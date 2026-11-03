@@ -16,6 +16,7 @@ src/.env
 /src/utils/settings.yml
 
 # Tests y archivos generados por las pruebas
+/requirements-dev.txt
 tests/
 test_*.py
 *_test.py

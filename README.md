@@ -204,3 +204,25 @@ email debe aparecer en la cabecera; `GET /api/auth/me` debe devolver
 aplicación. Volver a ingresar debe reutilizar el mismo usuario. La suite de pruebas
 de login simula la verificación Google y persiste únicamente en SQLite en memoria;
 no crea usuarios de prueba en producción.
+
+## Modelos compartidos y recarga de configuración
+
+Los modelos usan el paquete `model` y las instancias únicas `db` y `ma` de
+`utils.db`, inicializadas por la factory Flask. Los módulos adicionales quedan
+disponibles para importación sin activar scraping, Sheets o chats ni crear tablas
+en el arranque. El modelo `Usuario` mantiene los campos Google y la serialización
+excluye contraseñas y tokens. La contraseña se mapea al tipo binario existente.
+
+El helper de cifrado de mensajes utiliza `ENCRYPTION_KEY` de la configuración o
+del entorno, con las mismas rutas locales/Docker de `.env`. Para usar ese helper
+se debe suministrar una clave Fernet persistente; no se generan claves temporales
+ni se imprimen claves en logs. No cambiar una clave existente sin un procedimiento
+de migración para los mensajes cifrados con ella.
+
+El workflow `aws.yml` copia `/home/ubuntu/.env` y las credenciales al contenedor,
+ejecuta `docker restart` y verifica `/api/auth/config` hasta un máximo de 30 intentos.
+El workflow falla si falta el Client ID o la aplicación no queda disponible.
+Esto recarga el archivo mediante `load_dotenv` al reiniciar Python; los valores
+inyectados como variables de entorno del contenedor siguen teniendo prioridad.
+Si se cambian variables suministradas mediante `docker run --env-file`, hace falta
+recrear el contenedor para actualizarlas; un reinicio por sí solo no las reemplaza.

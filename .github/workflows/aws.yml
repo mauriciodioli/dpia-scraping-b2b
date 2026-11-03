@@ -70,18 +70,6 @@ jobs:
      
           docker run -d --name ${{ env.DEPLOYMENT_VERSION }} --network red_app -p 127.0.0.1:${{ env.HOST_PORT }}:8301 --restart unless-stopped docker.io/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
 
-    - name: Wait until container is running (remote)
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ env.EC2_HOST }}
-        username: ubuntu
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        script: |
-          until docker ps -q --filter name=${{ env.DEPLOYMENT_VERSION }}; do
-            echo "Esperando a que el contenedor arranque..."
-            sleep 5
-          done
-
     - name: Copy los archivos to Docker container
       uses: appleboy/ssh-action@master
       with:
@@ -96,6 +84,21 @@ jobs:
             docker cp /home/ubuntu/upload_to_gcs.json ${{ env.DEPLOYMENT_VERSION }}:/src/utils
             docker cp /home/ubuntu/pruebasheetpython.json ${{ env.DEPLOYMENT_VERSION }}:/src/utils
             docker cp /home/ubuntu/google_oauth_credentials.json ${{ env.DEPLOYMENT_VERSION }}:/src/utils
+            # Flask lee la configuración al iniciar: recargar tras copiar secretos.
+            docker restart ${{ env.DEPLOYMENT_VERSION }}
+            # Verificar configuración y disponibilidad sin imprimir credenciales.
+            docker exec ${{ env.DEPLOYMENT_VERSION }} python -c "from pathlib import Path; assert Path('/src/.env').is_file(); import config; assert config.GOOGLE_CLIENT_ID.strip(), 'GOOGLE_CLIENT_ID no configurado'"
+            for attempt in $(seq 1 30); do
+              if docker exec ${{ env.DEPLOYMENT_VERSION }} python -c "import urllib.request,json; r=urllib.request.urlopen('http://127.0.0.1:8301/api/auth/config',timeout=2); assert json.load(r).get('client_id')" >/dev/null 2>&1; then
+                echo "PWA disponible con Google configurado"
+                break
+              fi
+              if [ "$attempt" -eq 30 ]; then
+                echo "La PWA no inició correctamente con la configuración de Google"
+                exit 1
+              fi
+              sleep 2
+            done
               
     - name: Install vim and nano inside the container
       uses: appleboy/ssh-action@master

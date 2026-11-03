@@ -1,12 +1,11 @@
 # models/usuario.py
 
-from flask_marshmallow import Marshmallow
 from flask import Blueprint
-from utils.db import db
+from utils.db import db, ma
 from sqlalchemy import inspect
 from datetime import datetime
 
-ma = Marshmallow()
+
 
 usuario = Blueprint('usuario', __name__)
 
@@ -17,12 +16,12 @@ class Usuario(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     activo = db.Column(db.Boolean, nullable=False, default=True)
     correo_electronico = db.Column(db.String(120), unique=True, nullable=False)
-    password = db.Column(db.String(128), nullable=True)
+    password = db.Column(db.LargeBinary(128), nullable=True)
     token = db.Column(db.String(500), nullable=True)
     roll = db.Column(db.String(20), nullable=False, default='regular')
     refresh_token = db.Column(db.String(500), nullable=True)
     calendly_url = db.Column(db.String(255), nullable=True)
-    google_id = db.Column(db.String(255), nullable=True)
+    google_id = db.Column(db.String(255), unique=True, nullable=True)
     google_email = db.Column(db.String(120), nullable=True)
     google_picture = db.Column(db.String(500), nullable=True)
     auth_provider = db.Column(db.String(20), nullable=True, default='email')

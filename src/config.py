@@ -45,6 +45,7 @@ SIP_SERVER = os.getenv('SIP_SERVER')
 SIP_USER = os.getenv('SIP_USER')
 SIP_PASSWORD = os.getenv('SIP_PASSWORD')
 SIP_CALLER_ID = os.getenv('SIP_CALLER_ID')
+ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
 
 
 # ===== Configuración de Flask (app.config.from_object(config) solo toma los MAYÚSCULA) =====
