@@ -71,4 +71,6 @@ SQLALCHEMY_TRACK_MODIFICATIONS = False
 SCRAPEADOR_SERVICE_KEY = os.environ.get("SCRAPEADOR_SERVICE_KEY", "")
 DPIA_CONNECT_TIMEOUT = float(os.environ.get("DPIA_CONNECT_TIMEOUT", "3.05"))
 DPIA_READ_TIMEOUT = float(os.environ.get("DPIA_READ_TIMEOUT", "10"))
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
 

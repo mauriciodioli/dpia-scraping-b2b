@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.exc import SQLAlchemyError
 from services.locations import cities_for_country, postal_ids_for_city
 from utils.db import db
+from model.codigoPostal import CodigoPostal
 
 from services.dpia_client import CatalogError, CatalogFiltersError, DPIAClient, catalog_filters
 
@@ -94,7 +95,9 @@ def ubicacion():
                         existing['ambito_ids'] = sorted(set(existing['ambito_ids'] + record['ambito_ids']))
                     else:
                         combined[name][record[key]] = record
-        return jsonify(success=True, codigo_postal_ids=postal_ids, **{
+        postal_records=[{'id': row.id, 'codigoPostal':row.codigoPostal} for row in
+                        CodigoPostal.query.filter(CodigoPostal.id.in_(postal_ids)).order_by(CodigoPostal.id).all()]
+        return jsonify(success=True, codigo_postal_ids=postal_ids, codigos_postales=postal_records, **{
             name: sorted(records.values(), key=lambda item: (item['nombre'].casefold(), item[
                 'ambito_id' if name == 'ambitos' else 'categoria_id'])) for name, records in combined.items()})
     except CatalogFiltersError:

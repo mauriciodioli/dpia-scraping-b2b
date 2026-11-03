@@ -250,3 +250,53 @@ Comprobado con consultas reales de lectura: Spoleto tiene 11 IDs postales asocia
 En español, la API devolvió un ámbito y cero categorías para esa ubicación al
 verificar la integración. La interfaz conserva ese resultado sin inventar
 categorías ni sustituirlas por las de otras ciudades o idiomas.
+
+## Consultas, novedades y generación con OpenAI
+
+La pantalla Consultar conserva tres etapas: pedido editable, resumen legible para
+revisar y generación mediante instrucciones privadas de Flask. Permite seleccionar
+un ámbito, una categoría relacionada y el código postal real dentro de la ciudad.
+Novedades conserva ese contexto y cambia la intención a buscar candidatos novedosos.
+Editar la selección o el pedido invalida el resumen y exige prepararlo nuevamente.
+
+- `POST /api/consultas/preparar`: valida la sesión activa, resuelve el usuario desde
+  MySQL y comprueba país/ciudad/código postal y las relaciones del catálogo DPIA.
+  Devuelve el resumen y el contexto, sin instrucciones internas ni credenciales.
+- `POST /api/consultas/generar`: vuelve a verificar el contexto y llama a OpenAI
+  Responses con un JSON Schema estricto para `dpia.results.v2`. Devuelve `result`
+  y `rows`, un mapeo a las columnas del Sheet de referencia. No escribe en Sheets.
+
+La implementación utiliza la [documentación oficial de Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses).
+No hay llamadas OpenAI al importar módulos. No se reintentan automáticamente las
+generaciones, y el botón evita envíos simultáneos desde la misma pantalla.
+La respuesta se valida también en Flask: contexto, país/moneda, cantidad de 5–10
+candidatos, ausencia de duplicados y coherencia de las aclaraciones. Una aclaración
+requiere `needs_clarification: true`, pregunta no vacía e `items: []`.
+
+Configurar tanto en `src/.env` local como en `/home/ubuntu/.env` del servidor:
+
+```dotenv
+OPENAI_API_KEY='<clave API de tu proyecto OpenAI>'
+OPENAI_MODEL='gpt-4o-mini'
+```
+
+La clave se configura exclusivamente en el servidor, nunca en JavaScript ni en Git.
+El modelo es configurable y debe admitir Responses y Structured Outputs. Se agregó
+la variable local vacía para completarla sin compartirla por chat. Reiniciar Flask
+tras configurar las variables; el despliegue existente reinicia el contenedor tras
+copiar el `.env`. La generación se habilita únicamente cuando existe una clave.
+
+El país determina la moneda y el país de envío predeterminados: Argentina ARS/AR,
+Uruguay UYU/UY, España EUR/ES, Italia EUR/IT, Polonia PLN/PL y México MXN/MX.
+El ID de usuario proviene de la sesión, nunca de un campo enviado por el navegador.
+El prompt privado se construye desde `services/query_preparation.py`; el esquema,
+la llamada OpenAI y la validación están en `services/result_generation.py`.
+
+Esta etapa genera candidatos y planes de búsqueda, no verifica marketplaces.
+Por eso precios, márgenes, fuentes e imágenes se mantienen en `N/D` sin evidencia
+externa; `validado`, `pagoOnline` y `botonCompra` son `false`, y el estado es
+`CANDIDATO`. Se pueden descargar los resultados como JSON. No se envía el prompt
+al scraper: el JSON es la entrada para una etapa posterior de scraping a través de
+los endpoints DPIA existentes. No se ejecuta Apify, no se crean publicaciones ni
+se modifica la lógica de créditos o pagos. Los adjuntos aún no se interpretan:
+esta generación requiere texto y muestra un aviso si se intenta enviar archivos.

@@ -1,5 +1,5 @@
 // Catalog names come from DPIA. Images remain the existing local artwork.
-let catalogAmbitos = [], catalogCategorias = [];
+let catalogAmbitos = [], catalogCategorias = [], catalogPostalCodes = [];
 let catalogState = {ambitos: 'loading', categorias: 'loading'};
 let catalogGeneration = 0;
 const interestSelections = {};
@@ -56,13 +56,14 @@ function renderCategories() {
   const image = document.createElement('img'); image.src = '/static/images/' + catalogImage(item.nombre); image.alt = '';
   const label = document.createElement('span'); label.textContent = item.nombre; label.dataset.catalogName = '';
   button.append(image, label);
-  button.onclick = () => { show('consultPage'); document.querySelector('#promptText').value = `Buscar productos de ${item.nombre} en ${city}, ${country}. Priorizar publicaciones locales.`; };
+  button.onclick = () => { chooseQueryCategory(item); show('consultPage'); document.querySelector('#promptText').value = `Buscar productos de ${item.nombre} en ${city}, ${country}. Priorizar publicaciones locales.`; };
   grid.append(button);
  }
 }
 async function loadCatalogs() {
  const generation = ++catalogGeneration, language = catalogLanguage();
- catalogAmbitos = []; catalogCategorias = [];
+ catalogAmbitos = []; catalogCategorias = []; catalogPostalCodes = [];
+ if(typeof refreshQuerySelectors==='function')refreshQuerySelectors();
  catalogState = {ambitos:'loading', categorias:'loading'};
  renderInterests(); renderCategories();
  if(!country || !city){catalogState={ambitos:'empty',categorias:'empty'};renderInterests();renderCategories();return;}
@@ -77,6 +78,7 @@ async function loadCatalogs() {
   catalogState={ambitos:'error',categorias:'error'};renderInterests();renderCategories();return;
  }
  if(generation!==catalogGeneration)return;
+ catalogPostalCodes=locationPayload.codigos_postales||[];
  await Promise.all(['ambitos','categorias'].map(async name => {
   try {
    const payload = locationPayload;
@@ -100,6 +102,7 @@ async function loadCatalogs() {
   }
   renderInterests(); renderCategories();
  }));
+ refreshQuerySelectors();
 }
 
 let cityGeneration=0;

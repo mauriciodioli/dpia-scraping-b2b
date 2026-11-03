@@ -1,6 +1,13 @@
 """Read cities and postal IDs from the existing codigo_postal table."""
 from sqlalchemy import func
+import unicodedata
 from model.codigoPostal import CodigoPostal
+
+
+def city_key(value):
+    """Match saved UI names such as Poznań against legacy 'poznan' rows."""
+    decomposed = unicodedata.normalize('NFKD', value)
+    return ' '.join(''.join(c for c in decomposed if not unicodedata.combining(c)).casefold().split())
 
 
 def cities_for_country(country):
@@ -13,7 +20,7 @@ def cities_for_country(country):
         name = row.ciudad.strip()
         if not name:
             continue
-        item = cities.setdefault(name.casefold(), {'nombre': name, 'codigo_postal_ids': []})
+        item = cities.setdefault(city_key(name), {'nombre': name, 'codigo_postal_ids': []})
         item['codigo_postal_ids'].append(row.id)
     for item in cities.values():
         item['codigo_postal_ids'].sort()
@@ -22,4 +29,4 @@ def cities_for_country(country):
 
 def postal_ids_for_city(country, city):
     return next((item['codigo_postal_ids'] for item in cities_for_country(country)
-                 if item['nombre'].casefold() == city.strip().casefold()), [])
+                 if city_key(item['nombre']) == city_key(city)), [])
