@@ -11,6 +11,7 @@ src/.env
 /src/utils/pruebasheetpython.json
 /src/utils/credentials_module.json
 /src/utils/client_secrets.json
+/src/utils/google_oauth_credentials.json
 /src/utils/upload_to_gcs.json
 /src/utils/settings.yml
 
@@ -19,6 +20,7 @@ tests/
 test_*.py
 *_test.py
 conftest.py
+.uv-cache/
 .pytest_cache/
 .coverage
 .coverage.*

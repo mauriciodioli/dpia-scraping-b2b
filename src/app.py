@@ -4,6 +4,7 @@ from flask import Flask
 import config
 from model import ma
 from routes import auth_bp, main_bp
+from routes.catalog_routes import catalog_bp
 from utils.db import db
 
 
@@ -16,6 +17,7 @@ def create_app():
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(catalog_bp)
 
     return app
 

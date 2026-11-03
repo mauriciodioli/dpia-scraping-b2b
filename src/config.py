@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 import os
 
 from pathlib import Path
+from utils.google_oauth import google_client_id
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -51,7 +52,11 @@ SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", "local-demo-only-change-before-d
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_OAUTH_CREDENTIAL = Path(os.environ.get(
+    "GOOGLE_OAUTH_CREDENTIAL", "utils/google_oauth_credentials.json"))
+if not GOOGLE_OAUTH_CREDENTIAL.is_absolute():
+    GOOGLE_OAUTH_CREDENTIAL = BASE_DIR / GOOGLE_OAUTH_CREDENTIAL
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip() or google_client_id(GOOGLE_OAUTH_CREDENTIAL)
 
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8301"))
@@ -60,4 +65,9 @@ DEBUG = os.environ.get("FLASK_ENV", "development") != "production"
 # Flask-SQLAlchemy lee específicamente SQLALCHEMY_DATABASE_URI
 SQLALCHEMY_DATABASE_URI = DATABASE_CONNECTION_URI
 SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+# Server-side DPIA catalogs (never rendered into templates).
+SCRAPEADOR_SERVICE_KEY = os.environ.get("SCRAPEADOR_SERVICE_KEY", "")
+DPIA_CONNECT_TIMEOUT = float(os.environ.get("DPIA_CONNECT_TIMEOUT", "3.05"))
+DPIA_READ_TIMEOUT = float(os.environ.get("DPIA_READ_TIMEOUT", "10"))
 

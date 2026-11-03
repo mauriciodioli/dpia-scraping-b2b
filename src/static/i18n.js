@@ -35,7 +35,7 @@ const DPIA_TRANSLATIONS = {"Inicio":["Home","Start","Home"],"Ingresar":["Sign in
    const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
    let node;
    while((node=walker.nextNode())){
-    if(node.parentElement?.closest('script,style'))continue;
+    if(node.parentElement?.closest('script,style,[data-catalog-name]'))continue;
     const current=node.nodeValue;
     const previous=sourceText.get(node);
     if(!previous||current!==previous.rendered)sourceText.set(node,{original:current,rendered:current});
