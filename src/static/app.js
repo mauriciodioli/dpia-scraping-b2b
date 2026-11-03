@@ -9,17 +9,32 @@ function closeAuth(){$('#authOverlay').hidden=true;}
 $('#closeAuth').onclick=closeAuth;
 $('#authOverlay').onclick=e=>{if(e.target===$('#authOverlay'))closeAuth()};
 $('#userBtn').onclick=async()=>{if(currentEmail){await fetch('/api/auth/logout',{method:'POST'});updateUser(null);notify('Sesión cerrada')}else openAuth()};
+let googleLoginPending=false;
+async function completeGoogleLogin({credential}){
+ if(googleLoginPending)return;
+ googleLoginPending=true;
+ const help=$('#authHelp');
+ help.setAttribute('role','status');
+ help.textContent='Verificando tu cuenta y guardando el usuario…';
+ try{
+  const res=await fetch('/api/auth/google',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({credential}),signal:AbortSignal.timeout(30000)});
+  const data=await res.json().catch(()=>null);
+  if(!res.ok){help.textContent=data?.error||'No se pudo completar el acceso en DPIA. Reintentá.';return;}
+  if(!data?.authenticated||!data.email){help.textContent='DPIA no confirmó el inicio de sesión. Reintentá.';return;}
+  const sessionResponse=await fetch('/api/auth/me',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(10000)});
+  const me=await sessionResponse.json();
+  if(!sessionResponse.ok||!me.authenticated||me.email!==data.email){help.textContent='La sesión no se pudo conservar. Revisá que el navegador permita las cookies del sitio y reintentá.';return;}
+  updateUser(me.email);closeAuth();notify('Sesión iniciada');
+ }catch(_){help.textContent='No se pudo completar la conexión con DPIA. Reintentá.';}
+ finally{googleLoginPending=false;}
+}
 async function initAuth(){
  try{
   const [me,cfg]=await Promise.all([fetch('/api/auth/me').then(r=>r.json()),fetch('/api/auth/config').then(r=>r.json())]);
   updateUser(me.email);googleClientId=cfg.client_id||'';
   if(!googleClientId){$('#authHelp').textContent='Configurá GOOGLE_CLIENT_ID para habilitar el acceso real con Google.';return;}
   const render=()=>{if(!window.google?.accounts?.id){setTimeout(render,200);return;}
-   google.accounts.id.initialize({client_id:googleClientId,callback:async({credential})=>{
-    const res=await fetch('/api/auth/google',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({credential})});
-    const data=await res.json();if(!res.ok){notify(data.error||'Error al iniciar sesión');return}
-    updateUser(data.email);closeAuth();notify('Sesión iniciada');
-   }});
+   google.accounts.id.initialize({client_id:googleClientId,callback:completeGoogleLogin});
    google.accounts.id.renderButton($('#googleSignIn'),{theme:document.documentElement.dataset.theme==='dark'?'filled_black':'outline',size:'large',width:290,text:'signin_with',locale:window.DPIAI18N?.language||'es'});
    $('#authHelp').textContent='Google verifica tu identidad. DPIA muestra el email de tu cuenta.';
   };render();

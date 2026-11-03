@@ -9,7 +9,9 @@ def get_auth_config():
 
 
 def get_current_session():
-    return jsonify({"email": session.get("email"), "authenticated": bool(session.get("email"))})
+    response = jsonify({"email": session.get("email"), "authenticated": bool(session.get("email"))})
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 def login_with_google():
