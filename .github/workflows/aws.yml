@@ -1,0 +1,109 @@
+name: deploy
+on:
+  push:
+    branches:
+      - master
+
+env:
+  DEPLOYMENT_VERSION: "ms202611sb2b"
+  DOCKER_IMAGE_NAME: "ms202611sb2b"
+
+jobs:
+  deploy-to-cluster:
+    runs-on: ubuntu-latest
+    env:
+      EC2_HOST: ec2-54-234-169-22.compute-1.amazonaws.com # IMAGEN PRODUCCION
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+        
+    - name: Set Dockerfile WORKDIR to /src
+      run: |
+        sed -i 's/WORKDIR \/app/WORKDIR \/src/' Dockerfile
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and Push to Docker Hub
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: |
+          ${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+          ${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+
+    - name: Stop and remove existing container
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ env.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          docker stop ${{ env.DEPLOYMENT_VERSION }} || echo "Container already stopped"
+          docker rm ${{ env.DEPLOYMENT_VERSION }} || echo "Container already removed"
+
+    - name: Remove existing Docker image
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ env.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          IMAGE_ID=$(docker images -q ${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }})
+          echo "IMAGE_ID is $IMAGE_ID"
+          if [ ! -z "$IMAGE_ID" ]; then
+            docker rmi $IMAGE_ID
+          fi
+
+    - name: Copy Docker image to AWS instance
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ env.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          docker pull docker.io/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+     
+          docker run -d --name ${{ env.DEPLOYMENT_VERSION }} --network red_app -p 8100:8100 --restart always docker.io/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+
+
+    - name: Wait until container is running (remote)
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ env.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          until docker ps -q --filter name=${{ env.DEPLOYMENT_VERSION }}; do
+            echo "Esperando a que el contenedor arranque..."
+            sleep 5
+          done
+
+    - name: Copy los archivos to Docker container
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ env.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+            set -e  # Detener el script si hay un error en cualquier comando
+            docker cp /home/ubuntu/.env ${{ env.DEPLOYMENT_VERSION }}:/src
+            docker cp /home/ubuntu/client_secrets.json ${{ env.DEPLOYMENT_VERSION }}:/src/utils
+            docker cp /home/ubuntu/credentials_module.json ${{ env.DEPLOYMENT_VERSION }}:/src/utils
+            docker cp /home/ubuntu/upload_to_gcs.json ${{ env.DEPLOYMENT_VERSION }}:/src/utils
+            docker cp /home/ubuntu/pruebasheetpython.json ${{ env.DEPLOYMENT_VERSION }}:/src/utils
+              
+    - name: Install vim and nano inside the container
+      uses: appleboy/ssh-action@master
+      with:
+         host: ${{ env.EC2_HOST }}
+         username: ubuntu
+         key: ${{ secrets.SSH_PRIVATE_KEY }}
+         script: |               
+                   docker exec ${{ env.DEPLOYMENT_VERSION }} bash -c "
+                   apt update &&  apt-get install -y vim nano
+                   "

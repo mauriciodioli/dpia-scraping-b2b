@@ -1,0 +1,7 @@
+# No incluir secretos reales en la imagen; en producción se inyectan con
+# `docker cp` después del despliegue (ver .github/workflows/aws.yml).
+src/.env
+**/__pycache__/
+**/*.pyc
+.git
+.gitignore

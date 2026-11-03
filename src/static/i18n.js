@@ -1,0 +1,70 @@
+const DPIA_TRANSLATIONS = {"Inicio":["Home","Start","Home"],"Ingresar":["Sign in","Zaloguj się","Accedi"],"Iniciar sesión":["Sign in","Zaloguj się","Accedi"],"Cerrar sesión":["Sign out","Wyloguj się","Esci"],"Idioma":["Language","Język","Lingua"],"Cambiar tema":["Change theme","Zmień motyw","Cambia tema"],"Elegí ciudad":["Choose a city","Wybierz miasto","Scegli una città"],"¿Dónde estás?":["Where are you?","Gdzie jesteś?","Dove ti trovi?"],"Elegí tu país":["Choose your country","Wybierz kraj","Scegli il tuo Paese"],"Seguir →":["Continue →","Dalej →","Continua →"],"Elegí tu ciudad":["Choose your city","Wybierz miasto","Scegli la tua città"],"¿Qué te gusta?":["What do you like?","Co lubisz?","Cosa ti piace?"],"Elegí al menos 3":["Choose at least 3","Wybierz co najmniej 3","Scegline almeno 3"],"Empezar a descubrir →":["Start exploring →","Zacznij odkrywać →","Inizia a scoprire →"],"Guardar intereses →":["Save interests →","Zapisz zainteresowania →","Salva interessi →"],"Elegí al menos 3 intereses":["Choose at least 3 interests","Wybierz co najmniej 3 zainteresowania","Scegli almeno 3 interessi"],"Argentina":["Argentina","Argentyna","Argentina"],"Uruguay":["Uruguay","Urugwaj","Uruguay"],"España":["Spain","Hiszpania","Spagna"],"Italia":["Italy","Włochy","Italia"],"Polonia":["Poland","Polska","Polonia"],"México":["Mexico","Meksyk","Messico"],"✦ DESCUBRÍ ALGO NUEVO":["✦ DISCOVER SOMETHING NEW","✦ ODKRYJ COŚ NOWEGO","✦ SCOPRI QUALCOSA DI NUOVO"],"Todo lo que te gusta,":["Everything you love,","Wszystko, co lubisz,","Tutto ciò che ami,"],"en un lugar.":["in one place.","w jednym miejscu.","in un solo posto."],"Descubrí lo que hay cerca.":["Discover what is nearby.","Odkryj, co jest w pobliżu.","Scopri cosa c’è vicino a te."],"Buscá o consultá...":["Search or ask...","Szukaj lub zapytaj...","Cerca o chiedi..."],"Buscar":["Search","Szukaj","Cerca"],"Tomar foto":["Take a photo","Zrób zdjęcie","Scatta una foto"],"Grabar audio":["Record audio","Nagraj dźwięk","Registra audio"],"Grabar video":["Record video","Nagraj wideo","Registra video"],"Preparar consulta":["Prepare search","Przygotuj zapytanie","Prepara la ricerca"],"Explorar":["Explore","Odkrywaj","Esplora"],"Novedades":["New arrivals","Nowości","Novità"],"Local":["Local","Lokalnie","Vicino a te"],"Explorá categorías":["Explore categories","Przeglądaj kategorie","Esplora le categorie"],"Personalizar ↗":["Customize ↗","Dostosuj ↗","Personalizza ↗"],"⌖ Cerca tuyo":["⌖ Near you","⌖ W pobliżu","⌖ Vicino a te"],"Ver mapa ↗":["View map ↗","Zobacz mapę ↗","Vedi mappa ↗"],"TU CIUDAD":["YOUR CITY","TWOJE MIASTO","LA TUA CITTÀ"],"Tu ciudad":["Your city","Twoje miasto","La tua città"],"Explorá lo que hay cerca":["Explore nearby","Odkrywaj w pobliżu","Esplora ciò che ti circonda"],"Explorar mapa ↗":["Explore map ↗","Otwórz mapę ↗","Esplora mappa ↗"],"Tecnología":["Technology","Technologia","Tecnologia"],"Moda":["Fashion","Moda","Moda"],"Hogar":["Home & living","Dom","Casa"],"Deporte":["Sports","Sport","Sport"],"Cocina":["Kitchen","Kuchnia","Cucina"],"Audio":["Audio","Audio","Audio"],"Industria":["Industry","Przemysł","Industria"],"Belleza":["Beauty","Uroda","Bellezza"],"Notebook":["Laptop","Laptop","Portatile"],"Auriculares":["Headphones","Słuchawki","Cuffie"],"Zapatillas":["Sneakers","Buty sportowe","Sneakers"],"Herramientas industriales":["Industrial tools","Narzędzia przemysłowe","Attrezzi industriali"],"Consultar":["Ask","Zapytaj","Chiedi"],"Puntos":["Points","Punkty","Punti"],"pts":["pts","pkt","pt"],"Locales cerca tuyo":["Local businesses nearby","Lokalne firmy w pobliżu","Negozi vicino a te"],"Mapa de la ciudad":["City map","Mapa miasta","Mappa della città"],"Mapa de OpenStreetMap. Ubicación aproximada de la ciudad; las publicaciones son de demostración.":["OpenStreetMap. Approximate city location; listings are demos.","OpenStreetMap. Przybliżona lokalizacja miasta; oferty są demonstracyjne.","OpenStreetMap. Posizione approssimativa della città; gli annunci sono dimostrativi."],"Tu búsqueda, a tu manera":["Search your way","Szukaj po swojemu","Cerca come preferisci"],"Texto, foto, audio o video.":["Text, photo, audio or video.","Tekst, zdjęcie, dźwięk lub wideo.","Testo, foto, audio o video."],"¿Qué necesitás encontrar?":["What are you looking for?","Czego szukasz?","Che cosa stai cercando?"],"📷 Foto":["📷 Photo","📷 Zdjęcie","📷 Foto"],"🎙 Audio":["🎙 Audio","🎙 Audio","🎙 Audio"],"🎥 Video":["🎥 Video","🎥 Wideo","🎥 Video"],"Preparar consulta →":["Prepare search →","Przygotuj zapytanie →","Prepara ricerca →"],"⏹ Detener":["⏹ Stop","⏹ Zatrzymaj","⏹ Ferma"],"Saldo disponible":["Available balance","Dostępne saldo","Saldo disponibile"],"puntos":["points","punktów","punti"],"Valores de demostración · Sin pagos reales":["Demo values · No real payments","Wartości demo · Bez prawdziwych płatności","Valori dimostrativi · Nessun pagamento reale"],"Recargá puntos":["Top up points","Doładuj punkty","Ricarica punti"],"Impulso":["Starter","Start","Base"],"Explorador":["Explorer","Odkrywca","Esploratore"],"Pleno":["Full","Pełny","Completo"],"Cómo querés pagar":["Payment method","Metoda płatności","Metodo di pagamento"],"💳 Tarjeta":["💳 Card","💳 Karta","💳 Carta"],"📱 Billetera digital":["📱 Digital wallet","📱 Portfel cyfrowy","📱 Portafoglio digitale"],"Demo":["Demo","Demo","Demo"],"Seleccioná un plan para ver el detalle.":["Select a plan to see details.","Wybierz pakiet, aby zobaczyć szczegóły.","Seleziona un piano per i dettagli."],"Iniciá sesión para buscar":["Sign in to search","Zaloguj się, aby wyszukiwać","Accedi per cercare"],"Conectá tu cuenta antes de usar el scraping.":["Connect your account before using scraping.","Połącz konto przed użyciem scrapingu.","Accedi al tuo account prima di usare lo scraping."],"Inicio de sesión Google pendiente de configuración.":["Google sign-in has not been configured.","Logowanie Google nie zostało skonfigurowane.","Accesso Google non ancora configurato."],"Configurá GOOGLE_CLIENT_ID para habilitar el acceso real con Google.":["Configure GOOGLE_CLIENT_ID to enable Google sign-in.","Skonfiguruj GOOGLE_CLIENT_ID, aby włączyć logowanie Google.","Configura GOOGLE_CLIENT_ID per abilitare l’accesso con Google."],"Google verifica tu identidad. DPIA muestra el email de tu cuenta.":["Google verifies your identity. DPIA displays your account email.","Google weryfikuje Twoją tożsamość. DPIA wyświetla adres e-mail konta.","Google verifica la tua identità. DPIA mostra la tua email."],"No se pudo consultar la configuración de autenticación.":["Could not load authentication settings.","Nie można wczytać ustawień uwierzytelniania.","Impossibile caricare le impostazioni di autenticazione."],"Sesión cerrada":["Signed out","Wylogowano","Disconnesso"],"Sesión iniciada":["Signed in","Zalogowano","Accesso effettuato"],"Error al iniciar sesión":["Sign-in error","Błąd logowania","Errore di accesso"],"Publicación de demostración":["Demo listing","Oferta demonstracyjna","Annuncio dimostrativo"],"Grabación no disponible: requiere HTTPS o localhost":["Recording requires HTTPS or localhost","Nagrywanie wymaga HTTPS lub localhost","Registrazione disponibile solo con HTTPS o localhost"],"No se pudo acceder al micrófono":["Microphone unavailable","Mikrofon niedostępny","Microfono non disponibile"],"Grabando audio. Volvé a tocar para detener.":["Recording audio. Tap again to stop.","Nagrywanie dźwięku. Dotknij ponownie, aby zatrzymać.","Registrazione in corso. Tocca di nuovo per fermare."],"Escribí una consulta o adjuntá un archivo":["Enter a query or attach a file","Wpisz zapytanie lub dołącz plik","Scrivi una richiesta o allega un file"],"CONSULTA PARA DPIA (DEMOSTRACIÓN)":["DPIA QUERY (DEMO)","ZAPYTANIE DPIA (DEMO)","RICHIESTA DPIA (DEMO)"],"Ubicación:":["Location:","Lokalizacja:","Posizione:"],"Intereses:":["Interests:","Zainteresowania:","Interessi:"],"Pedido:":["Request:","Zapytanie:","Richiesta:"],"Adjuntos:":["Attachments:","Załączniki:","Allegati:"],"Acción solicitada:":["Requested action:","Żądana akcja:","Azione richiesta:"],"Pendiente: interpretación IA real de foto/audio/video y envío a la API.":["Pending: real AI interpretation of photo/audio/video and API submission.","Oczekuje: analiza zdjęć/audio/wideo przez AI i wysyłka do API.","In attesa: analisi AI di foto/audio/video e invio all’API."],"Interpretar los archivos adjuntos y buscar productos relacionados":["Interpret attachments and search related products","Zinterpretuj załączniki i wyszukaj powiązane produkty","Analizza gli allegati e cerca prodotti correlati"],"Ninguno":["None","Brak","Nessuno"],"Encontrar productos novedosos en":["Find new products in","Znajdź nowe produkty w","Trova nuovi prodotti in"],"especialmente en":["especially in","szczególnie w","soprattutto in"],"Consultar fuentes disponibles.":["Check available sources.","Sprawdź dostępne źródła.","Controlla le fonti disponibili."],"Buscar productos de":["Search products in","Szukaj produktów w","Cerca prodotti di"],"Priorizar publicaciones locales.":["Prioritize local listings.","Priorytet dla lokalnych ofert.","Dai priorità agli annunci locali."],"Acción solicitada: identificar intención y proponer búsqueda de productos en fuentes disponibles; priorizar publicaciones locales.":["Requested action: identify intent and suggest product searches from available sources; prioritize local listings.","Żądana akcja: rozpoznaj intencję i zaproponuj wyszukiwanie produktów w dostępnych źródłach; priorytet dla lokalnych ofert.","Azione richiesta: identifica l’intento e proponi ricerche di prodotti nelle fonti disponibili; dai priorità agli annunci locali."]};
+(()=>{
+ const languages=['es','en','pl','it'];
+ let language=localStorage.getItem('dpia-language')||'es';
+ if(!languages.includes(language)) language='es';
+ const sourceText=new WeakMap(), sourceAttr=new WeakMap();
+ let busy=false;
+ function translate(value){
+  if(language==='es') return value;
+  const idx=language==='en'?0:language==='pl'?1:2;
+  const flags={'🇦🇷 Argentina':'Argentina','🇺🇾 Uruguay':'Uruguay','🇪🇸 España':'España','🇮🇹 Italia':'Italia','🇵🇱 Polonia':'Polonia','🇲🇽 México':'México'};
+  if(flags[value])return value.split(' ')[0]+' '+DPIA_TRANSLATIONS[flags[value]][idx];
+  if(DPIA_TRANSLATIONS[value]) return DPIA_TRANSLATIONS[value][idx];
+  // Dynamic UI messages, location greeting and templated labels.
+  let out=value;
+  const replacements=[
+   [/ · Descubrí cerca tuyo/g,language==='en'?' · Discover nearby':language==='pl'?' · Odkrywaj w pobliżu':' · Scopri vicino a te'],
+   [/^Plan (\d+) puntos seleccionado\. Pago no disponible en esta demostración\.$/,language==='en'?'Plan $1 points selected. Payment unavailable in this demo.':language==='pl'?'Wybrano pakiet $1 punktów. Płatność niedostępna w demo.':'Piano da $1 punti selezionato. Pagamento non disponibile nella demo.'],
+   [/^Buscar productos de /,DPIA_TRANSLATIONS['Buscar productos de'][idx]+' '],
+   [/^Encontrar productos novedosos en /,DPIA_TRANSLATIONS['Encontrar productos novedosos en'][idx]+' '],
+   [/Priorizar publicaciones locales\./g,DPIA_TRANSLATIONS['Priorizar publicaciones locales.'][idx]],
+   [/Consultar fuentes disponibles\./g,DPIA_TRANSLATIONS['Consultar fuentes disponibles.'][idx]],
+   [/especialmente en /g,DPIA_TRANSLATIONS['especialmente en'][idx]+' ']
+  ];
+  for(const [re,to] of replacements) out=out.replace(re,to);
+  // Translate labels embedded in generated multiline prompt and selected categories.
+  for(const [key,pair] of Object.entries(DPIA_TRANSLATIONS)){
+   if(key.endsWith(':')) out=out.replaceAll(key,pair[idx]);
+  }
+  return out;
+ }
+ function apply(root=document){
+  if(busy)return;busy=true;
+  try{
+   const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+   let node;
+   while((node=walker.nextNode())){
+    if(node.parentElement?.closest('script,style'))continue;
+    const current=node.nodeValue;
+    const previous=sourceText.get(node);
+    if(!previous||current!==previous.rendered)sourceText.set(node,{original:current,rendered:current});
+    const rec=sourceText.get(node),original=rec.original;
+    const trim=original.trim(),translated=translate(trim);
+    const next=trim?original.replace(trim,translated):original;
+    if(next!==current)node.nodeValue=next;
+    rec.rendered=next;
+   }
+   const elements=root.querySelectorAll?root.querySelectorAll('[placeholder],[title],[aria-label]'):[];
+   for(const el of elements){
+    for(const attr of ['placeholder','title','aria-label']){
+     if(!el.hasAttribute(attr))continue;
+     const current=el.getAttribute(attr),key=attr+'|'+el.id;
+     let records=sourceAttr.get(el)||{};
+     if(!records[attr]||current!==records[attr].rendered)records[attr]={original:current,rendered:current};
+     const next=translate(records[attr].original);
+     if(next!==current)el.setAttribute(attr,next);
+     records[attr].rendered=next;sourceAttr.set(el,records);
+    }
+   }
+   document.documentElement.lang=language;
+   // Never reset the native select during background DOM translations.
+  }finally{busy=false;}
+ }
+ let queued=false;
+ const observer=new MutationObserver(()=>{if(queued)return;queued=true;setTimeout(()=>{queued=false;observer.disconnect();apply();observer.observe(document.body,observerOptions);},0);});
+ const observerOptions={subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['placeholder','title','aria-label']};
+ const start=()=>{const selector=document.getElementById('languageSelect');if(selector){selector.value=language;selector.addEventListener('change',e=>{const next=e.target.value;if(!languages.includes(next))return;language=next;localStorage.setItem('dpia-language',next);observer.disconnect();apply();observer.observe(document.body,observerOptions);});}apply();observer.observe(document.body,observerOptions);};
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+ window.DPIAI18N={get language(){return language},refresh:()=>apply(),translate};
+})();
