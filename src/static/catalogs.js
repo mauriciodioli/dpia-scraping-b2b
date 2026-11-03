@@ -65,11 +65,21 @@ async function loadCatalogs() {
  catalogAmbitos = []; catalogCategorias = [];
  catalogState = {ambitos:'loading', categorias:'loading'};
  renderInterests(); renderCategories();
+ if(!country || !city){catalogState={ambitos:'empty',categorias:'empty'};renderInterests();renderCategories();return;}
+ let locationPayload;
+ try {
+  const response=await fetch('/api/catalogos/ubicacion?'+new URLSearchParams({pais:country,ciudad:city,idioma:language}),{signal:AbortSignal.timeout(60000)});
+  if(!response.ok)throw new Error('location catalog');
+  locationPayload=await response.json();
+  if(locationPayload.success!==true)throw new Error('location catalog');
+ }catch(_){
+  if(generation!==catalogGeneration)return;
+  catalogState={ambitos:'error',categorias:'error'};renderInterests();renderCategories();return;
+ }
+ if(generation!==catalogGeneration)return;
  await Promise.all(['ambitos','categorias'].map(async name => {
   try {
-   const response = await fetch('/api/catalogos/' + name + '?' + new URLSearchParams({idioma:language}), {signal:AbortSignal.timeout(18000)});
-   if (!response.ok) throw new Error('catalog');
-   const payload = await response.json();
+   const payload = locationPayload;
    if (payload.success !== true || !Array.isArray(payload[name])) throw new Error('catalog');
    if (generation !== catalogGeneration) return;
    catalogState[name] = payload[name].length ? 'ready' : 'empty';
@@ -90,4 +100,26 @@ async function loadCatalogs() {
   }
   renderInterests(); renderCategories();
  }));
+}
+
+let cityGeneration=0;
+async function loadCities(chosenCountry){
+ const generation=++cityGeneration, select=document.querySelector('#citySelect'), status=document.querySelector('#cityStatus'), retry=document.querySelector('#retryCities');
+ select.replaceChildren();select.disabled=true;document.querySelector('#nextBtn').disabled=true;
+ status.textContent={es:'Cargando ciudades…',en:'Loading cities…',pl:'Ładowanie miast…',it:'Caricamento città…'}[catalogLanguage()];retry.hidden=true;
+ try{
+  const response=await fetch('/api/catalogos/ciudades?'+new URLSearchParams({pais:chosenCountry}),{signal:AbortSignal.timeout(15000)});
+  if(!response.ok)throw new Error('cities');
+  const payload=await response.json();
+  if(payload.success!==true||!Array.isArray(payload.ciudades))throw new Error('cities');
+  if(generation!==cityGeneration||country!==chosenCountry||step!==1)return;
+  for(const item of payload.ciudades){const option=document.createElement('option');option.value=item.nombre;option.textContent=item.nombre;select.append(option);}
+  select.disabled=!select.options.length;document.querySelector('#nextBtn').disabled=!select.options.length;
+  status.textContent=select.options.length?'':({es:'No hay ciudades disponibles para este país.',en:'No cities available for this country.',pl:'Brak miast dla tego kraju.',it:'Nessuna città disponibile per questo Paese.'}[catalogLanguage()]);
+  retry.hidden=!!select.options.length;
+ }catch(_){
+  if(generation!==cityGeneration||country!==chosenCountry||step!==1)return;
+  status.textContent={es:'No se pudieron cargar las ciudades. Reintentá.',en:'Could not load cities. Try again.',pl:'Nie udało się wczytać miast. Spróbuj ponownie.',it:'Impossibile caricare le città. Riprova.'}[catalogLanguage()];retry.hidden=false;
+ }
+ retry.textContent=(catalogMessages[catalogLanguage()]||catalogMessages.es)[3];retry.onclick=()=>loadCities(country);
 }

@@ -48,9 +48,13 @@ def _google_user(info):
     if user is None:
         user = Usuario.query.filter_by(correo_electronico=email).one_or_none()
         if user is not None:
-            if user.google_id and user.google_id != subject:
+            # Legacy email registrations stored the literal text '(NULL)'.
+            # It is not a Google binding; never replace a genuine different ID.
+            legacy_unlinked = user.google_id == '(NULL)' and user.auth_provider == 'email'
+            has_google_binding = bool(user.google_id) and not legacy_unlinked
+            if has_google_binding and user.google_id != subject:
                 raise AuthError("La cuenta ya está vinculada a otra identidad Google.", 409)
-            if not user.google_id and not (email.endswith('@gmail.com') or info.get('hd')):
+            if not has_google_binding and not (email.endswith('@gmail.com') or info.get('hd')):
                 raise AuthError("Esta cuenta requiere verificar el acceso antes de vincular Google.", 409)
         else:
             user = Usuario(correo_electronico=email, auth_provider='google', google_id=subject)

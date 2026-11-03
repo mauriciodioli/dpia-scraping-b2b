@@ -95,7 +95,7 @@ comprobar las categorías y cambiar entre ES/EN/PL/IT. En DevTools, las peticion
 de catálogo deben ir exclusivamente a las rutas internas, sin encabezado Bearer.
 Las imágenes siguen siendo archivos locales existentes, con `industry.svg` para
 nombres sin una imagen asociada. Las categorías de los ámbitos seleccionados aparecen
-primero; se conserva acceso al resto de categorías del idioma.
+primero; se conserva acceso al resto de categorías de la ciudad y el idioma elegidos.
 
 ### Contrato comprobado
 
@@ -111,8 +111,8 @@ No se modificó ese repositorio.
 | `/api/catalogos/categorias` | `/catalogos/categorias` | Los anteriores y `categoria_id` |
 
 Los IDs deben ser enteros entre 1 y 2147483647. Se rechazan filtros desconocidos
-o repetidos. El frontend envía el idioma; las rutas también permiten los demás filtros
-sin inferir códigos postales a partir de las ciudades de la demo. DPIA usa `in` para
+o repetidos. Las rutas individuales permiten esos filtros; el frontend utiliza ahora
+la ruta de ubicación con los IDs reales de `codigo_postal`. DPIA usa `in` para
 inglés: Flask convierte `en` a `in`. Los nombres se muestran como los devuelve la API,
 sin traducirlos con el diccionario de la demo.
 
@@ -226,3 +226,27 @@ Esto recarga el archivo mediante `load_dotenv` al reiniciar Python; los valores
 inyectados como variables de entorno del contenedor siguen teniendo prioridad.
 Si se cambian variables suministradas mediante `docker run --env-file`, hace falta
 recrear el contenedor para actualizarlas; un reinicio por sí solo no las reemplaza.
+
+## Ciudades y catálogos por ubicación
+
+El selector de ciudad usa ahora la tabla existente `codigo_postal` mediante
+`model.codigoPostal.CodigoPostal`, agrupando ciudades del país elegido. Se retiró
+la lista fija de ciudades del JavaScript. Solo se hacen consultas de lectura a esa
+tabla; las relaciones y los catálogos siguen siendo responsabilidad de la API DPIA.
+
+- `GET /api/catalogos/ciudades?pais=Italia`: ciudades y sus IDs postales reales.
+- `GET /api/catalogos/ubicacion?pais=Italia&ciudad=Spoleto&idioma=es`: ámbitos y
+  categorías de todos los códigos postales asociados a esa ciudad, sin duplicados.
+
+El endpoint de ubicación resuelve los IDs en `codigo_postal` y consulta la API con
+`codigo_postal_id` e `idioma` para cada uno, con un máximo de cuatro consultas HTTP
+simultáneas. No infiere IDs a partir del texto postal ni limita una ciudad a su
+primer código. La selección de país, ciudad y lenguaje delimita el catálogo; al
+cambiar la ciudad se invalida la respuesta anterior. Sin asociaciones se muestran
+listas vacías; ante errores se permite reintentar, sin recurrir al catálogo global.
+Los endpoints individuales `/ambitos` y `/categorias` mantienen su contrato previo.
+
+Comprobado con consultas reales de lectura: Spoleto tiene 11 IDs postales asociados.
+En español, la API devolvió un ámbito y cero categorías para esa ubicación al
+verificar la integración. La interfaz conserva ese resultado sin inventar
+categorías ni sustituirlas por las de otras ciudades o idiomas.
