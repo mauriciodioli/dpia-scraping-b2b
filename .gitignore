@@ -5,3 +5,21 @@ venv/
 src/.env
 *.egg-info/
 .DS_Store
+
+
+# Ignore specific credentials files inside src/utils/
+/src/utils/pruebasheetpython.json
+/src/utils/credentials_module.json
+/src/utils/client_secrets.json
+/src/utils/upload_to_gcs.json
+/src/utils/settings.yml
+
+# Tests y archivos generados por las pruebas
+tests/
+test_*.py
+*_test.py
+conftest.py
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/

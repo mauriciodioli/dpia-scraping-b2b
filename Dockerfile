@@ -2,7 +2,7 @@
 FROM python:3.12-slim
 
 # Capa 2: Directorio de trabajo
-WORKDIR /app
+WORKDIR /src
 
 # Capa 3: Requisitos Python
 COPY src/requirements.txt .
@@ -43,7 +43,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Capa 6: Código fuente
 COPY src/ .
-COPY src/config.py /app/config.py
+
 
 # Capa 7: Comando por defecto
 CMD ["python", "./app.py"]

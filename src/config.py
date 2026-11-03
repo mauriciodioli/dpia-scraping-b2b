@@ -54,7 +54,7 @@ SESSION_COOKIE_SAMESITE = "Lax"
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 
 HOST = os.environ.get("HOST", "0.0.0.0")
-PORT = int(os.environ.get("PORT", "8100"))
+PORT = int(os.environ.get("PORT", "8301"))
 DEBUG = os.environ.get("FLASK_ENV", "development") != "production"
 
 # Flask-SQLAlchemy lee específicamente SQLALCHEMY_DATABASE_URI
