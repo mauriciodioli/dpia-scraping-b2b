@@ -94,8 +94,9 @@ Abrir `http://127.0.0.1:8301` (o el `PORT` existente). Elegir país, ciudad e in
 comprobar las categorías y cambiar entre ES/EN/PL/IT. En DevTools, las peticiones
 de catálogo deben ir exclusivamente a las rutas internas, sin encabezado Bearer.
 Las imágenes siguen siendo archivos locales existentes, con `industry.svg` para
-nombres sin una imagen asociada. Las categorías de los ámbitos seleccionados aparecen
-primero; se conserva acceso al resto de categorías de la ciudad y el idioma elegidos.
+nombres sin una imagen asociada. El inicio muestra únicamente los ámbitos seleccionados. Al pulsar uno aparecen
+solo sus categorías para la ciudad y el idioma elegidos. Al elegir una categoría
+se abre la consulta conservando ese ámbito, incluso si pertenece a varios.
 
 ### Contrato comprobado
 

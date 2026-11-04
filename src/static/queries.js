@@ -1,23 +1,24 @@
 // User message and summary are public; the generation instruction lives in Flask.
 let queryMode='buscar', queryPrepared=null, queryBusy=false;
-function refreshQuerySelectors(category=null){
+function refreshQuerySelectors(category=null, scopeId=null){
  const scopeSelect=document.querySelector('#queryScope'), categorySelect=document.querySelector('#queryCategory'), postalSelect=document.querySelector('#queryPostal');
  const oldScope=scopeSelect.value,oldCategory=categorySelect.value,oldPostal=postalSelect.value;
  scopeSelect.replaceChildren();
  for(const scope of catalogAmbitos){const option=new Option(scope.nombre,String(scope.ambito_id));scopeSelect.add(option);}
- const desired=category?.ambito_ids.find(id=>catalogAmbitos.some(scope=>scope.ambito_id===id))||Number(oldScope)||Number([...selected][0]);
+ const desired=scopeId||category?.ambito_ids.find(id=>catalogAmbitos.some(scope=>scope.ambito_id===id))||Number(oldScope)||Number([...selected][0]);
  if([...scopeSelect.options].some(option=>option.value===String(desired)))scopeSelect.value=String(desired);
  categorySelect.replaceChildren();
  for(const item of catalogCategorias.filter(item=>item.ambito_ids.includes(Number(scopeSelect.value))))categorySelect.add(new Option(item.nombre,String(item.categoria_id)));
  const categoryId=category?.categoria_id||Number(oldCategory);
  if([...categorySelect.options].some(option=>option.value===String(categoryId)))categorySelect.value=String(categoryId);
+ document.querySelector('#queryCity').value=city;
  postalSelect.replaceChildren();
- for(const record of catalogPostalCodes)postalSelect.add(new Option(record.codigoPostal,String(record.id)));
+ for(const record of catalogPostalCodes)postalSelect.add(new Option(city,String(record.id)));
  if([...postalSelect.options].some(option=>option.value===oldPostal))postalSelect.value=oldPostal;
  invalidateQuery();
 }
 function invalidateQuery(){queryPrepared=null;document.querySelector('#generateQuery').hidden=true;document.querySelector('#queryResults').replaceChildren();document.querySelector('#promptResult').hidden=true;}
-function chooseQueryCategory(item){queryMode='buscar';refreshQuerySelectors(item);}
+function chooseQueryCategory(item, scopeId=null){queryMode='buscar';refreshQuerySelectors(item, scopeId);}
 function openNovelQuery(){queryMode='novedades';refreshQuerySelectors();show('consultPage');const category=document.querySelector('#queryCategory').selectedOptions[0]?.textContent||'';document.querySelector('#promptText').value=`Encontrar productos novedosos de ${category} en ${city}, ${country}. Priorizar tendencias y publicaciones locales.`;}
 function queryBody(){return {pais:country,ciudad:city,idioma:catalogLanguage(),ambito_id:Number(document.querySelector('#queryScope').value),categoria_id:Number(document.querySelector('#queryCategory').value),codigo_postal_id:Number(document.querySelector('#queryPostal').value),mode:queryMode,user_message:(document.querySelector('#promptText').value||document.querySelector('#searchText').value).trim()};}
 async function prepareDPIAQuery(){

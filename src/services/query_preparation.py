@@ -104,7 +104,7 @@ No copies precios ni imágenes de ejemplos. No inventes enlaces. El esquema de r
 def public_summary(prepared):
     ctx = prepared['context']
     return '\n'.join(['CONSULTA PARA DPIA', f"Ubicación: {ctx['ciudad']}, {ctx['pais']}",
-                      f"Código postal: {ctx['codigoPostal']}", f"Ámbito: {ctx['ambito']}",
+                      f"Ámbito: {ctx['ambito']}",
                       f"Categoría: {ctx['categoria']}", f"Idioma: {ctx['idioma']}",
                       f"Pedido: {prepared['user_message']}",
                       'Objetivo: proponer candidatos y un plan de búsqueda, sin ejecutar scraping.'])

@@ -1,0 +1,49 @@
+{
+    "version": "0.2.0",
+    "inputs": [{
+        "id": "scraperLocalEmail",
+        "type": "promptString",
+        "description": "Correo de un usuario existente en la BD local de pruebas"
+    }],
+    "configurations": [
+        {
+            "name": "Flask: scraper localhost (mock usuario 22)",
+            "type": "python",
+            "request": "launch",
+            "module": "flask",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "FLASK_APP": "src/app",
+                "FLASK_DEBUG": "1",
+                "FLASK_RUN_HOST": "127.0.0.1",
+                "FLASK_RUN_PORT": "8100",
+                "SCRAPER_LOCAL_AUTH": "true",
+                "SCRAPER_LOCAL_EMAIL": "mauriciodioli@gmail.com",
+                "SCRAPER_LOCAL_MOCK_USER_ID": "22"
+            },
+            "args": ["run", "--no-reload"],
+            "jinja": true,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python: Flask",
+            "type": "python",
+            "request": "launch",
+            "module": "flask",
+            "env": {
+                "FLASK_APP": "src/app",  // Aquí se coloca el nombre de tu archivo Python sin extensión
+                "FLASK_ENV": "development",  // Configuración de entorno, puede ser "production" si estás en producción
+                "FLASK_DEBUG": "1",
+                "FLASK_RUN_HOST": "127.0.0.1",  // Dirección local del servidor
+                "FLASK_RUN_PORT": "8100"  // Puerto en el que Flask correrá
+            },
+            "args": [
+                "run"
+            ],
+            "jinja": true,  // Habilitar soporte de Jinja para plantillas
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}",  // Esto asegura que VS Code use el directorio de tu proyecto
+            "console": "integratedTerminal"  // Usar la terminal integrada de VS Code
+        }
+    ]
+}

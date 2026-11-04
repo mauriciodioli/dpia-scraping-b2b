@@ -46,22 +46,52 @@ function renderInterests() {
 function selectedNames() {
  return catalogAmbitos.filter(item => selected.has(String(item.ambito_id))).map(item => item.nombre);
 }
+let activeCatalogScope = null;
 function renderCategories() {
  const grid = document.querySelector('#categoryGrid'); grid.replaceChildren();
- if (catalogStatus(grid, 'categorias')) return;
- const preferred = item => item.ambito_ids.some(id => selected.has(String(id)));
- const items = [...catalogCategorias].sort((a,b) => Number(preferred(b)) - Number(preferred(a)));
- for (const item of items) {
-  const button = document.createElement('button'); button.className = 'category'; button.dataset.cat = String(item.categoria_id);
+ const scopes = catalogAmbitos.filter(item => selected.has(String(item.ambito_id)));
+ if (!scopes.some(item => String(item.ambito_id) === activeCatalogScope)) activeCatalogScope = null;
+ const title = document.querySelector('#catalogHeading');
+ const activeScope = scopes.find(item => String(item.ambito_id) === activeCatalogScope);
+ title.textContent = activeScope ? activeScope.nombre : 'Tus ámbitos de interés';
+ title.toggleAttribute('data-catalog-name', !!activeScope);
+ const back = document.querySelector('#backToScopes');
+ back.hidden = !activeScope;
+ back.onclick = () => { activeCatalogScope = null; renderCategories(); };
+ document.querySelector('#changeInterests').hidden = !!activeScope;
+ if (catalogStatus(grid, 'ambitos')) return;
+ for (const item of activeScope ? [] : scopes) {
+  const id = String(item.ambito_id), button = document.createElement('button');
+  button.type = 'button'; button.className = 'category'; button.dataset.scope = id;
+  button.setAttribute('aria-pressed', String(activeCatalogScope === id));
   const image = document.createElement('img'); image.src = '/static/images/' + catalogImage(item.nombre); image.alt = '';
   const label = document.createElement('span'); label.textContent = item.nombre; label.dataset.catalogName = '';
   button.append(image, label);
-  button.onclick = () => { chooseQueryCategory(item); show('consultPage'); document.querySelector('#promptText').value = `Buscar productos de ${item.nombre} en ${city}, ${country}. Priorizar publicaciones locales.`; };
+  button.onclick = () => { activeCatalogScope = id; renderCategories(); };
+  grid.append(button);
+ }
+ if (!scopes.length) {
+  const hint = document.createElement('p'); hint.className = 'hint'; hint.setAttribute('role', 'status');
+  hint.textContent = 'Elegí tus ámbitos en Personalizar.'; grid.append(hint); return;
+ }
+ if (!activeCatalogScope || catalogStatus(grid, 'categorias')) return;
+ const items = catalogCategorias.filter(item => item.ambito_ids.some(id => String(id) === activeCatalogScope));
+ if (!items.length) {
+  const hint = document.createElement('p'); hint.className = 'hint'; hint.setAttribute('role', 'status');
+  hint.textContent = 'No hay categorías disponibles para este ámbito.'; grid.append(hint);
+ }
+ for (const item of items) {
+  const button = document.createElement('button'); button.type = 'button'; button.className = 'category'; button.dataset.cat = String(item.categoria_id);
+  const image = document.createElement('img'); image.src = '/static/images/' + catalogImage(item.nombre); image.alt = '';
+  const label = document.createElement('span'); label.textContent = item.nombre; label.dataset.catalogName = '';
+  button.append(image, label);
+  button.onclick = () => { chooseQueryCategory(item, Number(activeCatalogScope)); show('consultPage'); document.querySelector('#promptText').value = `Buscar productos de ${item.nombre} en ${city}, ${country}. Priorizar publicaciones locales.`; };
   grid.append(button);
  }
 }
 async function loadCatalogs() {
  const generation = ++catalogGeneration, language = catalogLanguage();
+ activeCatalogScope = null;
  catalogAmbitos = []; catalogCategorias = []; catalogPostalCodes = [];
  if(typeof refreshQuerySelectors==='function')refreshQuerySelectors();
  catalogState = {ambitos:'loading', categorias:'loading'};

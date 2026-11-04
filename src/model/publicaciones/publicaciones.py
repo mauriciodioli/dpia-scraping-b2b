@@ -27,6 +27,7 @@ class Publicacion(db.Model):
     botonCompra = db.Column(db.Boolean, default=False)
     imagen = db.Column(db.String(255), nullable=True)
     idioma = db.Column(db.String(255), nullable=True)
+    codigo_postal_id = db.Column(db.Integer, nullable=True)
     codigoPostal = db.Column(db.String(255), nullable=True)
     pagoOnline = db.Column(db.Boolean, default=True)
     afiliado_link = db.Column(db.String(500), nullable=True)
