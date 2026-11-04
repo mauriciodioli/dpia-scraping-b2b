@@ -6,3 +6,7 @@ src/utils/google_oauth_credentials.json
 **/*.pyc
 .git
 .gitignore
+
+# Private local query history
+src/instance/
+instance/

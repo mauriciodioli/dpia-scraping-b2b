@@ -22,11 +22,11 @@ COUNTRIES = {'Argentina': ('AR', 'ARS'), 'Uruguay': ('UY', 'UYU'),
 
 
 def prepare_context(body, user_id):
-    allowed = {'pais', 'ciudad', 'codigo_postal_id', 'ambito_id', 'categoria_id', 'idioma', 'user_message', 'mode'}
+    allowed = {'pais', 'ciudad', 'codigo_postal_id', 'ambito_id', 'categoria_id', 'idioma', 'user_message', 'mode', 'attachments', 'sources', 'request_id'}
     if not isinstance(body, dict) or set(body) - allowed:
         raise PreparationError('Solicitud de consulta inválida.')
     for key in ('pais', 'ciudad', 'user_message'):
-        if not isinstance(body.get(key), str) or not body[key].strip() or len(body[key]) > (4000 if key == 'user_message' else 100):
+        if not isinstance(body.get(key), str) or (not body[key].strip() and not (key == 'user_message' and body.get('attachments'))) or len(body[key]) > (4000 if key == 'user_message' else 100):
             raise PreparationError('Completá el país, la ciudad y tu pedido.')
     if body.get('idioma') not in ('es', 'en', 'it', 'pl') or body.get('mode', 'buscar') not in ('buscar', 'novedades'):
         raise PreparationError('Idioma o tipo de consulta inválidos.')
@@ -34,7 +34,7 @@ def prepare_context(body, user_id):
         raise PreparationError('País no disponible para esta consulta.')
     for key in ('codigo_postal_id', 'ambito_id', 'categoria_id'):
         if type(body.get(key)) is not int or not 0 < body[key] <= 2147483647:
-            raise PreparationError('Elegí un código postal, un ámbito y una categoría.')
+            raise PreparationError('Elegí un ámbito y una categoría para continuar.')
     user = Usuario.query.filter_by(id=user_id).one_or_none()
     if user is None or not user.activo:
         raise PreparationError('Iniciá sesión nuevamente.', 401)
@@ -54,7 +54,11 @@ def prepare_context(body, user_id):
     context = {'ambito': scope['nombre'], 'categoria': category['nombre'], 'pais': body['pais'],
                'ciudad': postal.ciudad, 'codigoPostal': postal.codigoPostal, 'idioma': body['idioma'],
                'usuario': user.id, 'fecha': datetime.now(ZoneInfo('Europe/Rome')).date().isoformat()}
-    return {'context': context, 'ids': {'ambito_id': body['ambito_id'], 'categoria_id': body['categoria_id'],
+    from services.query_media import validate_attachments
+    from services.query_sources import normalize_sources
+    attachments=validate_attachments(body.get('attachments'))
+    sources=normalize_sources(body.get('sources'))
+    return {'attachments':attachments, 'sources':sources, 'context': context, 'ids': {'ambito_id': body['ambito_id'], 'categoria_id': body['categoria_id'],
                                       'codigo_postal_id': postal.id},
             'mode': body.get('mode', 'buscar'), 'user_message': body['user_message'].strip()}
 
@@ -71,7 +75,7 @@ def result_template(prepared):
                             'brand_include': [], 'brand_exclude': [], 'condition': 'new', 'shipping_to': shipping,
                             'delivery_max_days': 'N/D', 'must_have': [], 'avoid': []},
             'scrape_plan': [{'source': source, 'country_domain': 'auto', 'search_query': '',
-                             'search_url': '', 'max_results': 20} for source in ('amazon', 'ebay', 'aliexpress')],
+                             'search_url': '', 'max_results': 20} for source in prepared.get('sources', ('amazon', 'ebay', 'aliexpress')) if source in ('amazon','ebay','aliexpress')],
             'items': []}
 
 
@@ -97,8 +101,10 @@ Copiá los campos de contexto sin alterarlos. Los candidatos iniciales llevan va
 estado="CANDIDATO", botonCompra=false y afiliado_link=""; esos estados no equivalen a validación real.
 No copies precios ni imágenes de ejemplos. No inventes enlaces. El esquema de referencia tiene items=[]: añadí candidatos solo si corresponde.
 '''
+    public_data={**prepared,'attachments':[{'type':item['type'],'name':item['name'],'frames_count':len(item['frames'])} for item in prepared.get('attachments',[])]}
+    instructions += '\nEl pedido original y los adjuntos definen la intención; no los sustituyas por una búsqueda genérica de la categoría.\nUsá solo los marketplaces elegidos en sources para scrape_plan. Si hay video, analizá los fotogramas visuales y no inventes audio.\n'
     return instructions + '\nMODALIDAD: ' + prepared['mode'] + '\nDATOS VERIFICADOS:\n' + json.dumps(
-        prepared, ensure_ascii=False) + '\nESTRUCTURA DE SALIDA:\n' + json.dumps(result_template(prepared), ensure_ascii=False)
+        public_data, ensure_ascii=False) + '\nESTRUCTURA DE SALIDA:\n' + json.dumps(result_template(prepared), ensure_ascii=False)
 
 
 def public_summary(prepared):
@@ -106,5 +112,6 @@ def public_summary(prepared):
     return '\n'.join(['CONSULTA PARA DPIA', f"Ubicación: {ctx['ciudad']}, {ctx['pais']}",
                       f"Ámbito: {ctx['ambito']}",
                       f"Categoría: {ctx['categoria']}", f"Idioma: {ctx['idioma']}",
-                      f"Pedido: {prepared['user_message']}",
-                      'Objetivo: proponer candidatos y un plan de búsqueda, sin ejecutar scraping.'])
+                      f"Pedido: {prepared['user_message'] or 'Identificar productos de los adjuntos.'}",
+                      'Adjuntos: '+', '.join(item['name'] for item in prepared.get('attachments',[])),
+                      'Objetivo: buscar según el pedido y los orígenes seleccionados.'])

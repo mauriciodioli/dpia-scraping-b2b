@@ -37,3 +37,5 @@ bcrypt
 cryptography
 jsonschema>=4.23,<5
 tzdata
+
+pillow>=10,<14

@@ -80,13 +80,15 @@ function renderCategories() {
   const image = DPIACatalogArtwork.create('categorias', item, {language:catalogLanguage(), country, city, scopeId:activeCatalogScope, ambitos:catalogAmbitos});
   const label = document.createElement('span'); label.textContent = item.nombre; label.dataset.catalogName = '';
   button.append(image, label);
-  button.onclick = () => { chooseQueryCategory(item, Number(activeCatalogScope)); show('consultPage'); document.querySelector('#promptText').value = `Buscar productos de ${item.nombre} en ${city}, ${country}. Priorizar publicaciones locales.`; };
+  button.onclick = () => { chooseQueryCategory(item, Number(activeCatalogScope)); show('consultPage'); document.querySelector('#promptText').value = document.querySelector('#searchText').value.trim(); };
   grid.append(button);
  }
 }
 async function loadCatalogs() {
  const generation = ++catalogGeneration, language = catalogLanguage();
  activeCatalogScope = null;
+ document.querySelector('#queryScope').value='';
+ document.querySelector('#queryCategory').value='';
  localCategory = null;
  catalogAmbitos = []; catalogCategorias = []; catalogPostalCodes = [];
  if(typeof refreshQuerySelectors==='function')refreshQuerySelectors();

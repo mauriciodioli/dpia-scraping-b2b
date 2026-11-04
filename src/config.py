@@ -74,3 +74,8 @@ DPIA_READ_TIMEOUT = float(os.environ.get("DPIA_READ_TIMEOUT", "10"))
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
 
+
+# Server-only credential with scraper:write for explicit marketplace dispatch.
+DPIA_SCRAPING_KEY = os.environ.get('DPIA_SCRAPING_KEY', '')
+QUERY_STORE_PATH = str(BASE_DIR / 'instance' / 'queries.sqlite3')
+MAX_CONTENT_LENGTH = 10 * 1024 * 1024

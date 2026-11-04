@@ -26,3 +26,7 @@ conftest.py
 .coverage
 .coverage.*
 htmlcov/
+
+# Local query history (private, never versioned)
+/src/instance/
+/instance/

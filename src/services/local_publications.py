@@ -7,7 +7,7 @@ from services.locations import postal_ids_for_city
 from utils.db import db
 
 
-def publications_for_city(country, city, offset=0, category_id=None):
+def publications_for_city(country, city, offset=0, category_id=None, terms=None):
     ids = postal_ids_for_city(country, city)
     if not ids:
         return [], False
@@ -29,6 +29,8 @@ def publications_for_city(country, city, offset=0, category_id=None):
     )
     if category_id is not None:
         query = query.filter(Publicacion.categoria_id == category_id)
+    if terms:
+        query = query.filter(or_(*(or_(Publicacion.titulo.ilike('%'+term+'%'), Publicacion.descripcion.ilike('%'+term+'%')) for term in terms)))
     rows = query.order_by(Publicacion.fecha_creacion.desc(), Publicacion.id.desc()).offset(offset).limit(25).all()
     return [dict(id=row.id, titulo=row.titulo, descripcion=row.descripcion,
                  imagen=row.imagen, precio=row.precio, moneda=row.moneda,

@@ -3,6 +3,7 @@ import json
 import requests
 from jsonschema import Draft202012Validator, ValidationError
 from services.query_preparation import result_template, build_private_prompt, PreparationError
+from services.query_media import model_input
 
 
 def obj(properties):
@@ -25,11 +26,12 @@ def result_schema(prepared):
     props=schema['properties']
     props['type']={'type':'string','enum':['results']}
     props['version']={'type':'string','enum':['dpia.results.v2']}
+    props['query']['properties']['raw_user_message']={'type':'string','enum':[prepared['user_message']]}
     props['context']=obj({key:{'type':'integer' if isinstance(value,int) else 'string','enum':[value]}
                           for key,value in prepared['context'].items()})
     props['constraints']['properties']['price']=obj({'min':PRICE,'max':PRICE,'currency':TEXT})
     props['constraints']['properties']['delivery_max_days']={'anyOf':[{'type':'integer','minimum':0},{'type':'string','enum':['N/D']}]}
-    props['scrape_plan']={'type':'array','items':obj({'source':{'type':'string','enum':['amazon','ebay','aliexpress']},
+    props['scrape_plan']={'type':'array','items':obj({'source':{'type':'string','enum':[s for s in prepared.get('sources',['amazon','ebay','aliexpress']) if s in ('amazon','ebay','aliexpress')] or ['amazon','ebay','aliexpress']},
         'country_domain':TEXT,'search_query':TEXT,'search_url':TEXT,'max_results':{'type':'integer','minimum':1,'maximum':20}})}
     fields={key:TEXT for key in ('producto','categoria','pais','fuente','motivo_tendencia','descripcion','fecha',
         'motivo_tendencia_extendido','ambito','codigoPostal','idioma','afiliado_link')}
@@ -54,6 +56,10 @@ def validate_result(result, prepared):
             raise PreparationError('La aclaración recibida no es válida.',502)
     elif not 5<=len(result['items'])<=10 or result['clarifying_question']:
         raise PreparationError('La cantidad de candidatos recibida no es válida.',502)
+    allowed={s for s in prepared.get('sources',['amazon','ebay','aliexpress']) if s in ('amazon','ebay','aliexpress')}
+    plans=[row['source'] for row in result['scrape_plan']]
+    if len(set(plans))!=len(plans) or set(plans)!=allowed:
+        raise PreparationError('El plan no coincide con los orígenes elegidos.',502)
     seen=set()
     for item in result['items']:
         key=item['producto'].strip().casefold()
@@ -85,7 +91,7 @@ def generate(prepared, config):
     try:
         with requests.post('https://api.openai.com/v1/responses',headers={'Authorization':f'Bearer {key}'},
                 json={'model':config.get('OPENAI_MODEL','gpt-4o-mini'),'store':False,'instructions':prompt,
-                      'input':prepared['user_message'],'max_output_tokens':12000,
+                      'input':model_input(prepared),'max_output_tokens':12000,
                       'text':{'format':{'type':'json_schema','name':'dpia_results_v2','strict':True,'schema':schema}}},
                 timeout=(3.05,90),allow_redirects=False) as response:
             if response.status_code!=200:raise PreparationError('No se pudo generar la consulta. Reintentá más tarde.',502)

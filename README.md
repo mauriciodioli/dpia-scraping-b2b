@@ -343,3 +343,52 @@ SELECT en una transacción de solo lectura y GET al bucket; produce miniaturas W
 un manifiesto estático con procedencia y un informe de cobertura. La navegación no
 consulta esas fuentes para resolver portadas. El mapa genérico de la etapa anterior
 queda conservado como recurso local, pero ya no se carga.
+
+## Envío de consultas, adjuntos y orígenes
+
+Enviar desde Inicio conserva exactamente el texto escrito (por ejemplo, «busco
+zapatillas») en el pedido editable. Requiere iniciar sesión y elegir explícitamente
+ámbito y categoría antes de preparar la consulta. La identidad viene de la sesión;
+el navegador no puede elegir otro usuario. El contexto se verifica otra vez al generar.
+
+Generar candidatos permite elegir Amazon, eBay, AliExpress, Local, DPIA, Historial
+o Todos. La selección se guarda en este navegador por cuenta y puede cambiarse
+con **Orígenes de búsqueda**. Local consulta publicaciones activas de la ciudad y
+categoría, DPIA consulta publicaciones activas de la categoría y Historial consulta
+las solicitudes completadas de ese usuario en esta PWA. Esos tres orígenes no
+llaman al scraper. Sin adjuntos pueden funcionar sin llamar a OpenAI.
+
+Para marketplaces, Flask envía el pedido y contexto verificado a OpenAI Responses
+con Structured Outputs y después adapta el resultado a la API existente:
+`GET /api/scraper/v1/marketplaces` y
+`POST /api/scraper/v1/scraping/{amazon|ebay|aliexpress}` con `registros` y
+`pais_defecto`. Se conserva el país del contexto para OpenAI y se utiliza el código
+esperado por el scraper en el transporte. Los países no soportados se informan sin
+lanzar scraping. No se publica ni se escribe en Sheets o Base44.
+
+Configurar en el servidor `OPENAI_API_KEY`, `OPENAI_MODEL` y una clave con permiso
+`scraper:write` en `DPIA_SCRAPING_KEY`. Si esta última no está definida, se utiliza
+`SCRAPEADOR_SERVICE_KEY`, que también debe tener ese permiso. Ninguna clave se
+envía al navegador. La API de producción no se modifica. Un candidato inicial no
+se marca como validado, pago disponible ni compra habilitada por haberlo propuesto
+el modelo; los resultados observados del scraper se muestran por separado.
+
+Se admiten hasta cuatro adjuntos, máximo ocho imágenes/fotogramas en conjunto.
+Cada archivo seleccionado puede tener hasta 15 MB. Las fotos se redimensionan
+localmente; de cada video de hasta 60 segundos se extraen cuatro fotogramas. No se
+interpreta la pista de audio. El servidor verifica y normaliza los datos antes de
+enviarlos a OpenAI; no acepta URLs arbitrarias para descargarlas. El cuerpo HTTP
+está limitado a 10 MB y las imágenes decodificadas a 5 MB. Los adjuntos no se guardan
+en el historial. La API de imágenes está documentada en
+[OpenAI Images and vision](https://developers.openai.com/api/docs/guides/images-vision).
+
+La deduplicación e historial se guardan en SQLite local
+`src/instance/queries.sqlite3` (`QUERY_STORE_PATH`), con permiso de archivo 0600,
+excluido de Git y del contexto Docker. Cada ID pertenece a un usuario y a un cuerpo
+de solicitud; una repetición recupera el resultado y no relanza proveedores. Los
+estados pendientes/fallidos no se reenvían automáticamente: un timeout puede dejar
+un trabajo remoto activo. Si se usa Docker, montar esa ruta como volumen para
+conservar el historial al recrear el contenedor. No se agregan tablas a MySQL.
+
+Pruebas específicas: `test_query_workflow.py`, `test_query_generation.py` y
+`test_catalog_ui.py`, con SQLite e interceptación HTTP. No consumen OpenAI ni Apify.

@@ -286,3 +286,5 @@ html[data-theme="dark"] .credit-demo-topup{background:linear-gradient(115deg,#5d
 .interest .catalog-artwork,.category .catalog-artwork{border-radius:inherit;margin:0}
 .interest .catalog-artwork + span,.category .catalog-artwork + span{position:absolute;inset:auto 0 0;z-index:2;max-width:100%;padding:36px 12px 12px;background:linear-gradient(transparent,#090716e8);color:#fff;font-weight:800;text-shadow:0 1px 4px #000;line-height:1.25}
 .interest .catalog-monogram,.category .catalog-monogram{padding-bottom:20px}
+
+.query-source-options{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:22px 0;text-align:left}.query-source-options label{display:flex;align-items:center;gap:8px}.query-source-options input,#allQuerySources{width:18px;height:18px;accent-color:#7952e8}#changeQuerySources{padding:12px 18px;margin:16px 0;border-radius:16px}#attachments>div{display:flex;align-items:center;gap:12px;overflow-wrap:anywhere}#attachments button{border-radius:50%;padding:5px 10px}.auth-dialog{max-height:90dvh;overflow:auto}
