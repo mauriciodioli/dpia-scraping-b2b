@@ -337,3 +337,5 @@ Object.assign(DPIA_TRANSLATIONS, {
   "Impossibile consultare i punti."
  ]
 });
+
+Object.assign(DPIA_TRANSLATIONS, {'Próximamente':['Coming soon','Wkrótce','Prossimamente'],'Todavía no disponible en la API DPIA':['Not yet available in the DPIA API','Jeszcze niedostępne w API DPIA','Non ancora disponibile nell’API DPIA']});

@@ -2,7 +2,7 @@
 import re
 from services.query_preparation import PreparationError
 
-EXTERNAL=('amazon','ebay','aliexpress')
+EXTERNAL=('amazon','ebay','aliexpress','mercadolibre')
 INTERNAL=('local','dpia','historial')
 ALL=EXTERNAL+INTERNAL
 

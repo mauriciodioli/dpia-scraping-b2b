@@ -1,7 +1,9 @@
 // The original user request is preserved; context and identity are verified by Flask.
 let queryMode='buscar', queryPrepared=null, queryBusy=false, queryRequestId=null, pendingSourcesGeneration=false;
 let novelAutoDraft='';
-const querySources=['amazon','ebay','aliexpress','local','dpia','historial'];
+const externalQuerySources=['amazon','ebay','aliexpress','mercadolibre'];
+const querySources=[...externalQuerySources,'local','dpia','historial'];
+function sourceAvailableForCountry(source){return source!=='mercadolibre'||['Argentina','México'].includes(country);}
 function refreshQuerySelectors(category=null, scopeId=null){
  const scopeSelect=document.querySelector('#queryScope'), categorySelect=document.querySelector('#queryCategory'), postalSelect=document.querySelector('#queryPostal');
  const oldScope=scopeSelect.value,oldCategory=categorySelect.value,oldPostal=postalSelect.value;
@@ -81,16 +83,20 @@ async function prepareDPIAQuery(){
  }catch(error){status.textContent=error.name==='TimeoutError'?'La preparación tardó demasiado. Reintentá.':error.message;}
  finally{queryBusy=false;}
 }
-function sourcePreferenceKey(){return 'dpia-query-sources:'+currentEmail;}
+function sourcePreferenceKey(){return 'dpia-query-sources:'+currentEmail+':'+country;}
 function savedQuerySources(){
- try{const saved=JSON.parse(localStorage.getItem(sourcePreferenceKey()));return Array.isArray(saved)&&saved.length&&saved.every(s=>querySources.includes(s))&&saved.filter(s=>['amazon','ebay','aliexpress'].includes(s)).length<=1?[...new Set(saved)]:null;}catch(_){return null;}
+ try{const saved=JSON.parse(localStorage.getItem(sourcePreferenceKey()));return Array.isArray(saved)&&saved.length&&saved.every(s=>querySources.includes(s)&&sourceAvailableForCountry(s))&&saved.filter(s=>externalQuerySources.includes(s)).length<=1?[...new Set(saved)]:null;}catch(_){return null;}
 }
 function openSourceModal(generateAfter=false){
  if(queryBusy)return;
  pendingSourcesGeneration=generateAfter;
  const selected=savedQuerySources()||['amazon'];
  document.querySelector('#allQuerySources').checked=['local','dpia','historial'].every(source=>selected.includes(source));
- for(const checkbox of document.querySelectorAll('[name="querySource"]'))checkbox.checked=selected.includes(checkbox.value);
+ for(const checkbox of document.querySelectorAll('[name="querySource"]')){
+  const source=checkbox.value,available=source==='allegro'?country==='Polonia':sourceAvailableForCountry(source);
+  if(['mercadolibre','allegro'].includes(source))checkbox.closest('label').hidden=!available;
+  checkbox.disabled=source==='allegro'||!available;checkbox.checked=!checkbox.disabled&&selected.includes(source);
+ }
  document.querySelector('#querySourceError').textContent='';document.querySelector('#querySourcesModal').hidden=false;
  document.querySelector('#confirmQuerySources').focus();
 }
@@ -108,7 +114,7 @@ function renderQueryResult(data){
   const state=document.createElement('p');state.className='query-state';state.textContent=states[outcome.status]||'Pendiente de confirmación';section.append(state);
   if(outcome.error){const error=document.createElement('p');error.textContent=outcome.error;section.append(error);}
   if(data.remote_job&&source==='amazon'&&window.DPIAHistory)section.append(window.DPIAHistory.remoteImageButton(data.remote_job));
-  const external=['amazon','ebay','aliexpress'].includes(source);
+  const external=externalQuerySources.includes(source);
   if(external){
    const grid=document.createElement('div');grid.className='scraped-products';
    for(const [productIndex,product] of (outcome.products||[]).entries()){
@@ -196,10 +202,10 @@ async function generateDPIAQuery(){
  if(JSON.stringify(queryBody())!==queryPrepared.fingerprint){invalidateQuery();document.querySelector('#queryStatus').textContent='El pedido cambió. Prepará nuevamente la consulta.';return;}
  const exploring=queryPrepared.body.mode==='explorar';
  const sources=exploring?['dpia']:savedQuerySources();if(!sources){openSourceModal(true);return;}
- if(queryPrepared.body.mode==='novedades'&&sources.filter(source=>['amazon','ebay','aliexpress'].includes(source)).length!==1){document.querySelector('#queryStatus').textContent='Elegí un marketplace para buscar novedades.';openSourceModal(true);return;}
+ if(queryPrepared.body.mode==='novedades'&&sources.filter(source=>externalQuerySources.includes(source)).length!==1){document.querySelector('#queryStatus').textContent='Elegí un marketplace para buscar novedades.';openSourceModal(true);return;}
  queryBusy=true;const button=document.querySelector('#generateQuery'),status=document.querySelector('#queryStatus');button.disabled=true;
  const novel=queryPrepared.body.mode==='novedades',email=currentEmail;
- const direct=queryPrepared.body.mode==='buscar'&&!queryPrepared.body.attachments.length&&sources.length===1&&['amazon','ebay','aliexpress'].includes(sources[0]);
+ const direct=queryPrepared.body.mode==='buscar'&&!queryPrepared.body.attachments.length&&sources.length===1&&externalQuerySources.includes(sources[0]);
  queryRequestId ||= crypto.randomUUID();
  if(direct)setScrapingStatus('running','Scrapeando…');
  if(novel)setScrapingStatus('preparing','Preparando novedades con IA…');
@@ -236,8 +242,8 @@ document.querySelector('#closeQuerySources').onclick=closeSourceModal;
 document.querySelector('#querySourcesModal').onclick=e=>{if(e.target.id==='querySourcesModal')closeSourceModal();};
 document.querySelector('#allQuerySources').onchange=e=>{for(const box of document.querySelectorAll('[name="querySource"]'))if(['local','dpia','historial'].includes(box.value))box.checked=e.target.checked;};
 document.querySelector('#confirmQuerySources').onclick=()=>{
- const sources=[...document.querySelectorAll('[name="querySource"]:checked')].map(box=>box.value);
- if(pendingSourcesGeneration&&queryMode==='novedades'&&sources.filter(source=>['amazon','ebay','aliexpress'].includes(source)).length!==1){document.querySelector('#querySourceError').textContent='Elegí un marketplace para buscar novedades.';return;}
+ const sources=[...document.querySelectorAll('[name="querySource"]:checked:not(:disabled)')].map(box=>box.value);
+ if(pendingSourcesGeneration&&queryMode==='novedades'&&sources.filter(source=>externalQuerySources.includes(source)).length!==1){document.querySelector('#querySourceError').textContent='Elegí un marketplace para buscar novedades.';return;}
  if(!sources.length){document.querySelector('#querySourceError').textContent='Seleccioná al menos un origen de búsqueda.';return;}
  try{localStorage.setItem(sourcePreferenceKey(),JSON.stringify(sources));}catch(_){document.querySelector('#querySourceError').textContent='No se pudieron guardar los orígenes.';return;}
  const generate=pendingSourcesGeneration;queryRequestId=null;closeSourceModal();if(generate)generateDPIAQuery();
@@ -246,4 +252,4 @@ function syncLocalCategory(){const option=document.querySelector('#queryCategory
 document.querySelector('#queryCategory').addEventListener('change',()=>{syncLocalCategory();if(queryMode==='novedades')updateNovelDraft();});
 
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!document.querySelector('#querySourcesModal').hidden)closeSourceModal();});
-for(const box of document.querySelectorAll('[name="querySource"]'))box.addEventListener('change',()=>{if(box.checked&&['amazon','ebay','aliexpress'].includes(box.value)){for(const other of document.querySelectorAll('[name="querySource"]'))if(other!==box&&['amazon','ebay','aliexpress'].includes(other.value))other.checked=false;}document.querySelector('#allQuerySources').checked=[...document.querySelectorAll('[name="querySource"]')].filter(item=>['local','dpia','historial'].includes(item.value)).every(item=>item.checked);});
+for(const box of document.querySelectorAll('[name="querySource"]'))box.addEventListener('change',()=>{if(box.checked&&externalQuerySources.includes(box.value)){for(const other of document.querySelectorAll('[name="querySource"]'))if(other!==box&&externalQuerySources.includes(other.value))other.checked=false;}document.querySelector('#allQuerySources').checked=[...document.querySelectorAll('[name="querySource"]')].filter(item=>['local','dpia','historial'].includes(item.value)).every(item=>item.checked);});

@@ -31,7 +31,7 @@ def result_schema(prepared):
                           for key,value in prepared['context'].items()})
     props['constraints']['properties']['price']=obj({'min':PRICE,'max':PRICE,'currency':TEXT})
     props['constraints']['properties']['delivery_max_days']={'anyOf':[{'type':'integer','minimum':0},{'type':'string','enum':['N/D']}]}
-    props['scrape_plan']={'type':'array','items':obj({'source':{'type':'string','enum':[s for s in prepared.get('sources',['amazon','ebay','aliexpress']) if s in ('amazon','ebay','aliexpress')] or ['amazon','ebay','aliexpress']},
+    props['scrape_plan']={'type':'array','items':obj({'source':{'type':'string','enum':[s for s in prepared.get('sources',['amazon','ebay','aliexpress']) if s in ('amazon','ebay','aliexpress','mercadolibre')] or ['amazon','ebay','aliexpress']},
         'country_domain':TEXT,'search_query':TEXT,'search_url':TEXT,'max_results':{'type':'integer','minimum':1,'maximum':20}})}
     fields={key:TEXT for key in ('producto','categoria','pais','fuente','motivo_tendencia','descripcion','fecha',
         'motivo_tendencia_extendido','ambito','codigoPostal','idioma','afiliado_link')}
@@ -56,7 +56,7 @@ def validate_result(result, prepared):
             raise PreparationError('La aclaración recibida no es válida.',502)
     elif not 5<=len(result['items'])<=10 or result['clarifying_question']:
         raise PreparationError('La cantidad de candidatos recibida no es válida.',502)
-    allowed={s for s in prepared.get('sources',['amazon','ebay','aliexpress']) if s in ('amazon','ebay','aliexpress')}
+    allowed={s for s in prepared.get('sources',['amazon','ebay','aliexpress']) if s in ('amazon','ebay','aliexpress','mercadolibre')}
     plans=[row['source'] for row in result['scrape_plan']]
     if len(set(plans))!=len(plans) or set(plans)!=allowed:
         raise PreparationError('El plan no coincide con los orígenes elegidos.',502)

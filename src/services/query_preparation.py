@@ -58,6 +58,8 @@ def prepare_context(body, user_id):
     from services.query_sources import normalize_sources
     attachments=validate_attachments(body.get('attachments'))
     sources=[] if body.get('mode')=='explorar' else normalize_sources(body.get('sources'))
+    if 'mercadolibre' in sources and body['pais'] not in ('Argentina','México'):
+        raise PreparationError('Mercado Libre no está disponible para el país seleccionado.')
     return {'attachments':attachments, 'sources':sources, 'context': context, 'ids': {'ambito_id': body['ambito_id'], 'categoria_id': body['categoria_id'],
                                       'codigo_postal_id': postal.id},
             'mode': body.get('mode', 'buscar'), 'user_message': body['user_message'].strip()}
@@ -75,7 +77,7 @@ def result_template(prepared):
                             'brand_include': [], 'brand_exclude': [], 'condition': 'new', 'shipping_to': shipping,
                             'delivery_max_days': 'N/D', 'must_have': [], 'avoid': []},
             'scrape_plan': [{'source': source, 'country_domain': 'auto', 'search_query': '',
-                             'search_url': '', 'max_results': 20} for source in prepared.get('sources', ('amazon', 'ebay', 'aliexpress')) if source in ('amazon','ebay','aliexpress')],
+                             'search_url': '', 'max_results': 20} for source in prepared.get('sources', ('amazon', 'ebay', 'aliexpress')) if source in ('amazon','ebay','aliexpress','mercadolibre')],
             'items': []}
 
 
