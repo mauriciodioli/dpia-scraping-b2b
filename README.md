@@ -407,3 +407,11 @@ Los paquetes comerciales siguen siendo demostración sin pagos.
 las llamadas externas. No se habilita automáticamente al agregar ejecuciones.
 Ver [scraping directo](docs/direct-scraping.md) y
 [prueba funcional](docs/six-scraping-trial.md).
+
+## Historial y preparación de imágenes en la PWA
+
+Consultar incorpora pestañas de Consulta e Historial. La notificación global
+se consume al pulsarla. El historial permite recuperar búsquedas propias y, para
+el titular autorizado de la conexión, trabajos de la API del Scrapeador.
+Las imágenes y publicaciones requieren acciones explícitas; no se repite la
+búsqueda inicial. Ver [contratos, permisos y pruebas](docs/query-history-images.md).

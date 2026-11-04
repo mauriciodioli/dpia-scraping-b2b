@@ -24,8 +24,8 @@ no declaradas mediante FK ni mediante `publicacion_id`, `id_publicacion` o
 El controlador conserva los helpers aportados; se corrigieron imports a `model`
 y `utils.db`. El helper heredado de creación solo admite el modo de base de datos
 por defecto y ya no importa ni llama a Sheets. No se exponen rutas de creación o
-edición mediante esos helpers. El flujo de imágenes/publicación desde scraping
-sigue pendiente de un contrato compatible con los resultados directos.
+edición mediante esos helpers. El flujo de imágenes/publicación desde los resultados directos está documentado
+en [historial e imágenes](query-history-images.md).
 
 Pruebas locales: `test_publication_deletion.py` verifica propiedad, dependencias,
 medios compartidos, rollback y listado privado con fixtures aislados.

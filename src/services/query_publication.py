@@ -69,7 +69,7 @@ def publish_product(quota, operation_id, user_id, body):
         if not scope or not category or not relation:raise PreparationError('La categoría ya no corresponde al ámbito seleccionado.',409)
         slug='pwa-'+hashlib.sha256(f'{user_id}:{operation_id}:{index}'.encode()).hexdigest()
         result=conn.execute(Publicacion.__table__.insert().values(user_id=user_id,titulo=slug,texto=payload['titulo'],
-            ambito=scope['valor'],categoria_id=ids['categoria_id'],correo_electronico=user['correo_electronico'],
+            ambito=scope['valor'] or context['ambito'],categoria_id=ids['categoria_id'],correo_electronico=user['correo_electronico'],
             descripcion=payload['descripcion'],color_texto='black',color_titulo='black',
             fecha_creacion=datetime.now(timezone.utc).replace(tzinfo=None),estado='ACTIVO',
             codigo_postal_id=ids['codigo_postal_id'],codigoPostal=context['codigoPostal'],idioma=context['idioma'],

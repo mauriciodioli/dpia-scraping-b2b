@@ -1,29 +1,30 @@
 /* History and galleries are loaded through authenticated Flask endpoints. */
 (()=>{
  const $=id=>document.getElementById(id);
- let generation=0,offset=0,chosen=null,imageBusy=false,identity=null;
+ let generation=0,offset=0,chosen=null,imageBusy=false,identity=typeof currentEmail==='string'?currentEmail:null;
  function showQuery(){
   $('currentQueryPanel').hidden=false;$('queryHistoryPanel').hidden=true;
   $('queryCurrentTab').setAttribute('aria-selected','true');$('queryHistoryTab').setAttribute('aria-selected','false');
  }
  async function history(append=false){
   if(!currentEmail){openAuth();return;}
-  const email=currentEmail,serial=++generation;
+  const email=currentEmail,serial=++generation,remote=$('queryHistoryOrigin').value==='scraper',place=country;
   if(!append){offset=0;$('queryHistoryList').replaceChildren();$('ArchivosCargados').replaceChildren(new Option('Seleccioná una búsqueda',''));}
   $('queryHistoryStatus').textContent='Cargando historial…';$('moreQueryHistory').hidden=true;
   try{
-   const response=await fetch('/api/consultas/historial?offset='+offset,{cache:'no-store'}),data=await response.json();
+   const response=await fetch(remote?'/api/consultas/historial/scrapeador?pais='+encodeURIComponent(place):'/api/consultas/historial?offset='+offset,{cache:'no-store'}),data=await response.json();
+   if(remote&&Array.isArray(data.trabajos))data.operations=data.trabajos.map(row=>({operation_id:row.archivo,query:row.nombre,source:'Scrapeador API',city:place,state:'stored',product_count:null,remote:true}));
    if(serial!==generation||email!==currentEmail)return;
    if(response.status===401){openAuth();return;}
    if(!response.ok||!data.success||!Array.isArray(data.operations))throw new Error(data.error||'No se pudo consultar el historial.');
-   const states={reserved:'Reservada',dispatching:'En curso',pending:'Pendiente de confirmación',consumed:'Finalizada',released:'No iniciada'};
+   const states={reserved:'Reservada',dispatching:'En curso',pending:'Pendiente de confirmación',consumed:'Finalizada',released:'No iniciada',stored:'Trabajo guardado'};
    for(const row of data.operations){
     const label=[row.query,row.source,row.city,row.created_at?new Date(row.created_at).toLocaleString():null].filter(Boolean).join(' · ');
-    const option=new Option(label,row.operation_id);option.dataset.trabajoId=row.operation_id;$('ArchivosCargados').add(option);
+    const option=new Option(label,row.operation_id);if(!remote)option.dataset.trabajoId=row.operation_id;else option.dataset.archivo=row.operation_id;option.dataset.origin=remote?'scraper':'pwa';option.dataset.country=place;$('ArchivosCargados').add(option);
     const card=document.createElement('article');card.className='source-result';
     const title=document.createElement('strong');title.textContent=label;
-    const detail=document.createElement('p');detail.textContent=`${states[row.state]||'Estado sin confirmar'} · ${row.product_count} productos · ${row.category||''}`;
-    const button=document.createElement('button');button.type='button';button.textContent='Consultar resultados';button.onclick=()=>loadQueryOperation(row.operation_id);
+    const detail=document.createElement('p');detail.textContent=`${states[row.state]||'Estado sin confirmar'} · ${row.product_count==null?'Productos por consultar':row.product_count+' productos'} · ${row.category||''}`;
+    const button=document.createElement('button');button.className='action-button';button.type='button';button.textContent='Consultar resultados';button.onclick=()=>row.remote?loadRemote(row.operation_id,place):loadQueryOperation(row.operation_id);
     card.append(title,detail,button);$('queryHistoryList').append(card);
    }
    offset+=data.operations.length;$('moreQueryHistory').hidden=!data.has_more;
@@ -82,23 +83,55 @@
    if(currentEmail!==target.email)return;
    if(!response.ok||!data.success||!data.guardado)throw new Error(data.error||'No se pudo confirmar la publicación.');
    $('queryPublicationStatus').textContent='Publicación guardada · ID '+data.publicacion_id+' · Disponible en Mi perfil → Mis publicaciones.';
-   const button=document.createElement('button');button.type='button';button.textContent='Ver mis publicaciones';button.onclick=()=>{$('productImagesOverlay').hidden=true;window.DPIAPublications?.openProfile();};$('queryPublicationStatus').append(button);
+   const button=document.createElement('button');button.className='action-button';button.type='button';button.textContent='Ver mis publicaciones';button.onclick=()=>{$('productImagesOverlay').hidden=true;window.DPIAPublications?.openProfile();};$('queryPublicationStatus').append(button);
   }catch(error){$('queryPublicationStatus').textContent=error.message;$('saveQueryPublication').disabled=false;}
   finally{imageBusy=false;}
  }
  $('queryPublicationForm').onsubmit=e=>{e.preventDefault();publish();};
+ async function loadRemote(filename,place=country){
+  const email=currentEmail,serial=++generation;
+  $('queryHistoryStatus').textContent='Consultando trabajo en la API DPIA…';
+  try{
+   const params=new URLSearchParams({pais:place,archivo:filename});
+   const response=await fetch('/api/consultas/historial/scrapeador?'+params,{cache:'no-store'}),data=await response.json();
+   if(serial!==generation||email!==currentEmail)return;
+   if(!response.ok||!data.success)throw new Error(data.error||'No se pudo recuperar el trabajo.');
+   show('consultPage');renderQueryResult(data.payload);$('queryStatus').textContent='Trabajo recuperado de la API DPIA.';
+  }catch(error){if(serial===generation&&email===currentEmail)$('queryHistoryStatus').textContent=error.message;}
+ }
+ function remoteImageButton(job){
+  const wrap=document.createElement('div'),button=document.createElement('button'),status=document.createElement('p'),results=document.createElement('div');
+  button.className='action-button';button.type='button';button.textContent='Preparar imágenes del trabajo';status.className='hint';
+  button.onclick=async()=>{
+   if(button.disabled)return;
+   const email=currentEmail;button.disabled=true;status.textContent='Aplicando los filtros del Scrapeador y preparando imágenes…';
+   try{
+    const response=await fetch('/api/consultas/historial/scrapeador',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...job,filters:{}}),signal:AbortSignal.timeout(650000)}),data=await response.json();
+    if(email!==currentEmail)return;
+    if(!response.ok||!data.success)throw new Error(data.error||'No se pudo confirmar la preparación de imágenes.');
+    results.replaceChildren();
+    for(const row of data.selected||[]){const article=document.createElement('article'),title=document.createElement('h4'),gallery=document.createElement('div');title.textContent=row.title;gallery.className='product-gallery';
+     for(const value of row.images||[]){const url=safeQueryUrl(value);if(url){const image=document.createElement('img');image.src=url;image.alt='Imagen del producto';image.onerror=()=>image.remove();gallery.append(image);}}
+     article.append(title,gallery);results.append(article);}
+    status.textContent=data.selected?.length?'Selección final de imágenes recuperada de DPIA.':'No hay productos que superen los filtros del Scrapeador.';
+   }catch(error){if(email===currentEmail)status.textContent=error.message;}
+   finally{button.disabled=false;}
+  };
+  wrap.append(button,status,results);return wrap;
+ }
  function imageButton(operation,index,product,stage){
-  const button=document.createElement('button');button.type='button';button.textContent=stage?.status==='complete'?'Ver imágenes / ajustar filtros':'Preparar imágenes';
+  const button=document.createElement('button');button.className='action-button';button.type='button';button.textContent=stage?.status==='complete'?'Ver imágenes / ajustar filtros':'Preparar imágenes';
   button.onclick=()=>openImages(operation,index,product,stage);return button;
  }
  $('queryCurrentTab').onclick=showQuery;$('queryHistoryTab').onclick=showHistory;
  $('refreshQueryHistory').onclick=()=>history();$('moreQueryHistory').onclick=()=>history(true);
- $('ArchivosCargados').onchange=e=>{if(e.target.value)loadQueryOperation(e.target.value);};
+ $('ArchivosCargados').onchange=e=>{if(e.target.value){const option=e.target.selectedOptions[0];if(option.dataset.origin==='scraper')loadRemote(e.target.value,option.dataset.country);else loadQueryOperation(e.target.value);}};
+ $('queryHistoryOrigin').onchange=()=>history();
  $('productImagesForm').onsubmit=e=>{e.preventDefault();prepareImages();};
  function closeImages(){if(imageBusy)return;$('productImagesOverlay').hidden=true;chosen=null;}
  $('closeProductImages').onclick=closeImages;
  $('productImagesOverlay').onclick=e=>{if(e.target===$('productImagesOverlay'))closeImages();};
  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeImages();});
  new MutationObserver(()=>{if(identity!==currentEmail){identity=currentEmail;generation++;$('queryHistoryList').replaceChildren();$('ArchivosCargados').replaceChildren(new Option('Seleccioná una búsqueda',''));$('productImagesOverlay').hidden=true;chosen=null;}}).observe($('userBtn'),{childList:true,subtree:true,characterData:true});
- window.DPIAHistory={showQuery,showHistory,imageButton};
+ window.DPIAHistory={showQuery,showHistory,imageButton,remoteImageButton};
 })();

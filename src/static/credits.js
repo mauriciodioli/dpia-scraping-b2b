@@ -17,7 +17,7 @@
   $('creditDemoHint').textContent=tr(logged?'Un punto representa una ejecución de scraping. No se descuentan tokens.':'Iniciá sesión para consultar tus ejecuciones.');
   $('creditOperations').replaceChildren();
   for(const operation of credits?.operations||[]){
-   const row=document.createElement('li'),name=document.createElement('span'),button=document.createElement('button');
+   const row=document.createElement('li'),name=document.createElement('span'),button=document.createElement('button');button.className='action-button';
    name.textContent=operation.source+' · '+tr(states[operation.state]||'Pendiente de confirmación');button.type='button';button.textContent=tr('Ver resultado');
    button.onclick=()=>loadQueryOperation(operation.operation_id);row.append(name,button);$('creditOperations').append(row);
   }

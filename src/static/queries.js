@@ -72,6 +72,7 @@ function renderQueryResult(data){
   const title=document.createElement('h3');title.textContent=source;section.append(title);
   const state=document.createElement('p');state.className='query-state';state.textContent=states[outcome.status]||'Pendiente de confirmación';section.append(state);
   if(outcome.error){const error=document.createElement('p');error.textContent=outcome.error;section.append(error);}
+  if(data.remote_job&&source==='amazon'&&window.DPIAHistory)section.append(window.DPIAHistory.remoteImageButton(data.remote_job));
   const external=['amazon','ebay','aliexpress'].includes(source);
   if(external){
    const grid=document.createElement('div');grid.className='scraped-products';
@@ -87,11 +88,11 @@ function renderQueryResult(data){
     card.append(visual,name,price,currency,marketplace);
     const productUrl=safeQueryUrl(product.url);
     if(productUrl){const link=document.createElement('a');link.href=productUrl;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Ver producto';card.append(link);}
-    if(source==='amazon'&&(data.request_id||lastQueryOperationId)&&window.DPIAHistory)card.append(window.DPIAHistory.imageButton(data.request_id||lastQueryOperationId,productIndex,product,outcome.image_stages?.[String(productIndex)]));
+    if(data.origin!=='scraper_api'&&source==='amazon'&&(data.request_id||lastQueryOperationId)&&window.DPIAHistory)card.append(window.DPIAHistory.imageButton(data.request_id||lastQueryOperationId,productIndex,product,outcome.image_stages?.[String(productIndex)]));
     grid.append(card);
    }
    section.append(grid);
-   if(outcome.status==='pending'&&lastQueryOperationId){const refresh=document.createElement('button');refresh.type='button';refresh.textContent='Consultar estado';refresh.onclick=()=>loadQueryOperation(lastQueryOperationId);section.append(refresh);}
+   if(outcome.status==='pending'&&lastQueryOperationId){const refresh=document.createElement('button');refresh.className='action-button';refresh.type='button';refresh.textContent='Consultar estado';refresh.onclick=()=>loadQueryOperation(lastQueryOperationId);section.append(refresh);}
   }else{
    for(const row of outcome.data||[]){const article=document.createElement('article');article.className='prompt-result';const name=document.createElement('strong');name.textContent=row.titulo||row.producto||row.Producto||'';const description=document.createElement('p');description.textContent=row.descripcion||'';article.append(name,description);section.append(article);}
    if(!outcome.data?.length){const empty=document.createElement('p');empty.textContent='Sin resultados para este origen.';section.append(empty);}
@@ -104,7 +105,7 @@ function renderQueryResult(data){
   for(const row of data.rows){const card=document.createElement('article');card.className='prompt-result';const title=document.createElement('strong');title.textContent=row.Producto;const detail=document.createElement('p');detail.textContent=row.descripcion;card.append(title,detail);candidates.append(card);}
   container.append(candidates);
  }
- const download=document.createElement('button');download.type='button';download.textContent='Descargar JSON';
+ const download=document.createElement('button');download.className='action-button';download.type='button';download.textContent='Descargar JSON';
  download.onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='dpia-results.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};container.append(download);
 }
 async function loadQueryOperation(id){
@@ -119,9 +120,12 @@ async function loadQueryOperation(id){
 function setScrapingStatus(state,text){
  const badge=document.querySelector('#scrapingActivity');
  badge.hidden=false;badge.dataset.state=state;
+ if(state==='running')badge.dataset.operationId='';
+ if(state==='pending'&&queryRequestId)badge.dataset.operationId=queryRequestId;
  badge.querySelector('span:last-child').textContent=text;
 }
 function updateScrapingStatus(data){
+ document.querySelector('#scrapingActivity').dataset.operationId=data.request_id||lastQueryOperationId||'';
  const outcomes=Object.values(data.sources||{});
  if(outcomes.some(row=>row.status==='pending'))setScrapingStatus('pending','Scraping pendiente de confirmación · Consultar');
  else if(outcomes.some(row=>row.status==='failed'))setScrapingStatus('failed','La búsqueda informó un error · Consultar');
@@ -130,7 +134,7 @@ function updateScrapingStatus(data){
   setScrapingStatus('complete',count?`${count} resultados disponibles · Consultar`:'Búsqueda completada sin resultados · Consultar');
  }
 }
-document.querySelector('#scrapingActivity').onclick=()=>{document.querySelector('#scrapingActivity').hidden=true;show('consultPage');document.querySelector('#queryResults').scrollIntoView({behavior:'smooth',block:'start'});};
+document.querySelector('#scrapingActivity').onclick=async()=>{const badge=document.querySelector('#scrapingActivity'),id=badge.dataset.operationId;badge.hidden=true;show('consultPage');if(id)await loadQueryOperation(id);document.querySelector('#queryResults').scrollIntoView({behavior:'smooth',block:'start'});};
 async function generateDPIAQuery(){
  if(queryBusy||!queryPrepared)return;
  if(!currentEmail){openAuth();return;}
@@ -151,7 +155,7 @@ async function generateDPIAQuery(){
   renderQueryResult(data);if(direct)updateScrapingStatus(data);
   const outcomes=Object.values(data.sources||{});
   status.textContent=outcomes.some(row=>row.status==='pending')?'La ejecución sigue pendiente. No se reenviará.':outcomes.some(row=>row.status==='failed')?'La ejecución falló.':'Consulta completada. Revisá los resultados de cada origen.';
- }catch(error){if(direct&&!error.confirmedRejection)setScrapingStatus('pending','Scraping pendiente de confirmación · Consultar');status.textContent=error.name==='TimeoutError'?'La consulta sigue pendiente. No se reenviará automáticamente.':error.message;if(queryRequestId){lastQueryOperationId=queryRequestId;const refresh=document.createElement('button');refresh.textContent='Consultar estado';refresh.onclick=()=>loadQueryOperation(lastQueryOperationId);document.querySelector('#queryResults').append(refresh);}}
+ }catch(error){if(direct&&!error.confirmedRejection)setScrapingStatus('pending','Scraping pendiente de confirmación · Consultar');status.textContent=error.name==='TimeoutError'?'La consulta sigue pendiente. No se reenviará automáticamente.':error.message;if(queryRequestId){lastQueryOperationId=queryRequestId;const refresh=document.createElement('button');refresh.className='action-button';refresh.textContent='Consultar estado';refresh.onclick=()=>loadQueryOperation(lastQueryOperationId);document.querySelector('#queryResults').append(refresh);}}
  finally{queryBusy=false;button.disabled=false;window.DPIACredits?.refresh();}
 }
 document.querySelector('#queryScope').addEventListener('change',()=>{refreshQuerySelectors();syncLocalCategory();});

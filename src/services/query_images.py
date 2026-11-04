@@ -9,6 +9,8 @@ import re
 from urllib.parse import urlsplit
 import requests
 from services.dpia_client import DPIAClient
+from model.usuario import Usuario
+from utils.db import db
 from services.query_execution import normalize_products, safe_product_url
 from services.query_preparation import PreparationError
 
@@ -66,6 +68,8 @@ def raw_product(operation, index):
 
 
 def prepare_images(quota, operation_id, user_id, index, filters, config):
+    user=db.session.get(Usuario,user_id)
+    if not user or not user.activo:raise PreparationError('Iniciá sesión con un usuario activo.',401)
     operation=quota.operation(operation_id,user_id)
     if not operation:raise PreparationError('Operación no encontrada.',404)
     if operation['source']!='amazon':raise PreparationError('La galería por ASIN está disponible para Amazon.')

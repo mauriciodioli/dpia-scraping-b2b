@@ -192,6 +192,9 @@ def query_history():
     if not offset.isdecimal() or len(offset)>6:
         return jsonify(success=False,error='Página inválida.'),400
     try:
+        from model.usuario import Usuario
+        user=db.session.get(Usuario,session['user_id'])
+        if not user or not user.activo:return jsonify(success=False,error='Iniciá sesión.'),401
         return jsonify(success=True,**quota.history(session['user_id'],int(offset)))
     except PreparationError as exc:
         return jsonify(success=False,error=str(exc)),exc.status
@@ -231,3 +234,31 @@ def publish_query_product(operation_id):
         return jsonify(success=False,error=str(exc)),exc.status
     except SQLAlchemyError:
         return jsonify(success=False,error='No se confirmó el guardado. Consultá tus publicaciones antes de reintentar.'),503
+
+
+@query_bp.route('/historial/scrapeador',methods=['GET','POST'])
+def shared_scraper_history():
+    if type(session.get('user_id')) is not int:
+        return jsonify(success=False,error='Iniciá sesión para consultar el historial.'),401
+    try:
+        from services.scraper_history import ScraperHistory
+        from services.query_execution import normalize_products
+        client=ScraperHistory(session['user_id'],current_app.config)
+        if request.method=='GET':
+            country=request.args.get('pais','');filename=request.args.get('archivo')
+            if filename is None:return jsonify(success=True,trabajos=client.listing(country))
+            groups=client.load(country,filename)
+            products=normalize_products(groups,'amazon')
+            errors=any(bool(group.get('error')) for group in groups)
+            status=('partial' if products else 'failed') if errors else ('complete' if products else 'empty')
+            return jsonify(success=True,payload={'rows':[],'result':{'needs_clarification':False},
+                'origin':'scraper_api','remote_job':{'pais':country,'archivo':filename},
+                'sources':{'amazon':{'status':status,'products':products}}})
+        body=request.get_json(silent=True)
+        if not isinstance(body,dict) or set(body)-{'pais','archivo','filters'} or not isinstance(body.get('archivo'),str):
+            raise PreparationError('Seleccioná un trabajo válido del historial.')
+        return jsonify(client.images(body.get('pais'),body['archivo'],body.get('filters',{})))
+    except PreparationError as exc:
+        return jsonify(success=False,error=str(exc)),exc.status
+    except SQLAlchemyError:
+        return jsonify(success=False,error='No se pudo verificar el acceso al historial.'),503
