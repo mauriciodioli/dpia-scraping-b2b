@@ -30,3 +30,7 @@ htmlcov/
 # Local query history (private, never versioned)
 /src/instance/
 /instance/
+
+# Documentación y SQL locales de promociones
+/docs/publication-promotions.md
+/docs/sql/publication-promotions.sql

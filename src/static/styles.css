@@ -314,3 +314,13 @@ html[data-theme="dark"] button.action-button{background:linear-gradient(135deg,#
 
 /* Keep the last consultation actions clear of the fixed navigation and status. */
 #consultPage{padding-bottom:160px}
+
+/* Nearby publications: swipe, keyboard focus, and manual navigation. */
+#products{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;padding:4px 2px 14px;scrollbar-width:thin}
+#products>.product{flex:0 0 calc((100% - 42px)/4);min-width:160px;scroll-snap-align:start;text-align:left}
+#products>.product:focus-visible{outline:3px solid #a77aff;outline-offset:-3px}
+.home-carousel-controls{display:flex;justify-content:flex-end;gap:8px;margin:0 0 12px}
+.home-carousel-controls .action-button{min-width:44px;font-size:24px;line-height:1}
+@media(max-width:520px){#products>.product{flex-basis:72%;min-width:0}}
+
+#products .promotion-badge{align-self:flex-start;padding:5px 9px;margin:0 0 6px;border-radius:12px;background:#ffb41e;color:#241738;font-weight:700}

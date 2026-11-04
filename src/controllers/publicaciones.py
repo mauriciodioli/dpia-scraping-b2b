@@ -1003,3 +1003,36 @@ def delete_publication(publication_id):
         db.session.rollback()
         current_app.logger.warning('Publication deletion rolled back')
         return jsonify(success=False, error='No se pudo eliminar la publicación. No se confirmaron cambios.'), 503
+
+
+@publicaciones.get('/api/publicaciones/promociones')
+def promotion_balance():
+    try:
+        user = authenticated_publication_user()
+        if user is None:
+            return jsonify(success=False, error='Iniciá sesión.'), 401
+        from services.publication_promotions import summary
+        return jsonify(success=True, **summary(user.id))
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify(success=False, error='No se pudieron consultar los puntos de promoción.'), 503
+
+
+@publicaciones.post('/api/publicaciones/<int:publication_id>/destacar')
+def promote_publication(publication_id):
+    try:
+        user = authenticated_publication_user()
+        if user is None:
+            return jsonify(success=False, error='Iniciá sesión.'), 401
+        if request.headers.get('X-DPIA-Action')!='promote-publication':
+            return jsonify(success=False, error='Solicitud inválida.'), 400
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or set(body)!={'operacion_id'}:
+            return jsonify(success=False, error='Solicitud inválida.'), 400
+        from services.publication_promotions import activate
+        return jsonify(activate(publication_id, user.id, body['operacion_id']))
+    except HTTPException as exc:
+        return jsonify(success=False, error=exc.description), exc.code
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify(success=False, error='No se confirmó la promoción. Actualizá tu perfil antes de reintentar.'), 503

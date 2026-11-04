@@ -1,13 +1,13 @@
 /* Owned publications only; IDs come from confirmed MySQL records. */
 (()=>{
- const $=id=>document.getElementById(id);
- let generation=0,offset=0,selected=null,deleting=false,previousFocus=null;
+ const $=id=>document.getElementById(id),tr=text=>window.DPIAI18N?.translate(text)||text;
+ let generation=0,offset=0,selected=null,deleting=false,previousFocus=null,promotionSummary=null,promoting=false;
  function clear(){
-  generation++;offset=0;selected=null;
+  generation++;offset=0;selected=null;promotionSummary=null;document.querySelector('#promotePublicationOverlay')?.remove();
   $('publicationHistory').replaceChildren();$('profileOverlay').hidden=true;
   $('deletePublicationOverlay').hidden=true;
  }
- function close(){if(deleting)return;clear();$('userBtn').focus();}
+ function close(){if(deleting||promoting)return;clear();$('userBtn').focus();}
  function cancelDelete(){
   if(deleting)return;
   selected=null;$('deletePublicationOverlay').hidden=true;
@@ -30,11 +30,43 @@
   const description=document.createElement('p');description.textContent=publication.descripcion||'';
   const price=document.createElement('p');price.textContent=publication.precio==null?'Precio no informado':`${publication.precio} ${publication.moneda||''}`.trim();
   card.append(title,description,price);
+  if(publication.can_delete&&String(publication.estado).trim().toLowerCase()==='activo'&&promotionSummary){
+   const active=promotionSummary.promociones.find(row=>row.publicacion_id===publication.id);
+   if(active){const info=document.createElement('small');info.textContent=tr('Destacada hasta')+' '+new Date(active.fin_en).toLocaleString();card.append(info);}
+   else{const promote=document.createElement('button');promote.className='action-button';promote.type='button';promote.textContent='Destacar 5 días · 5 puntos';promote.onclick=()=>requestPromotion(publication,promote);card.append(promote);}
+  }
   if(publication.can_delete&&Number.isInteger(publication.id)&&publication.id>0){
    const button=document.createElement('button');button.type='button';button.textContent='Eliminar publicación';
    button.onclick=()=>requestDelete(publication,card,button);card.append(button);
   }
   return card;
+ }
+ function requestPromotion(publication,trigger){
+  if(promoting||document.querySelector('#promotePublicationOverlay'))return;
+  const email=currentEmail,operationId=crypto.randomUUID();
+  const overlay=document.createElement('div');overlay.className='auth-overlay';overlay.id='promotePublicationOverlay';
+  const dialog=document.createElement('div');dialog.className='auth-dialog';dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-labelledby','promotePublicationTitle');
+  const title=document.createElement('h2');title.id='promotePublicationTitle';title.textContent='Destacar publicación';
+  const text=document.createElement('p');text.textContent=tr('Destacar «{titulo}» durante 5 días cuesta 5 puntos. Saldo disponible: {saldo}. Se mostrará a otros usuarios de la misma zona.').replace('{titulo}',publication.titulo).replace('{saldo}',promotionSummary.saldo);
+  const status=document.createElement('p');status.setAttribute('role','status');
+  const cancel=document.createElement('button');cancel.className='action-button';cancel.textContent='Cancelar';
+  const confirm=document.createElement('button');confirm.className='action-button';confirm.textContent='Confirmar · Gastar 5 puntos';confirm.disabled=promotionSummary.saldo<5;
+  if(confirm.disabled)status.textContent='Saldo insuficiente. Necesitás 5 puntos de promoción.';
+  const dismiss=()=>{if(promoting)return;overlay.remove();$('profileOverlay').removeAttribute('aria-hidden');trigger.focus();};
+  cancel.onclick=dismiss;overlay.onclick=event=>{if(event.target===overlay)dismiss();};
+  overlay.onkeydown=event=>{if(event.key==='Escape'){event.stopPropagation();dismiss();}if(event.key==='Tab'){const targets=[cancel,confirm].filter(button=>!button.disabled);if(targets.length===1||(!event.shiftKey&&document.activeElement===targets.at(-1))||(event.shiftKey&&document.activeElement===targets[0])){event.preventDefault();(event.shiftKey?targets.at(-1):targets[0]).focus();}}};
+  confirm.onclick=async()=>{
+   if(promoting||currentEmail!==email)return;promoting=true;confirm.disabled=true;cancel.disabled=true;status.textContent='Activando promoción…';
+   let saved=false;
+   try{
+    const response=await fetch('/api/publicaciones/'+publication.id+'/destacar',{method:'POST',headers:{'Content-Type':'application/json','X-DPIA-Action':'promote-publication'},body:JSON.stringify({operacion_id:operationId}),signal:AbortSignal.timeout(20000)}),data=await response.json();
+    if(currentEmail!==email)return;
+    if(!response.ok||!data.success)throw new Error(data.error||'No se confirmó la promoción.');
+    saved=true;overlay.remove();$('profileOverlay').removeAttribute('aria-hidden');homePublicationsCache=null;await load();window.DPIACredits?.refresh();
+   }catch(error){status.textContent=error.name==='TimeoutError'?'Resultado pendiente. Actualizá el perfil para comprobarlo o reintentá esta misma operación.':error.message;}
+   finally{promoting=false;cancel.disabled=false;confirm.disabled=false;if(saved)$('closeProfile').focus();}
+  };
+  dialog.append(title,text,status,cancel,confirm);overlay.append(dialog);document.body.append(overlay);$('profileOverlay').setAttribute('aria-hidden','true');cancel.focus();
  }
  async function load(append=false){
   if(!currentEmail){openAuth();return;}
@@ -46,6 +78,13 @@
    if(serial!==generation||email!==currentEmail)return;
    if(response.status===401){clear();openAuth();return;}
    if(!response.ok||!data.success)throw new Error(data.error||'No se pudieron consultar tus publicaciones.');
+   try{
+    const pointsResponse=await fetch('/api/publicaciones/promociones',{cache:'no-store'}),points=await pointsResponse.json();
+    if(serial!==generation||email!==currentEmail)return;
+    promotionSummary=pointsResponse.ok&&points.success?points:null;
+   }catch(_){promotionSummary=null;}
+   if(serial!==generation||email!==currentEmail)return;
+   $('profilePromotionBalance').textContent=promotionSummary?tr('Puntos para destacar: {saldo} · 5 puntos = 5 días').replace('{saldo}',promotionSummary.saldo):'No se pudieron consultar los puntos de promoción.';
    for(const publication of data.publicaciones)$('publicationHistory').append(cardFor(publication));
    offset+=data.publicaciones.length;$('moreMyPublications').hidden=!data.has_more;
    $('profileStatus').textContent=$('publicationHistory').children.length?'':'Todavía no tenés publicaciones guardadas.';
@@ -77,9 +116,9 @@
  $('deletePublicationCancel').onclick=cancelDelete;$('deletePublicationConfirm').onclick=confirmDelete;
  $('profileOverlay').onclick=e=>{if(e.target===$('profileOverlay'))close();};
  $('deletePublicationOverlay').onclick=e=>{if(e.target===$('deletePublicationOverlay'))cancelDelete();};
- document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('deletePublicationOverlay').hidden)cancelDelete();else if(!$('profileOverlay').hidden)close();}});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.querySelector('#promotePublicationOverlay'))return;if(!$('deletePublicationOverlay').hidden)cancelDelete();else if(!$('profileOverlay').hidden)close();}});
  $('profileLogout').onclick=async()=>{
-  if(deleting)return;
+  if(deleting||promoting)return;
   try{const response=await fetch('/api/auth/logout',{method:'POST'});if(!response.ok)throw new Error('No se pudo cerrar la sesión.');clear();updateUser(null);notify('Sesión cerrada');}
   catch(error){$('profileStatus').textContent=error.message;}
  };

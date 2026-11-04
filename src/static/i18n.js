@@ -92,3 +92,17 @@ Object.assign(DPIA_TRANSLATIONS, {
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
  window.DPIAI18N={get language(){return language},refresh:()=>apply(),translate};
 })();
+
+Object.assign(DPIA_TRANSLATIONS, {
+ 'Destacar 5 días · 5 puntos':['Feature for 5 days · 5 points','Promuj przez 5 dni · 5 punktów','Metti in evidenza per 5 giorni · 5 punti'],
+ 'Destacar publicación':['Feature publication','Promuj ogłoszenie','Metti in evidenza annuncio'],
+ 'Destacada hasta':['Featured until','Promowane do','In evidenza fino al'],
+ 'Confirmar · Gastar 5 puntos':['Confirm · Spend 5 points','Potwierdź · Wydaj 5 punktów','Conferma · Spendi 5 punti'],
+ 'Saldo insuficiente. Necesitás 5 puntos de promoción.':['Insufficient balance. You need 5 promotion points.','Niewystarczające saldo. Potrzebujesz 5 punktów promocji.','Saldo insufficiente. Servono 5 punti promozione.'],
+ 'Activando promoción…':['Activating promotion…','Aktywowanie promocji…','Attivazione promozione…'],
+ 'Puntos para destacar publicaciones':['Publication promotion points','Punkty na promowanie ogłoszeń','Punti per mettere in evidenza annunci'],
+ '5 puntos = 5 días · Separados de las ejecuciones de scraping':['5 points = 5 days · Separate from scraping executions','5 punktów = 5 dni · Niezależne od uruchomień scrapingu','5 punti = 5 giorni · Separati dalle esecuzioni di scraping'],
+ 'Puntos para destacar: {saldo} · 5 puntos = 5 días':['Promotion points: {saldo} · 5 points = 5 days','Punkty promocji: {saldo} · 5 punktów = 5 dni','Punti promozione: {saldo} · 5 punti = 5 giorni'],
+ 'Destacar «{titulo}» durante 5 días cuesta 5 puntos. Saldo disponible: {saldo}. Se mostrará a otros usuarios de la misma zona.':['Featuring “{titulo}” for 5 days costs 5 points. Available balance: {saldo}. It will be shown to other users in the same area.','Promowanie „{titulo}” przez 5 dni kosztuje 5 punktów. Dostępne saldo: {saldo}. Ogłoszenie zobaczą inni użytkownicy z tej samej okolicy.','Mettere in evidenza «{titulo}» per 5 giorni costa 5 punti. Saldo disponibile: {saldo}. Sarà mostrato agli altri utenti della stessa zona.'],
+ 'Las ejecuciones de scraping y los puntos para destacar son saldos independientes.':['Scraping executions and promotion points are separate balances.','Uruchomienia scrapingu i punkty promocji mają oddzielne salda.','Le esecuzioni di scraping e i punti promozione sono saldi separati.']
+});

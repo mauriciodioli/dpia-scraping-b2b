@@ -1,4 +1,7 @@
 """Read active publications for all postal records of a selected city."""
+import random
+import time
+
 from sqlalchemy import and_, func, or_
 from model.codigoPostal import CodigoPostal
 from model.publicaciones.publicaciones import Publicacion
@@ -7,7 +10,7 @@ from services.locations import postal_ids_for_city
 from utils.db import db
 
 
-def publications_for_city(country, city, offset=0, category_id=None, terms=None):
+def publications_for_city(country, city, offset=0, category_id=None, terms=None, category_ids=None, rotate=False, promoted_only=False, viewer_id=None):
     ids = postal_ids_for_city(country, city)
     if not ids:
         return [], False
@@ -27,11 +30,29 @@ def publications_for_city(country, city, offset=0, category_id=None, terms=None)
     query = Publicacion.query.filter(
         func.lower(func.trim(Publicacion.estado)) == 'activo', local,
     )
+    if promoted_only:
+        from services.publication_promotions import active_publication_ids
+        query = query.filter(Publicacion.id.in_(active_publication_ids(viewer_id)))
+        if viewer_id is not None:
+            query = query.filter(Publicacion.user_id != viewer_id)
     if category_id is not None:
         query = query.filter(Publicacion.categoria_id == category_id)
+    if category_ids is not None:
+        query = query.filter(Publicacion.categoria_id.in_(category_ids))
     if terms:
         query = query.filter(or_(*(or_(Publicacion.titulo.ilike('%'+term+'%'), Publicacion.texto.ilike('%'+term+'%'), Publicacion.descripcion.ilike('%'+term+'%')) for term in terms)))
-    rows = query.order_by(Publicacion.fecha_creacion.desc(), Publicacion.id.desc()).offset(offset).limit(25).all()
+    ordered = query.order_by(Publicacion.fecha_creacion.desc(), Publicacion.id.desc())
+    if rotate:
+        # Rotate over the entire matching catalogue, not only the newest page.
+        bucket = int(time.time()) // (48 * 60 * 60)
+        total = query.count()
+        start = bucket % total if total else 0
+        rows = ordered.offset(start).limit(min(total, 24)).all()
+        if len(rows) < min(total, 24):
+            rows += ordered.limit(min(total, 24) - len(rows)).all()
+        random.Random(bucket).shuffle(rows)
+    else:
+        rows = ordered.offset(offset).limit(25).all()
     return [dict(id=row.id, titulo=row.texto or row.titulo, descripcion=row.descripcion,
                  imagen=row.imagen, precio=row.precio, moneda=row.moneda,
-                 ciudad=city) for row in rows[:24]], len(rows) > 24
+                 ciudad=city) for row in rows[:24]], (total > 24 if rotate else len(rows) > 24)

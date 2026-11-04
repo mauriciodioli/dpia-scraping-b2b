@@ -130,7 +130,7 @@ async function loadCatalogs() {
   }
   renderInterests(); renderCategories();
  }));
- refreshQuerySelectors();
+ refreshQuerySelectors();if(page==='home')loadHomePublications();
 }
 
 let cityGeneration=0;

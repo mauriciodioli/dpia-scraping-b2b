@@ -14,7 +14,7 @@
   $('usageTitle').textContent=tr('Consumidas');const percent=credits?Math.round(100*credits.consumed/credits.initial):0;
   $('usagePct').textContent=credits?percent+'%':'—';$('usageUsed').textContent=consumed+' '+tr('consumidas');$('usageTotal').textContent=initial+' '+tr('iniciales');
   $('creditMeterFill').style.width=percent+'%';$('creditMeterFill').style.background=percent<50?'#30d49a':percent<80?'#ffaf35':'#ff5668';$('creditMeter').setAttribute('aria-valuenow',String(percent));
-  $('creditDemoHint').textContent=tr(logged?'Un punto representa una ejecución de scraping. No se descuentan tokens.':'Iniciá sesión para consultar tus ejecuciones.');
+  $('creditDemoHint').textContent=tr(logged?'Las ejecuciones de scraping y los puntos para destacar son saldos independientes.':'Iniciá sesión para consultar tus ejecuciones.');
   $('creditOperations').replaceChildren();
   for(const operation of credits?.operations||[]){
    const row=document.createElement('li'),name=document.createElement('span'),button=document.createElement('button');button.className='action-button';
@@ -24,8 +24,19 @@
   $('addTestCredits').hidden=!logged||!testEnabled;
   choose(chosen);
  }
+ async function refreshPromotionPoints(current,serial){
+  $('promotionPointsBalance').textContent='—';$('promotionPointsStatus').textContent='';
+  if(!current)return;
+  try{
+   const response=await fetch('/api/publicaciones/promociones',{cache:'no-store'}),data=await response.json();
+   if(serial!==generation||currentEmail!==current)return;
+   if(!response.ok||!data.success)throw new Error('No se pudieron consultar los puntos de promoción.');
+   $('promotionPointsBalance').textContent=data.saldo;
+  }catch(error){if(serial===generation)$('promotionPointsStatus').textContent=error.message;}
+ }
  async function refresh(){
   const current=typeof currentEmail==='string'?currentEmail:null,serial=++generation;
+  refreshPromotionPoints(current,serial);
   if(account!==current){credits=null;testEnabled=false;account=current;}
   if(!current){credits=null;render();return;}
   try{
