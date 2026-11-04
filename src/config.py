@@ -81,3 +81,6 @@ MAX_CONTENT_LENGTH = 10 * 1024 * 1024
 
 # Explicit opt-in required before any live OpenAI/Apify functional test.
 LIVE_PROVIDER_CALLS_ENABLED = os.environ.get('LIVE_PROVIDER_CALLS_ENABLED', 'false').lower() == 'true'
+
+# Explicit opt-in; the route also requires Flask development/debug mode.
+ENABLE_TEST_SCRAPING_CREDITS = os.environ.get('ENABLE_TEST_SCRAPING_CREDITS', 'false').lower() == 'true'

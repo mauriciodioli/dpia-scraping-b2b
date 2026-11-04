@@ -1,13 +1,17 @@
-# Estado de la prueba funcional
+# Prueba funcional: contador MySQL
 
-El almacenamiento local de contador e historial fue retirado por solicitud del
-usuario. Los módulos `query_store.py` y `scraping_quota.py`, sus tablas locales y
-su configuración ya no forman parte de la aplicación.
+El usuario creó manualmente `pwa_scraping_cupos` y `pwa_scraping_operaciones`.
+Flask utiliza esas tablas para cupos, reservas, idempotencia y resultados.
+No hay SQLite de aplicación, creación automática de tablas ni cambios al YAML.
 
-No se implementó otra persistencia ni se modificó MySQL. El workflow YAML fue
-editado por el usuario y no se modificó durante esta retirada.
+La recarga de seis ejecuciones exige DEBUG y ENABLE_TEST_SCRAPING_CREDITS=true.
+Los proveedores permanecen controlados por LIVE_PROVIDER_CALLS_ENABLED.
+No se habilitan pagos ni se contabilizan tokens o costos de Apify.
 
-El contador, el historial y la ejecución facturable permanecen no disponibles hasta
-definir una persistencia autorizada. Las consultas de texto a publicaciones
-existentes permanecen disponibles. No se muestran saldos inventados ni se habilitan
-pagos. No se ejecutó ninguna prueba facturable ni despliegue.
+Las pruebas nuevas simulan conexiones SQL y proveedores: verifican el bloqueo
+FOR UPDATE antes del conteo, UUID/payload/usuario, agotamiento, transiciones,
+reutilización de resultados y restricciones de recarga. La inspección real de
+MySQL se limita a metadatos. La concurrencia contra un MySQL real no se ha
+probado todavía; las simulaciones no sustituyen esa validación.
+
+No se ejecutó scraping real, OpenAI, commit, push ni despliegue.

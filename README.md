@@ -382,19 +382,28 @@ está limitado a 10 MB y las imágenes decodificadas a 5 MB. Los adjuntos no se 
 en el historial. La API de imágenes está documentada en
 [OpenAI Images and vision](https://developers.openai.com/api/docs/guides/images-vision).
 
-El almacenamiento local agregado para historial, deduplicación y contador fue
-retirado por solicitud del usuario. No se instaló una persistencia alternativa.
-Las consultas de texto a publicaciones existentes siguen disponibles. El historial,
-el contador y la ejecución facturable permanecen no disponibles hasta definir
-una persistencia autorizada. La interfaz muestra esa condición sin inventar saldos.
-
-Pruebas específicas: `test_query_workflow.py`, `test_query_generation.py` y
-`test_catalog_ui.py`, con SQLite e interceptación HTTP. No consumen OpenAI ni Apify.
+El contador y las operaciones de scraping directo usan las tablas MySQL
+`pwa_scraping_cupos` y `pwa_scraping_operaciones`, creadas manualmente por el usuario.
+No se crean tablas al iniciar Flask ni se usa SQLite para estas funciones.
+Los fixtures de pruebas anteriores pueden seguir usando SQLite en memoria.
 
 ## Estado del contador y del historial
 
-Se retiraron los módulos de almacenamiento local del contador y del historial,
-junto con su configuración. No se modificaron tablas MySQL ni se añadió otra base
-de datos. El scraping real queda bloqueado mientras no haya persistencia autorizada
-para el contador y la protección contra reenvíos. La pantalla Puntos no presenta
-un saldo inicial ficticio. Los paquetes permanecen como demostración sin pagos.
+Cada usuario obtiene seis ejecuciones iniciales. Reservas, envíos pendientes y
+consumos reducen el disponible; los rechazos confirmados liberan la reserva.
+Las operaciones se identifican por UUID y hash del pedido. Una transacción con
+bloqueo de fila serializa las reservas por usuario. Los resultados guardados se
+recuperan desde Consultar sin repetir el scraping. La reconciliación de estados
+inciertos contra el proveedor requiere un contrato de seguimiento verificado;
+consultar una operación actualmente recupera su último estado persistido.
+
+En desarrollo (`DEBUG=True`), `ENABLE_TEST_SCRAPING_CREDITS=true` habilita en Puntos
+el botón “Agregar 6 ejecuciones de prueba”. La ruta exige sesión autenticada,
+JSON y cabecera de la PWA. No está disponible con DEBUG desactivado. La acreditación
+es fija de seis y no acepta usuario ni cantidad enviados por el cliente.
+Los paquetes comerciales siguen siendo demostración sin pagos.
+
+`LIVE_PROVIDER_CALLS_ENABLED` continúa siendo una autorización independiente para
+las llamadas externas. No se habilita automáticamente al agregar ejecuciones.
+Ver [scraping directo](docs/direct-scraping.md) y
+[prueba funcional](docs/six-scraping-trial.md).

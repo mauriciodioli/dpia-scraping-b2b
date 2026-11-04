@@ -1,6 +1,7 @@
 /* Server-authoritative six-execution allowance. No fake purchases or local balances. */
 (()=>{
  const $=id=>document.getElementById(id),tr=text=>window.DPIAI18N?.translate(text)||text;
+ let testEnabled=false;
  let credits=null,account=null,generation=0,chosen=300,returnToQuery=false;
  const states={reserved:'Reservada',dispatching:'En curso o pendiente',pending:'Pendiente de confirmación',consumed:'Consumida',released:'Liberada'};
  function render(){
@@ -20,18 +21,19 @@
    name.textContent=operation.source+' · '+tr(states[operation.state]||'Pendiente de confirmación');button.type='button';button.textContent=tr('Ver resultado');
    button.onclick=()=>loadQueryOperation(operation.operation_id);row.append(name,button);$('creditOperations').append(row);
   }
+  $('addTestCredits').hidden=!logged||!testEnabled;
   choose(chosen);
  }
  async function refresh(){
   const current=typeof currentEmail==='string'?currentEmail:null,serial=++generation;
-  if(account!==current){credits=null;account=current;}
+  if(account!==current){credits=null;testEnabled=false;account=current;}
   if(!current){credits=null;render();return;}
   try{
    const response=await fetch('/api/consultas/creditos',{cache:'no-store'}),data=await response.json();
    if(serial!==generation||currentEmail!==current)return;
    if(!response.ok||!data.success||!data.credits)throw new Error(data.error||'No se pudieron consultar las ejecuciones.');
-   credits=data.credits;$('creditStatus').textContent='';
-  }catch(error){if(serial!==generation)return;credits=null;$('creditStatus').textContent=tr(error.message);}
+   credits=data.credits;testEnabled=!!data.test_credits_enabled;$('creditStatus').textContent='';
+  }catch(error){if(serial!==generation)return;credits=null;testEnabled=false;$('creditStatus').textContent=tr(error.message);}
   render();
  }
  function choose(points){
@@ -50,6 +52,15 @@
   $('upgradeOverlay').hidden=true;
   if(returnToQuery){show('consultPage');returnToQuery=false;}
  }
+ $('addTestCredits').onclick=async()=>{
+  const button=$('addTestCredits');if(button.disabled)return;button.disabled=true;
+  try{
+   const response=await fetch('/api/consultas/creditos/prueba',{method:'POST',headers:{'Content-Type':'application/json','X-DPIA-Test-Credits':'1'},body:'{}'}),data=await response.json();
+   if(!response.ok||!data.success)throw new Error(data.error||'No se pudo agregar ejecuciones.');
+   await refresh();
+  }catch(error){$('creditStatus').textContent=error.message;}
+  finally{button.disabled=false;}
+ };
  $('openUpgrade').onclick=()=>open();$('closeUpgrade').onclick=close;$('cancelCreditUpgrade').onclick=close;
  $('upgradeOverlay').onclick=event=>{if(event.target===$('upgradeOverlay'))close();};
  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('upgradeOverlay').hidden)close();});

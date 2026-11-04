@@ -20,7 +20,7 @@ function refreshQuerySelectors(category=null, scopeId=null){
  if([...postalSelect.options].some(option=>option.value===oldPostal))postalSelect.value=oldPostal;
  invalidateQuery();
 }
-function invalidateQuery(){queryPrepared=null;queryRequestId=null;document.querySelector('#generateQuery').hidden=true;document.querySelector('#queryResults').replaceChildren();document.querySelector('#promptResult').hidden=true;}
+function invalidateQuery(){if(queryBusy)return;queryPrepared=null;queryRequestId=null;document.querySelector('#generateQuery').hidden=true;document.querySelector('#queryResults').replaceChildren();document.querySelector('#promptResult').hidden=true;}
 function chooseQueryCategory(item, scopeId=null){queryMode='buscar';refreshQuerySelectors(item,scopeId);localCategory={id:String(item.categoria_id),name:item.nombre};}
 function openNovelQuery(){queryMode='novedades';show('consultPage');document.querySelector('#promptText').value=document.querySelector('#searchText').value.trim();invalidateQuery();}
 function queryBody(){return {pais:country,ciudad:city,idioma:catalogLanguage(),ambito_id:Number(document.querySelector('#queryScope').value),categoria_id:Number(document.querySelector('#queryCategory').value),codigo_postal_id:Number(document.querySelector('#queryPostal').value),mode:queryMode,user_message:document.querySelector('#promptText').value.trim(),attachments:media};}
@@ -41,6 +41,7 @@ async function prepareDPIAQuery(){
   queryPrepared={body:structuredClone(body),fingerprint:JSON.stringify(body)};
   document.querySelector('#promptResult').textContent=data.summary;document.querySelector('#promptResult').hidden=false;
   document.querySelector('#generateQuery').hidden=false;document.querySelector('#generateQuery').disabled=false;
+  document.querySelector('#generateQuery').textContent=body.mode==='buscar'&&!body.attachments.length?'Iniciar búsqueda':'Generar candidatos';
   status.textContent='Revisá el resumen y elegí los orígenes de búsqueda.';
  }catch(error){status.textContent=error.name==='TimeoutError'?'La preparación tardó demasiado. Reintentá.':error.message;}
  finally{queryBusy=false;}
@@ -110,29 +111,47 @@ async function loadQueryOperation(id){
  try{
   const response=await fetch('/api/consultas/operaciones/'+encodeURIComponent(id),{cache:'no-store'}),data=await response.json();
   if(!response.ok||!data.success)throw new Error(data.error||'No se pudo consultar el estado.');
-  lastQueryOperationId=id;renderQueryResult(data.payload);window.DPIACredits?.refresh();
+  lastQueryOperationId=id;renderQueryResult(data.payload);updateScrapingStatus(data.payload);window.DPIACredits?.refresh();
   status.textContent=data.state==='pending'?'La ejecución sigue pendiente. No se reenviará.':data.state==='failed'?'La ejecución falló.':'Estado recuperado del servidor.';
  }catch(error){status.textContent=error.message;}
 }
+function setScrapingStatus(state,text){
+ const badge=document.querySelector('#scrapingActivity');
+ badge.hidden=false;badge.dataset.state=state;
+ badge.querySelector('span:last-child').textContent=text;
+}
+function updateScrapingStatus(data){
+ const outcomes=Object.values(data.sources||{});
+ if(outcomes.some(row=>row.status==='pending'))setScrapingStatus('pending','Scraping pendiente de confirmación · Consultar');
+ else if(outcomes.some(row=>row.status==='failed'))setScrapingStatus('failed','La búsqueda informó un error · Consultar');
+ else {
+  const count=outcomes.reduce((sum,row)=>sum+(row.products?.length||0),0);
+  setScrapingStatus('complete',count?`${count} resultados disponibles · Consultar`:'Búsqueda completada sin resultados · Consultar');
+ }
+}
+document.querySelector('#scrapingActivity').onclick=()=>{show('consultPage');document.querySelector('#queryResults').scrollIntoView({behavior:'smooth',block:'start'});};
 async function generateDPIAQuery(){
  if(queryBusy||!queryPrepared)return;
  if(!currentEmail){openAuth();return;}
  if(JSON.stringify(queryBody())!==queryPrepared.fingerprint){invalidateQuery();document.querySelector('#queryStatus').textContent='El pedido cambió. Prepará nuevamente la consulta.';return;}
  const sources=savedQuerySources();if(!sources){openSourceModal(true);return;}
  queryBusy=true;const button=document.querySelector('#generateQuery'),status=document.querySelector('#queryStatus');button.disabled=true;
+ const direct=queryPrepared.body.mode==='buscar'&&!queryPrepared.body.attachments.length&&sources.length===1&&['amazon','ebay','aliexpress'].includes(sources[0]);
+ if(direct&&!window.confirm(`¿Iniciar scraping externo en ${sources[0]} para «${queryPrepared.body.user_message}»?`)){queryBusy=false;button.disabled=false;return;}
+ if(direct)setScrapingStatus('running','Scrapeando…');
  status.textContent='Buscando en los orígenes seleccionados…';queryRequestId ||= crypto.randomUUID();
  try{
-  const response=await fetch('/api/consultas/generar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...queryPrepared.body,sources,request_id:queryRequestId}),signal:AbortSignal.timeout(650000)});
+  const response=await fetch(direct?'/api/consultas/scraping-directo':'/api/consultas/generar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...queryPrepared.body,sources,request_id:queryRequestId}),signal:AbortSignal.timeout(650000)});
   const data=await response.json();if(response.status===401)openAuth();
-  if(response.status===402&&data.code==='insufficient_credit'){window.DPIACredits?.insufficient(data);return;}
-  if(!response.ok||!data.success)throw new Error(data.error||'No se pudo generar la consulta.');
+  if(response.status===402&&data.code==='insufficient_credit'){if(direct)setScrapingStatus('failed','No se inició: ejecuciones insuficientes · Consultar');window.DPIACredits?.insufficient(data);return;}
+  if(!response.ok||!data.success){const confirmedRejection=response.status<500||data.code==='persistence_not_configured';if(direct&&confirmedRejection)setScrapingStatus('failed','No se inició la búsqueda · Consultar');const error=new Error(data.error||'No se pudo generar la consulta.');error.confirmedRejection=confirmedRejection;throw error;}
   lastQueryOperationId=data.request_id||queryRequestId;window.DPIACredits?.refresh();
-  if(!queryPrepared||JSON.stringify(queryBody())!==queryPrepared.fingerprint){status.textContent='El pedido cambió. Prepará nuevamente la consulta.';return;}
+  if(!direct&&(!queryPrepared||JSON.stringify(queryBody())!==queryPrepared.fingerprint)){status.textContent='El pedido cambió. Prepará nuevamente la consulta.';return;}
   if(data.result.needs_clarification){status.textContent=data.result.clarifying_question;return;}
-  renderQueryResult(data);
+  renderQueryResult(data);if(direct)updateScrapingStatus(data);
   const outcomes=Object.values(data.sources||{});
   status.textContent=outcomes.some(row=>row.status==='pending')?'La ejecución sigue pendiente. No se reenviará.':outcomes.some(row=>row.status==='failed')?'La ejecución falló.':'Consulta completada. Revisá los resultados de cada origen.';
- }catch(error){status.textContent=error.name==='TimeoutError'?'La consulta sigue pendiente. No se reenviará automáticamente.':error.message;if(queryRequestId){lastQueryOperationId=queryRequestId;const refresh=document.createElement('button');refresh.textContent='Consultar estado';refresh.onclick=()=>loadQueryOperation(lastQueryOperationId);document.querySelector('#queryResults').append(refresh);}}
+ }catch(error){if(direct&&!error.confirmedRejection)setScrapingStatus('pending','Scraping pendiente de confirmación · Consultar');status.textContent=error.name==='TimeoutError'?'La consulta sigue pendiente. No se reenviará automáticamente.':error.message;if(queryRequestId){lastQueryOperationId=queryRequestId;const refresh=document.createElement('button');refresh.textContent='Consultar estado';refresh.onclick=()=>loadQueryOperation(lastQueryOperationId);document.querySelector('#queryResults').append(refresh);}}
  finally{queryBusy=false;button.disabled=false;window.DPIACredits?.refresh();}
 }
 document.querySelector('#queryScope').addEventListener('change',()=>{refreshQuerySelectors();syncLocalCategory();});

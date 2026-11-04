@@ -65,6 +65,10 @@ def dispatch_external(source,result,config,*,quota=None,operation_id=None):
     if execution['state']!='reserved':
         if execution.get('outcome'):return json.loads(execution['outcome'])
         return {'status':'pending','operation_id':operation_id,'error':'La ejecución ya fue enviada; no se reenviará.'}
+    # Claim once before preflight so a concurrent retry cannot release a
+    # reservation belonging to another request while it contacts the provider.
+    if not quota.transition(operation_id,user_id,'dispatching'):
+        return {'status':'pending','operation_id':operation_id,'error':'La ejecución ya fue enviada.'}
     def finish(state,payload):
         payload={**payload,'operation_id':operation_id}
         quota.transition(operation_id,user_id,state,payload)
@@ -96,8 +100,6 @@ def dispatch_external(source,result,config,*,quota=None,operation_id=None):
         'usuario':user_id,'ambito':ctx['ambito'],'Categoría':ctx['categoria'],
         'codigoPostal':ctx['codigoPostal'],'idioma':ctx['idioma']}]}
     if source=='amazon':payload['batch_size']=1
-    if not quota.transition(operation_id,user_id,'dispatching'):
-        return {'status':'pending','operation_id':operation_id,'error':'La ejecución ya fue enviada.'}
     def uncertain(message,job_id=None):
         return finish('pending',{'status':'pending','error':message,'provider_job_id':job_id,'products':[]})
     try:
