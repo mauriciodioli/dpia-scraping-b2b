@@ -301,3 +301,17 @@ al scraper: el JSON es la entrada para una etapa posterior de scraping a través
 los endpoints DPIA existentes. No se ejecuta Apify, no se crean publicaciones ni
 se modifica la lógica de créditos o pagos. Los adjuntos aún no se interpretan:
 esta generación requiere texto y muestra un aviso si se intenta enviar archivos.
+
+
+## Publicaciones locales
+
+La pestaña Local conserva la navegación inferior y permite plegar el mapa. Debajo
+muestra publicaciones activas reales de todos los códigos postales de la ciudad
+seleccionada, en páginas de 24 mediante `GET /api/publicaciones/locales?pais=…&ciudad=…&offset=0`.
+Se consultan `publicacion.codigo_postal_id`, `publicacionCodigoPostal` y, para filas
+antiguas sin asociaciones explícitas, el texto exacto de `publicacion.codigoPostal`.
+El código postal se utiliza internamente y no se muestra en las tarjetas. No se
+modifica ninguna publicación ni se crean tablas al arrancar. La columna
+`codigo_postal_id` corresponde al esquema aportado de la base existente.
+Las ciudades sin coordenadas configuradas ofrecen un enlace de búsqueda en
+OpenStreetMap, sin mostrar el mapa de otra ciudad.
