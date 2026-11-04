@@ -319,3 +319,27 @@ que permite plegarlo sin salir de Local.
 Al elegir una categoría y entrar en Local se conserva su `categoria_id`: el listado
 combina esa categoría con todos los códigos postales de la ciudad, también al
 cargar más páginas. Si no hay coincidencias se muestra el estado vacío.
+
+## Imágenes locales de ámbitos y categorías
+
+El renderizado utiliza `catalog-artwork-map.js` (IDs verificados por idioma) y
+`catalog-artwork.js` (prioridad y errores de carga). La biblioteca y su referencia
+se documentan en [src/static/images/catalog/README.md](src/static/images/catalog/README.md).
+Los temas sin recursos apropiados muestran iniciales y un degradado; las categorías
+pueden heredar la imagen de su ámbito activo. No cambia la API ni se descargan
+imágenes externas durante la navegación de estos catálogos.
+
+Pruebas: instalar `requirements-dev.txt`, configurar `CHROME_BIN` si corresponde,
+y ejecutar `python -m unittest discover -s tests -p 'test_catalog_artwork.py' -v`
+y `python -m unittest discover -s tests -p 'test_catalog_ui.py' -v`.
+
+## Portadas reales de publicaciones
+
+El sistema actual prioriza fotos existentes del bucket DPIA. La generación manual,
+las reglas de selección y las pruebas están en
+[src/static/images/publication-covers/README.md](src/static/images/publication-covers/README.md).
+Ejecutar `python scripts/build_publication_covers.py` para regenerar. El script usa
+SELECT en una transacción de solo lectura y GET al bucket; produce miniaturas WebP,
+un manifiesto estático con procedencia y un informe de cobertura. La navegación no
+consulta esas fuentes para resolver portadas. El mapa genérico de la etapa anterior
+queda conservado como recurso local, pero ya no se carga.

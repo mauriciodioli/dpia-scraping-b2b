@@ -10,11 +10,6 @@ const catalogMessages = {
  it: ['Caricamento catalogo…', 'Nessun dato disponibile.', 'Impossibile caricare il catalogo.', 'Riprova', 'Puoi continuare e scegliere gli interessi più tardi.']
 };
 const catalogLanguage = () => window.DPIAI18N?.language || 'es';
-function catalogImage(name) {
- const key = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
- const images = {tecnologia:'laptop.webp', technology:'laptop.webp', technologia:'laptop.webp', moda:'sneakers.webp', fashion:'sneakers.webp', hogar:'sofa.webp', deporte:'football.webp', sports:'football.webp', sport:'football.webp', cocina:'blender.webp', audio:'headphones.webp', industria:'industry.svg', belleza:'beauty.svg'};
- return images[key] || 'industry.svg';
-}
 function catalogStatus(container, name) {
  const state = catalogState[name], messages = catalogMessages[catalogLanguage()] || catalogMessages.es;
  if (state === 'ready') return false;
@@ -35,7 +30,7 @@ function renderInterests() {
  for (const item of catalogAmbitos) {
   const id = String(item.ambito_id), button = document.createElement('button');
   button.className = 'interest' + (selected.has(id) ? ' active' : ''); button.dataset.interest = id;
-  const image = document.createElement('img'); image.src = '/static/images/' + catalogImage(item.nombre); image.alt = '';
+  const image = DPIACatalogArtwork.create('ambitos', item, {language:catalogLanguage(), country, city});
   const label = document.createElement('span'); label.textContent = item.nombre; label.dataset.catalogName = '';
   const check = document.createElement('i'); check.className = 'interest-check'; check.textContent = selected.has(id) ? '✓' : '+';
   button.append(image, label, check);
@@ -64,7 +59,7 @@ function renderCategories() {
   const id = String(item.ambito_id), button = document.createElement('button');
   button.type = 'button'; button.className = 'category'; button.dataset.scope = id;
   button.setAttribute('aria-pressed', String(activeCatalogScope === id));
-  const image = document.createElement('img'); image.src = '/static/images/' + catalogImage(item.nombre); image.alt = '';
+  const image = DPIACatalogArtwork.create('ambitos', item, {language:catalogLanguage(), country, city});
   const label = document.createElement('span'); label.textContent = item.nombre; label.dataset.catalogName = '';
   button.append(image, label);
   button.onclick = () => { activeCatalogScope = id; renderCategories(); };
@@ -82,7 +77,7 @@ function renderCategories() {
  }
  for (const item of items) {
   const button = document.createElement('button'); button.type = 'button'; button.className = 'category'; button.dataset.cat = String(item.categoria_id);
-  const image = document.createElement('img'); image.src = '/static/images/' + catalogImage(item.nombre); image.alt = '';
+  const image = DPIACatalogArtwork.create('categorias', item, {language:catalogLanguage(), country, city, scopeId:activeCatalogScope, ambitos:catalogAmbitos});
   const label = document.createElement('span'); label.textContent = item.nombre; label.dataset.catalogName = '';
   button.append(image, label);
   button.onclick = () => { chooseQueryCategory(item, Number(activeCatalogScope)); show('consultPage'); document.querySelector('#promptText').value = `Buscar productos de ${item.nombre} en ${city}, ${country}. Priorizar publicaciones locales.`; };
