@@ -3,12 +3,12 @@ let currentEmail=null,googleClientId='';
 function setTheme(t){document.documentElement.dataset.theme=t;localStorage.setItem('dpia-theme',t);$('#themeToggle').textContent=t==='dark'?'☀':'☾';}
 setTheme(localStorage.getItem('dpia-theme')||'dark');
 $('#themeToggle').onclick=()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
-function updateUser(email){currentEmail=email||null;$('#userBtn').textContent=currentEmail||'Ingresar';$('#userBtn').title=currentEmail?'Cerrar sesión':'Iniciar sesión';}
+function updateUser(email){currentEmail=email||null;$('#userBtn').textContent=currentEmail||'Ingresar';$('#userBtn').title=currentEmail?'Mi perfil':'Iniciar sesión';}
 function openAuth(){$('#authOverlay').hidden=false;syncCookieConsent();}
 function closeAuth(){$('#authOverlay').hidden=true;}
 $('#closeAuth').onclick=closeAuth;
 $('#authOverlay').onclick=e=>{if(e.target===$('#authOverlay'))closeAuth()};
-$('#userBtn').onclick=async()=>{if(currentEmail){await fetch('/api/auth/logout',{method:'POST'});updateUser(null);notify('Sesión cerrada')}else openAuth()};
+$('#userBtn').onclick=()=>{if(currentEmail)window.DPIAPublications?.openProfile();else openAuth()};
 function syncCookieConsent(){
  $('#googleSignIn').hidden=!$('#authCookieConsent').checked;
 }

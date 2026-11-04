@@ -21,13 +21,17 @@ def local_publications():
     if (not country or not city or len(country) > 100 or len(city) > 100
             or not offset.isdecimal() or len(offset) > 6):
         return jsonify(success=False, error='Elegí un país y una ciudad válidos.'), 400
+    search = request.args.get('q', '').strip()
+    if len(search) > 500:
+        return jsonify(success=False, error='La búsqueda local admite hasta 500 caracteres.'), 400
     category = request.args.get('categoria_id')
     if category is not None and (not category.isdecimal() or len(category) > 10
                                  or not 1 <= int(category) <= 2147483647):
         return jsonify(success=False, error='Categoría inválida.'), 400
     try:
+        from services.query_sources import search_terms
         items, more = publications_for_city(country, city, int(offset),
-                                            int(category) if category is not None else None)
+                                            int(category) if category is not None else None, terms=search_terms(search))
         response = jsonify(success=True, publicaciones=items, has_more=more)
         response.headers['Cache-Control'] = 'no-store'
         return response

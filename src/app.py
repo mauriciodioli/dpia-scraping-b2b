@@ -23,6 +23,8 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(catalog_bp)
     app.register_blueprint(query_bp)
+    from controllers.publicaciones import publicaciones
+    app.register_blueprint(publicaciones)
 
     return app
 

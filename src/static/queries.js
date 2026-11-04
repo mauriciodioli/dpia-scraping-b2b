@@ -137,7 +137,6 @@ async function generateDPIAQuery(){
  const sources=savedQuerySources();if(!sources){openSourceModal(true);return;}
  queryBusy=true;const button=document.querySelector('#generateQuery'),status=document.querySelector('#queryStatus');button.disabled=true;
  const direct=queryPrepared.body.mode==='buscar'&&!queryPrepared.body.attachments.length&&sources.length===1&&['amazon','ebay','aliexpress'].includes(sources[0]);
- if(direct&&!window.confirm(`¿Iniciar scraping externo en ${sources[0]} para «${queryPrepared.body.user_message}»?`)){queryBusy=false;button.disabled=false;return;}
  if(direct)setScrapingStatus('running','Scrapeando…');
  status.textContent='Buscando en los orígenes seleccionados…';queryRequestId ||= crypto.randomUUID();
  try{
