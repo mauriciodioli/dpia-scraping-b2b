@@ -1,5 +1,6 @@
 // The original user request is preserved; context and identity are verified by Flask.
 let queryMode='buscar', queryPrepared=null, queryBusy=false, queryRequestId=null, pendingSourcesGeneration=false;
+let novelAutoDraft='';
 const querySources=['amazon','ebay','aliexpress','local','dpia','historial'];
 function refreshQuerySelectors(category=null, scopeId=null){
  const scopeSelect=document.querySelector('#queryScope'), categorySelect=document.querySelector('#queryCategory'), postalSelect=document.querySelector('#queryPostal');
@@ -14,15 +15,41 @@ function refreshQuerySelectors(category=null, scopeId=null){
  }
  const categoryId=category?.categoria_id||(oldScope===scopeSelect.value?oldCategory:'');
  if([...categorySelect.options].some(option=>option.value===String(categoryId)))categorySelect.value=String(categoryId);
+ if(queryMode==='novedades'&&!categorySelect.value&&categorySelect.options.length>1)categorySelect.selectedIndex=1;
  document.querySelector('#queryCity').value=city;
  postalSelect.replaceChildren();
  for(const record of catalogPostalCodes)postalSelect.add(new Option(city,String(record.id)));
  if([...postalSelect.options].some(option=>option.value===oldPostal))postalSelect.value=oldPostal;
- invalidateQuery();
+ invalidateQuery();if(queryMode==='novedades')updateNovelDraft();
 }
 function invalidateQuery(){if(queryBusy)return;queryPrepared=null;queryRequestId=null;document.querySelector('#generateQuery').hidden=true;document.querySelector('#queryResults').replaceChildren();document.querySelector('#promptResult').hidden=true;}
 function chooseQueryCategory(item, scopeId=null){queryMode='buscar';refreshQuerySelectors(item,scopeId);localCategory={id:String(item.categoria_id),name:item.nombre};}
-function openNovelQuery(){queryMode='novedades';show('consultPage');document.querySelector('#promptText').value=document.querySelector('#searchText').value.trim();invalidateQuery();}
+function updateNovelDraft(force=false){
+ const prompt=document.querySelector('#promptText'),scope=document.querySelector('#queryScope'),category=document.querySelector('#queryCategory');
+ if(!scope.value||!category.value||(!force&&prompt.value.trim()&&prompt.value!==novelAutoDraft))return;
+ const a=scope.selectedOptions[0].textContent,c=category.selectedOptions[0].textContent;
+ const templates={
+  es:`Buscá novedades y productos relevantes de ${c}, en el ámbito ${a}, para ${city}, ${country}. Proponé una búsqueda concreta de productos útiles y evitá duplicados. No inventes precios ni presentes tendencias como verificadas sin evidencia.`,
+  en:`Find new and relevant products in ${c}, within ${a}, for ${city}, ${country}. Prepare a focused search for useful products and avoid duplicates. Do not invent prices or present trends as verified without evidence.`,
+  it:`Cerca novità e prodotti rilevanti di ${c}, nell'ambito ${a}, per ${city}, ${country}. Prepara una ricerca concreta di prodotti utili, evitando duplicati. Non inventare prezzi o presentare tendenze come verificate senza prove.`,
+  pl:`Znajdź nowości i przydatne produkty w kategorii ${c}, w obszarze ${a}, dla ${city}, ${country}. Przygotuj konkretne wyszukiwanie i unikaj duplikatów. Nie wymyślaj cen ani nie przedstawiaj trendów jako potwierdzonych bez dowodów.`};
+ novelAutoDraft=templates[catalogLanguage()]||templates.es;prompt.value=novelAutoDraft;
+}
+async function openNovelQuery(){
+ if(queryBusy)return;
+ queryMode='novedades';show('consultPage');invalidateQuery();
+ const status=document.querySelector('#queryStatus');status.textContent='Cargando tus intereses para preparar novedades…';
+ if(catalogState.ambitos==='loading'||catalogState.categorias==='loading')await loadCatalogs();
+ const scopes=catalogAmbitos.filter(scope=>selected.has(String(scope.ambito_id))&&catalogCategorias.some(category=>category.ambito_ids.includes(scope.ambito_id)));
+ const current=document.querySelector('#queryScope').value;
+ const scope=scopes.find(item=>String(item.ambito_id)===current)||scopes.find(item=>String(item.ambito_id)===activeCatalogScope)||scopes[0];
+ if(!scope){refreshQuerySelectors();status.textContent='Elegí un ámbito y una categoría disponibles para tu ciudad.';return;}
+ const oldCategory=Number(document.querySelector('#queryCategory').value);
+ const category=catalogCategorias.find(item=>item.categoria_id===oldCategory&&item.ambito_ids.includes(scope.ambito_id))||catalogCategorias.find(item=>item.ambito_ids.includes(scope.ambito_id));
+ refreshQuerySelectors(category,scope.ambito_id);syncLocalCategory();updateNovelDraft(true);
+ status.textContent='Revisá los datos y el pedido. Preparar consulta muestra el resumen; ejecutar buscará novedades con OpenAI y DPIA.';
+}
+
 function queryBody(){return {pais:country,ciudad:city,idioma:catalogLanguage(),ambito_id:Number(document.querySelector('#queryScope').value),categoria_id:Number(document.querySelector('#queryCategory').value),codigo_postal_id:Number(document.querySelector('#queryPostal').value),mode:queryMode,user_message:document.querySelector('#promptText').value.trim(),attachments:media};}
 function startHomeQuery(){
  document.querySelector('#promptText').value=document.querySelector('#searchText').value.trim();queryMode='buscar';invalidateQuery();show('consultPage');prepareDPIAQuery();
@@ -34,14 +61,14 @@ async function prepareDPIAQuery(){
  const status=document.querySelector('#queryStatus'),body=queryBody();
  if(!body.ambito_id||!body.categoria_id){status.textContent='Elegí un ámbito y una categoría para continuar.';document.querySelector(body.ambito_id?'#queryCategory':'#queryScope').focus();return;}
  if(!body.user_message&&!body.attachments.length){status.textContent='Escribí tu pedido o adjuntá una imagen o video.';return;}
- queryBusy=true;invalidateQuery();status.textContent='Preparando tu consulta…';
+ invalidateQuery();queryBusy=true;status.textContent='Preparando tu consulta…';
  try{
   const response=await fetch('/api/consultas/preparar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(45000)});
   const data=await response.json();if(response.status===401)openAuth();if(!response.ok||!data.success)throw new Error(data.error||'No se pudo preparar la consulta.');
   queryPrepared={body:structuredClone(body),fingerprint:JSON.stringify(body)};
   document.querySelector('#promptResult').textContent=data.summary;document.querySelector('#promptResult').hidden=false;
   document.querySelector('#generateQuery').hidden=false;document.querySelector('#generateQuery').disabled=false;
-  document.querySelector('#generateQuery').textContent=body.mode==='buscar'&&!body.attachments.length?'Iniciar búsqueda':'Generar candidatos';
+  document.querySelector('#generateQuery').textContent=body.mode==='novedades'?'Buscar novedades':body.mode==='buscar'&&!body.attachments.length?'Iniciar búsqueda':'Generar candidatos';
   status.textContent='Revisá el resumen y elegí los orígenes de búsqueda.';
  }catch(error){status.textContent=error.name==='TimeoutError'?'La preparación tardó demasiado. Reintentá.':error.message;}
  finally{queryBusy=false;}
@@ -120,14 +147,15 @@ async function loadQueryOperation(id){
 function setScrapingStatus(state,text){
  const badge=document.querySelector('#scrapingActivity');
  badge.hidden=false;badge.dataset.state=state;
- if(state==='running')badge.dataset.operationId='';
+ if(state==='running'||state==='preparing')badge.dataset.operationId=queryRequestId||'';
  if(state==='pending'&&queryRequestId)badge.dataset.operationId=queryRequestId;
  badge.querySelector('span:last-child').textContent=text;
 }
 function updateScrapingStatus(data){
  document.querySelector('#scrapingActivity').dataset.operationId=data.request_id||lastQueryOperationId||'';
  const outcomes=Object.values(data.sources||{});
- if(outcomes.some(row=>row.status==='pending'))setScrapingStatus('pending','Scraping pendiente de confirmación · Consultar');
+ if(outcomes.some(row=>row.generation?.status==='running'))setScrapingStatus('preparing','Preparando novedades con IA…');
+ else if(outcomes.some(row=>row.status==='pending'))setScrapingStatus('pending','Scraping pendiente de confirmación · Consultar');
  else if(outcomes.some(row=>row.status==='failed'))setScrapingStatus('failed','La búsqueda informó un error · Consultar');
  else {
   const count=outcomes.reduce((sum,row)=>sum+(row.products?.length||0),0);
@@ -140,23 +168,37 @@ async function generateDPIAQuery(){
  if(!currentEmail){openAuth();return;}
  if(JSON.stringify(queryBody())!==queryPrepared.fingerprint){invalidateQuery();document.querySelector('#queryStatus').textContent='El pedido cambió. Prepará nuevamente la consulta.';return;}
  const sources=savedQuerySources();if(!sources){openSourceModal(true);return;}
+ if(queryPrepared.body.mode==='novedades'&&sources.filter(source=>['amazon','ebay','aliexpress'].includes(source)).length!==1){document.querySelector('#queryStatus').textContent='Elegí un marketplace para buscar novedades.';openSourceModal(true);return;}
  queryBusy=true;const button=document.querySelector('#generateQuery'),status=document.querySelector('#queryStatus');button.disabled=true;
+ const novel=queryPrepared.body.mode==='novedades',email=currentEmail;
  const direct=queryPrepared.body.mode==='buscar'&&!queryPrepared.body.attachments.length&&sources.length===1&&['amazon','ebay','aliexpress'].includes(sources[0]);
+ queryRequestId ||= crypto.randomUUID();
  if(direct)setScrapingStatus('running','Scrapeando…');
- status.textContent='Buscando en los orígenes seleccionados…';queryRequestId ||= crypto.randomUUID();
+ if(novel)setScrapingStatus('preparing','Preparando novedades con IA…');
+ status.textContent=novel?'Preparando una búsqueda de novedades con OpenAI…':'Buscando en los orígenes seleccionados…';
+ let polling=false;
+ const operationId=queryRequestId;
+ const progress=novel?setInterval(async()=>{
+  if(polling||!queryBusy||currentEmail!==email)return;polling=true;
+  try{const response=await fetch('/api/consultas/operaciones/'+encodeURIComponent(operationId),{cache:'no-store'});if(!response.ok)return;const data=await response.json();
+   if(!queryBusy||currentEmail!==email)return;
+   if(data.state==='dispatching')setScrapingStatus('running','Scrapeando novedades…');
+   else if(data.state==='pending')setScrapingStatus('pending','Scraping pendiente de confirmación · Consultar');
+  }catch(_){}finally{polling=false;}
+ },3000):null;
  try{
   const response=await fetch(direct?'/api/consultas/scraping-directo':'/api/consultas/generar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...queryPrepared.body,sources,request_id:queryRequestId}),signal:AbortSignal.timeout(650000)});
-  const data=await response.json();if(response.status===401)openAuth();
-  if(response.status===402&&data.code==='insufficient_credit'){if(direct)setScrapingStatus('failed','No se inició: ejecuciones insuficientes · Consultar');window.DPIACredits?.insufficient(data);return;}
-  if(!response.ok||!data.success){const confirmedRejection=response.status<500||data.code==='persistence_not_configured';if(direct&&confirmedRejection)setScrapingStatus('failed','No se inició la búsqueda · Consultar');const error=new Error(data.error||'No se pudo generar la consulta.');error.confirmedRejection=confirmedRejection;throw error;}
+  const data=await response.json();if(novel&&currentEmail!==email)return;if(response.status===401)openAuth();
+  if(response.status===402&&data.code==='insufficient_credit'){if(direct||novel)setScrapingStatus('failed','No se inició: ejecuciones insuficientes · Consultar');window.DPIACredits?.insufficient(data);return;}
+  if(!response.ok||!data.success){const confirmedRejection=response.status<500||data.code==='persistence_not_configured'||data.not_started===true;if((direct||novel)&&confirmedRejection)setScrapingStatus('failed','No se inició la búsqueda · Consultar');const error=new Error(data.error||'No se pudo generar la consulta.');error.confirmedRejection=confirmedRejection;throw error;}
   lastQueryOperationId=data.request_id||queryRequestId;window.DPIACredits?.refresh();
-  if(!direct&&(!queryPrepared||JSON.stringify(queryBody())!==queryPrepared.fingerprint)){status.textContent='El pedido cambió. Prepará nuevamente la consulta.';return;}
-  if(data.result.needs_clarification){status.textContent=data.result.clarifying_question;return;}
-  renderQueryResult(data);if(direct)updateScrapingStatus(data);
+  if(!direct&&!novel&&(!queryPrepared||JSON.stringify(queryBody())!==queryPrepared.fingerprint)){status.textContent='El pedido cambió. Prepará nuevamente la consulta.';return;}
+  if(data.result?.needs_clarification){status.textContent=data.result.clarifying_question;if(novel)setScrapingStatus('failed','La consulta necesita una aclaración · Consultar');renderQueryResult(data);return;}
+  renderQueryResult(data);if(direct||novel)updateScrapingStatus(data);
   const outcomes=Object.values(data.sources||{});
   status.textContent=outcomes.some(row=>row.status==='pending')?'La ejecución sigue pendiente. No se reenviará.':outcomes.some(row=>row.status==='failed')?'La ejecución falló.':'Consulta completada. Revisá los resultados de cada origen.';
- }catch(error){if(direct&&!error.confirmedRejection)setScrapingStatus('pending','Scraping pendiente de confirmación · Consultar');status.textContent=error.name==='TimeoutError'?'La consulta sigue pendiente. No se reenviará automáticamente.':error.message;if(queryRequestId){lastQueryOperationId=queryRequestId;const refresh=document.createElement('button');refresh.className='action-button';refresh.textContent='Consultar estado';refresh.onclick=()=>loadQueryOperation(lastQueryOperationId);document.querySelector('#queryResults').append(refresh);}}
- finally{queryBusy=false;button.disabled=false;window.DPIACredits?.refresh();}
+ }catch(error){if((direct||novel)&&!error.confirmedRejection)setScrapingStatus('pending','Scraping pendiente de confirmación · Consultar');status.textContent=error.name==='TimeoutError'?'La consulta sigue pendiente. No se reenviará automáticamente.':error.message;if(queryRequestId){lastQueryOperationId=queryRequestId;const refresh=document.createElement('button');refresh.className='action-button';refresh.textContent='Consultar estado';refresh.onclick=()=>loadQueryOperation(lastQueryOperationId);document.querySelector('#queryResults').append(refresh);}}
+ finally{if(progress)clearInterval(progress);queryBusy=false;button.disabled=false;window.DPIACredits?.refresh();}
 }
 document.querySelector('#queryScope').addEventListener('change',()=>{refreshQuerySelectors();syncLocalCategory();});
 for(const id of ['queryCategory','queryPostal','promptText','searchText'])document.querySelector('#'+id).addEventListener('input',invalidateQuery);
@@ -167,12 +209,13 @@ document.querySelector('#querySourcesModal').onclick=e=>{if(e.target.id==='query
 document.querySelector('#allQuerySources').onchange=e=>{for(const box of document.querySelectorAll('[name="querySource"]'))if(['local','dpia','historial'].includes(box.value))box.checked=e.target.checked;};
 document.querySelector('#confirmQuerySources').onclick=()=>{
  const sources=[...document.querySelectorAll('[name="querySource"]:checked')].map(box=>box.value);
+ if(pendingSourcesGeneration&&queryMode==='novedades'&&sources.filter(source=>['amazon','ebay','aliexpress'].includes(source)).length!==1){document.querySelector('#querySourceError').textContent='Elegí un marketplace para buscar novedades.';return;}
  if(!sources.length){document.querySelector('#querySourceError').textContent='Seleccioná al menos un origen de búsqueda.';return;}
  try{localStorage.setItem(sourcePreferenceKey(),JSON.stringify(sources));}catch(_){document.querySelector('#querySourceError').textContent='No se pudieron guardar los orígenes.';return;}
  const generate=pendingSourcesGeneration;queryRequestId=null;closeSourceModal();if(generate)generateDPIAQuery();
 };
 function syncLocalCategory(){const option=document.querySelector('#queryCategory').selectedOptions[0];localCategory=option?.value?{id:option.value,name:option.textContent}:null;}
-document.querySelector('#queryCategory').addEventListener('change',syncLocalCategory);
+document.querySelector('#queryCategory').addEventListener('change',()=>{syncLocalCategory();if(queryMode==='novedades')updateNovelDraft();});
 
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!document.querySelector('#querySourcesModal').hidden)closeSourceModal();});
 for(const box of document.querySelectorAll('[name="querySource"]'))box.addEventListener('change',()=>{if(box.checked&&['amazon','ebay','aliexpress'].includes(box.value)){for(const other of document.querySelectorAll('[name="querySource"]'))if(other!==box&&['amazon','ebay','aliexpress'].includes(other.value))other.checked=false;}document.querySelector('#allQuerySources').checked=[...document.querySelectorAll('[name="querySource"]')].filter(item=>['local','dpia','historial'].includes(item.value)).every(item=>item.checked);});

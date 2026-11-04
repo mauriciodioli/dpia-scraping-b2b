@@ -162,3 +162,37 @@ class MySQLScrapingQuota:
             conn.execute(update(operaciones).where(operaciones.c.operacion_id == operation_id,
                 operaciones.c.usuario_id == user_id).values(resultado_json=json.dumps(outcome, ensure_ascii=False)))
             return stages[str(index)]
+
+    def novel_generation(self, operation_id, user_id, *, token=None, result=None, error=None):
+        """Durable OpenAI claim/result inside the existing reservation, without DDL."""
+        import uuid
+        with self._engine().begin() as conn:
+            self._lock(conn,user_id)
+            row=conn.execute(select(operaciones).where(operaciones.c.operacion_id==operation_id,
+                operaciones.c.usuario_id==user_id).with_for_update()).mappings().first()
+            if not row:raise PreparationError('Operación no encontrada.',404)
+            outcome=decode(row['resultado_json']) or {}
+            generation=outcome.get('generation',{})
+            claiming=token is None
+            if claiming:
+                if outcome.get('generation_result'):
+                    return {'result':outcome['generation_result']}
+                if row['estado']!='reserved' or generation.get('status')=='running':
+                    raise PreparationError('La consulta de novedades ya está en preparación. Consultá su estado.',409)
+                token=str(uuid.uuid4())
+                outcome={'status':'pending','products':[],'generation':{'status':'running','token':token}}
+                state='reserved'
+            else:
+                if row['estado']!='reserved' or generation.get('token')!=token or generation.get('status')!='running':
+                    raise PreparationError('La preparación ya fue procesada.',409)
+                if error:
+                    outcome={'status':'failed','error':error,'products':[],'generation':{'status':'failed'}}
+                    state='released'
+                else:
+                    clarification=result['needs_clarification']
+                    outcome={'status':'clarification_required' if clarification else 'pending','products':[],
+                             'generation':{'status':'complete'},'generation_result':result}
+                    state='released' if clarification else 'reserved'
+            conn.execute(update(operaciones).where(operaciones.c.operacion_id==operation_id,
+                operaciones.c.usuario_id==user_id).values(estado=state,resultado_json=json.dumps(outcome,ensure_ascii=False)))
+            return {'token':token} if claiming else {'result':result}

@@ -311,3 +311,6 @@ html[data-theme="dark"] button.action-button{background:linear-gradient(135deg,#
 @media(hover:hover){button.action-button:hover:not(:disabled){background:linear-gradient(135deg,#e9ddff,#dbcaee);border-color:#9874c5;box-shadow:0 5px 16px #7045ad18}html[data-theme="dark"] button.action-button:hover:not(:disabled){background:linear-gradient(135deg,#4c376d,#392852);border-color:#b69bdc;box-shadow:0 5px 16px #09041433}}
 @media(max-width:520px){#refreshQueryHistory.action-button,#moreQueryHistory.action-button{width:100%;margin-top:12px}#creditOperations li{flex-wrap:wrap}}
 @media(prefers-reduced-motion:reduce){button.action-button{transition:none}}
+
+/* Keep the last consultation actions clear of the fixed navigation and status. */
+#consultPage{padding-bottom:160px}

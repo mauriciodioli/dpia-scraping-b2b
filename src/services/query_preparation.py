@@ -101,6 +101,8 @@ Copiá los campos de contexto sin alterarlos. Los candidatos iniciales llevan va
 estado="CANDIDATO", botonCompra=false y afiliado_link=""; esos estados no equivalen a validación real.
 No copies precios ni imágenes de ejemplos. No inventes enlaces. El esquema de referencia tiene items=[]: añadí candidatos solo si corresponde.
 '''
+    if prepared['mode']=='novedades':
+        instructions += '\nPara novedades, prepará una sola búsqueda concreta y no vacía por marketplace seleccionado, de hasta 500 caracteres, coherente con los candidatos. No generes tareas separadas por candidato.\n'
     public_data={**prepared,'attachments':[{'type':item['type'],'name':item['name'],'frames_count':len(item['frames'])} for item in prepared.get('attachments',[])]}
     instructions += '\nEl pedido original y los adjuntos definen la intención; no los sustituyas por una búsqueda genérica de la categoría.\nUsá solo los marketplaces elegidos en sources para scrape_plan. Si hay video, analizá los fotogramas visuales y no inventes audio.\n'
     return instructions + '\nMODALIDAD: ' + prepared['mode'] + '\nDATOS VERIFICADOS:\n' + json.dumps(

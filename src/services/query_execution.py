@@ -69,7 +69,9 @@ def dispatch_external(source,result,config,*,quota=None,operation_id=None):
     # reservation belonging to another request while it contacts the provider.
     if not quota.transition(operation_id,user_id,'dispatching'):
         return {'status':'pending','operation_id':operation_id,'error':'La ejecución ya fue enviada.'}
+    generation=json.loads(execution['outcome']).get('generation_result') if execution.get('outcome') else None
     def finish(state,payload):
+        if generation is not None:payload={**payload,'generation_result':generation}
         payload={**payload,'operation_id':operation_id}
         quota.transition(operation_id,user_id,state,payload)
         return payload

@@ -24,7 +24,8 @@ def prepare():
         # Construct only on the server. It is neither returned nor stored in a session cookie.
         build_private_prompt(prepared)
         return jsonify(success=True, summary=public_summary(prepared), context=prepared['context'],
-                       generation_available=False,external_execution_available=False,history_available=False)
+                       generation_available=bool(prepared['mode']=='novedades' and current_app.config.get('OPENAI_API_KEY') and current_app.config.get('LIVE_PROVIDER_CALLS_ENABLED') and current_app.extensions.get('scraping_quota')),
+                       external_execution_available=bool(current_app.config.get('LIVE_PROVIDER_CALLS_ENABLED') and current_app.extensions.get('scraping_quota')),history_available=bool(current_app.extensions.get('scraping_quota')))
     except PreparationError as exc:
         return jsonify(success=False, error=str(exc)), exc.status
     except CatalogError:
@@ -90,7 +91,8 @@ def query_operation(operation_id):
         import json
         from services.query_preparation import result_template
         outcome=json.loads(operation['outcome']) if operation.get('outcome') else {'status':'pending','products':[]}
-        payload=dict(result=result_template(operation['prepared']),rows=[],request_id=operation_id,
+        generated=outcome.get('generation_result')
+        payload=dict(result=generated or result_template(operation['prepared']),rows=sheet_rows(generated) if generated else [],request_id=operation_id,
                      sources={operation['source']:outcome})
         return jsonify(success=True,state=operation['state'],payload=payload)
     except PreparationError as exc:
@@ -114,6 +116,14 @@ def generate_query():
         external=[source for source in prepared['sources'] if source in EXTERNAL]
         if len(external)>1:
             raise PreparationError('Elegí un solo marketplace por ejecución.')
+        if prepared['mode']=='novedades' and external:
+            quota=current_app.extensions.get('scraping_quota')
+            if quota is None:return persistence_unavailable()
+            from services.novel_query import run_novelties, validate_configuration
+            validate_configuration(current_app.config)
+            try:operation_id=str(uuid.UUID(body.get('request_id','')))
+            except (ValueError,TypeError,AttributeError):raise PreparationError('Identificador de consulta inválido.') from None
+            return jsonify(run_novelties(prepared,current_app.config,quota,operation_id,generate))
         # No replacement persistence is installed implicitly. Paid execution stays
         # blocked until its server-side counter and replay protection are configured.
         if external or prepared.get('attachments'):
@@ -126,7 +136,10 @@ def generate_query():
         return jsonify(success=True,result=result,rows=sheet_rows(result),sources=outcomes,
                        request_id=request_id,internal_only=True,context_ids=prepared['ids'])
     except PreparationError as exc:
-        return jsonify(success=False,error=str(exc)),exc.status
+        if exc.status==402:
+            return jsonify(success=False,code='insufficient_credit',error=str(exc),required=1,missing=1,
+                credits=current_app.extensions['scraping_quota'].credits(session['user_id'])),402
+        return jsonify(success=False,error=str(exc),not_started=getattr(exc,'not_started',False)),exc.status
     except CatalogError:
         return jsonify(success=False,error='No se pudo verificar el catálogo.'),502
     except SQLAlchemyError:
