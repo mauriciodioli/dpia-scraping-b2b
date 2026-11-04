@@ -4,7 +4,7 @@ Separate metadata deliberately prevents db.create_all() from provisioning them.
 """
 import hashlib
 import json
-from sqlalchemy import Table, Column, MetaData, Integer, String, Text, DateTime, select, func, update
+from sqlalchemy import Table, Column, MetaData, Integer, String, Text, DateTime, select, func, update, case
 from sqlalchemy.dialects.mysql import insert
 from sqlalchemy.exc import IntegrityError
 from services.query_preparation import PreparationError
@@ -21,6 +21,14 @@ operaciones = Table('pwa_scraping_operaciones', metadata,
     Column('proveedor_trabajo_id', String(160)), Column('creado_en', DateTime),
     Column('actualizado_en', DateTime))
 HELD = ('reserved', 'dispatching', 'pending', 'consumed')
+POINT_COST = case((operaciones.c.origen == 'promocion', 5), else_=1)
+
+
+def used_points(conn, user_id):
+    return int(conn.execute(select(func.coalesce(func.sum(POINT_COST), 0)).where(
+        operaciones.c.usuario_id == user_id, operaciones.c.estado.in_(HELD))).scalar_one())
+
+
 TRANSITIONS = {'reserved': {'dispatching', 'released'},
                'dispatching': {'consumed', 'pending', 'released'},
                'pending': {'consumed', 'released'}}
@@ -58,10 +66,9 @@ class MySQLScrapingQuota:
                     if existing['usuario_id'] != user_id or existing['solicitud_hash'] != digest:
                         raise PreparationError('El identificador pertenece a otro pedido.', 409)
                     return
-                used = conn.execute(select(func.count()).select_from(operaciones).where(
-                    operaciones.c.usuario_id == user_id, operaciones.c.estado.in_(HELD))).scalar_one()
+                used = used_points(conn, user_id)
                 if used >= total:
-                    raise PreparationError('No quedan ejecuciones de scraping disponibles.', 402)
+                    raise PreparationError('No quedan puntos disponibles.', 402)
                 conn.execute(operaciones.insert().values(operacion_id=operation_id, usuario_id=user_id,
                     solicitud_hash=digest, origen=prepared['sources'][0], estado='reserved',
                     contexto_json=json.dumps(prepared, ensure_ascii=False)))
@@ -72,7 +79,7 @@ class MySQLScrapingQuota:
         with self._engine().connect() as conn:
             row = conn.execute(select(operaciones).where(operaciones.c.operacion_id == operation_id,
                 operaciones.c.usuario_id == user_id)).mappings().first()
-            if not row:
+            if not row or row['origen']=='promocion':
                 return None
             outcome = decode(row['resultado_json'])
             return {'operation_id': row['operacion_id'], 'source': row['origen'], 'state': row['estado'],
@@ -98,16 +105,16 @@ class MySQLScrapingQuota:
     def credits(self, user_id):
         with self._engine().begin() as conn:
             total = self._lock(conn, user_id)
-            counts = dict(conn.execute(select(operaciones.c.estado, func.count()).where(
+            counts = dict(conn.execute(select(operaciones.c.estado, func.sum(POINT_COST)).where(
                 operaciones.c.usuario_id == user_id).group_by(operaciones.c.estado)).all())
             rows = conn.execute(select(operaciones.c.operacion_id, operaciones.c.origen, operaciones.c.estado
                 ).where(operaciones.c.usuario_id == user_id).order_by(
                 operaciones.c.creado_en.desc(), operaciones.c.operacion_id).limit(30)).all()
-            reserved = sum(counts.get(state, 0) for state in ('reserved', 'dispatching', 'pending'))
-            consumed = counts.get('consumed', 0)
+            reserved = sum(int(counts.get(state, 0)) for state in ('reserved', 'dispatching', 'pending'))
+            consumed = int(counts.get('consumed', 0))
             return {'initial': total, 'available': max(0, total-reserved-consumed),
                     'reserved': reserved, 'consumed': consumed,
-                    'operations': [{'operation_id': row[0], 'source': row[1], 'state': row[2]} for row in rows]}
+                    'operations': [{'operation_id': row[0], 'source': row[1], 'state': row[2], 'cost': 5 if row[1]=='promocion' else 1} for row in rows]}
 
     def grant_test(self, user_id):
         with self._engine().begin() as conn:
@@ -117,7 +124,7 @@ class MySQLScrapingQuota:
 
     def history(self, user_id, offset=0):
         with self._engine().connect() as conn:
-            rows = conn.execute(select(operaciones).where(operaciones.c.usuario_id == user_id)
+            rows = conn.execute(select(operaciones).where(operaciones.c.usuario_id == user_id, operaciones.c.origen != 'promocion')
                 .order_by(operaciones.c.creado_en.desc(), operaciones.c.operacion_id)
                 .offset(offset).limit(25)).mappings().all()
             history = []

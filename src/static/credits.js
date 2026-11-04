@@ -7,42 +7,31 @@
  function render(){
   const logged=typeof currentEmail==='string'&&!!currentEmail;
   const available=credits?.available??'—',reserved=credits?.reserved??'—',consumed=credits?.consumed??'—',initial=credits?.initial??'—';
-  $('walletNum').textContent=available;$('balanceNum').textContent=available;$('scrapingBalanceUnit').textContent=tr('ejec.');
-  $('balanceLabel').textContent=tr('Scrapings disponibles');$('freeCaption').textContent=tr('Iniciales');$('freeRemaining').textContent=initial;
-  $('freeRenew').textContent=tr('Por usuario autenticado');$('paidCaption').textContent=tr('Reservadas o pendientes');$('paidRemaining').textContent=reserved;
-  $('paidDetail').textContent=tr('Retenidas hasta confirmar el resultado');$('consumedExecutions').textContent=consumed;$('availableExecutions').textContent=available;
-  $('usageTitle').textContent=tr('Consumidas');const percent=credits?Math.round(100*credits.consumed/credits.initial):0;
-  $('usagePct').textContent=credits?percent+'%':'—';$('usageUsed').textContent=consumed+' '+tr('consumidas');$('usageTotal').textContent=initial+' '+tr('iniciales');
+  $('walletNum').textContent=available;$('balanceNum').textContent=available;$('scrapingBalanceUnit').textContent=tr('pts');
+  $('balanceLabel').textContent=tr('Puntos disponibles');$('freeCaption').textContent=tr('Puntos cargados');$('freeRemaining').textContent=initial;
+  $('freeRenew').textContent=tr('Por usuario autenticado');$('paidCaption').textContent=tr('Reservados o pendientes');$('paidRemaining').textContent=reserved;
+  $('paidDetail').textContent=tr('Retenidos hasta confirmar el resultado');$('consumedExecutions').textContent=consumed;$('availableExecutions').textContent=available;
+  $('usageTitle').textContent=tr('Puntos consumidos');const percent=credits?Math.round(100*credits.consumed/credits.initial):0;
+  $('usagePct').textContent=credits?percent+'%':'—';$('usageUsed').textContent=consumed+' '+tr('puntos consumidos');$('usageTotal').textContent=initial+' '+tr('puntos cargados');
   $('creditMeterFill').style.width=percent+'%';$('creditMeterFill').style.background=percent<50?'#30d49a':percent<80?'#ffaf35':'#ff5668';$('creditMeter').setAttribute('aria-valuenow',String(percent));
-  $('creditDemoHint').textContent=tr(logged?'Las ejecuciones de scraping y los puntos para destacar son saldos independientes.':'Iniciá sesión para consultar tus ejecuciones.');
+  $('creditDemoHint').textContent=tr(logged?'Un solo saldo: 1 punto por scraping iniciado y 5 puntos por destacar durante 5 días.':'Iniciá sesión para consultar tus puntos.');
   $('creditOperations').replaceChildren();
   for(const operation of credits?.operations||[]){
    const row=document.createElement('li'),name=document.createElement('span'),button=document.createElement('button');button.className='action-button';
-   name.textContent=operation.source+' · '+tr(states[operation.state]||'Pendiente de confirmación');button.type='button';button.textContent=tr('Ver resultado');
-   button.onclick=()=>loadQueryOperation(operation.operation_id);row.append(name,button);$('creditOperations').append(row);
+   name.textContent=(operation.source==='promocion'?tr('Publicación destacada'):operation.source)+' · '+tr(states[operation.state]||'Pendiente de confirmación')+' · '+(operation.cost||(operation.source==='promocion'?5:1))+' '+tr('pts');button.type='button';button.textContent=tr(operation.source==='promocion'?'Ver publicación':'Ver resultado');
+   button.onclick=()=>operation.source==='promocion'?window.DPIAPublications?.openProfile():loadQueryOperation(operation.operation_id);row.append(name,button);$('creditOperations').append(row);
   }
   $('addTestCredits').hidden=!logged||!testEnabled;
   choose(chosen);
  }
- async function refreshPromotionPoints(current,serial){
-  $('promotionPointsBalance').textContent='—';$('promotionPointsStatus').textContent='';
-  if(!current)return;
-  try{
-   const response=await fetch('/api/publicaciones/promociones',{cache:'no-store'}),data=await response.json();
-   if(serial!==generation||currentEmail!==current)return;
-   if(!response.ok||!data.success)throw new Error('No se pudieron consultar los puntos de promoción.');
-   $('promotionPointsBalance').textContent=data.saldo;
-  }catch(error){if(serial===generation)$('promotionPointsStatus').textContent=error.message;}
- }
  async function refresh(){
   const current=typeof currentEmail==='string'?currentEmail:null,serial=++generation;
-  refreshPromotionPoints(current,serial);
   if(account!==current){credits=null;testEnabled=false;account=current;}
   if(!current){credits=null;render();return;}
   try{
    const response=await fetch('/api/consultas/creditos',{cache:'no-store'}),data=await response.json();
    if(serial!==generation||currentEmail!==current)return;
-   if(!response.ok||!data.success||!data.credits)throw new Error(data.error||'No se pudieron consultar las ejecuciones.');
+   if(!response.ok||!data.success||!data.credits)throw new Error(data.error||'No se pudieron consultar los puntos.');
    credits=data.credits;testEnabled=!!data.test_credits_enabled;$('creditStatus').textContent='';
   }catch(error){if(serial!==generation)return;credits=null;testEnabled=false;$('creditStatus').textContent=tr(error.message);}
   render();
@@ -67,7 +56,7 @@
   const button=$('addTestCredits');if(button.disabled)return;button.disabled=true;
   try{
    const response=await fetch('/api/consultas/creditos/prueba',{method:'POST',headers:{'Content-Type':'application/json','X-DPIA-Test-Credits':'1'},body:'{}'}),data=await response.json();
-   if(!response.ok||!data.success)throw new Error(data.error||'No se pudo agregar ejecuciones.');
+   if(!response.ok||!data.success)throw new Error(data.error||'No se pudieron agregar puntos.');
    await refresh();
   }catch(error){$('creditStatus').textContent=error.message;}
   finally{button.disabled=false;}

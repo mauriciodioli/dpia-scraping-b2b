@@ -52,7 +52,7 @@
   const status=document.createElement('p');status.setAttribute('role','status');
   const cancel=document.createElement('button');cancel.className='action-button';cancel.textContent='Cancelar';
   const confirm=document.createElement('button');confirm.className='action-button';confirm.textContent='Confirmar · Gastar 5 puntos';confirm.disabled=promotionSummary.saldo<5;
-  if(confirm.disabled)status.textContent='Saldo insuficiente. Necesitás 5 puntos de promoción.';
+  if(confirm.disabled)status.textContent='Saldo insuficiente. Necesitás 5 puntos disponibles.';
   const dismiss=()=>{if(promoting)return;overlay.remove();$('profileOverlay').removeAttribute('aria-hidden');trigger.focus();};
   cancel.onclick=dismiss;overlay.onclick=event=>{if(event.target===overlay)dismiss();};
   overlay.onkeydown=event=>{if(event.key==='Escape'){event.stopPropagation();dismiss();}if(event.key==='Tab'){const targets=[cancel,confirm].filter(button=>!button.disabled);if(targets.length===1||(!event.shiftKey&&document.activeElement===targets.at(-1))||(event.shiftKey&&document.activeElement===targets[0])){event.preventDefault();(event.shiftKey?targets.at(-1):targets[0]).focus();}}};
@@ -85,7 +85,7 @@
     promotionSummary=pointsResponse.ok&&points.success?points:null;
    }catch(_){promotionSummary=null;}
    if(serial!==generation||email!==currentEmail)return;
-   $('profilePromotionBalance').textContent=promotionSummary?tr('Puntos para destacar: {saldo} · 5 puntos = 5 días').replace('{saldo}',promotionSummary.saldo):'No se pudieron consultar los puntos de promoción.';
+   $('profilePromotionBalance').textContent=promotionSummary?tr('Puntos disponibles: {saldo} · 5 puntos = 5 días').replace('{saldo}',promotionSummary.saldo):'No se pudieron consultar los puntos disponibles.';
    for(const publication of data.publicaciones)$('publicationHistory').append(cardFor(publication));
    offset+=data.publicaciones.length;$('moreMyPublications').hidden=!data.has_more;
    $('profileStatus').textContent=$('publicationHistory').children.length?'':'Todavía no tenés publicaciones guardadas.';

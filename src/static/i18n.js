@@ -234,3 +234,106 @@ Object.assign(DPIA_TRANSLATIONS, {
   "Impossibile eliminare l’annuncio. Nessuna modifica confermata."
  ]
 });
+
+Object.assign(DPIA_TRANSLATIONS, {
+ "Puntos disponibles": [
+  "Available points",
+  "Dostępne punkty",
+  "Punti disponibili"
+ ],
+ "Puntos cargados": [
+  "Points credited",
+  "Przyznane punkty",
+  "Punti accreditati"
+ ],
+ "Puntos consumidos": [
+  "Points used",
+  "Wykorzystane punkty",
+  "Punti utilizzati"
+ ],
+ "puntos consumidos": [
+  "points used",
+  "wykorzystanych punktów",
+  "punti utilizzati"
+ ],
+ "puntos cargados": [
+  "points credited",
+  "przyznanych punktów",
+  "punti accreditati"
+ ],
+ "puntos": [
+  "points",
+  "punkty",
+  "punti"
+ ],
+ "pts": [
+  "pts",
+  "pkt",
+  "pt"
+ ],
+ "Reservados o pendientes": [
+  "Reserved or pending",
+  "Zarezerwowane lub oczekujące",
+  "Riservati o in attesa"
+ ],
+ "Retenidos hasta confirmar el resultado": [
+  "Held until the result is confirmed",
+  "Zarezerwowane do potwierdzenia wyniku",
+  "Trattenuti fino alla conferma del risultato"
+ ],
+ "Un solo saldo: 1 punto por scraping iniciado y 5 puntos por destacar durante 5 días.": [
+  "One balance: 1 point per scraping job started and 5 points to feature a publication for 5 days.",
+  "Jedno saldo: 1 punkt za uruchomienie scrapingu i 5 punktów za promowanie ogłoszenia przez 5 dni.",
+  "Un solo saldo: 1 punto per scraping avviato e 5 punti per mettere in evidenza un annuncio per 5 giorni."
+ ],
+ "Iniciá sesión para consultar tus puntos.": [
+  "Sign in to see your points.",
+  "Zaloguj się, aby sprawdzić punkty.",
+  "Accedi per consultare i tuoi punti."
+ ],
+ "Historial de consumo de puntos": [
+  "Point usage history",
+  "Historia wykorzystania punktów",
+  "Cronologia utilizzo punti"
+ ],
+ "Scraping y publicaciones destacadas": [
+  "Scraping and featured publications",
+  "Scraping i promowane ogłoszenia",
+  "Scraping e annunci in evidenza"
+ ],
+ "Publicación destacada": [
+  "Featured publication",
+  "Promowane ogłoszenie",
+  "Annuncio in evidenza"
+ ],
+ "Ver publicación": [
+  "View publication",
+  "Zobacz ogłoszenie",
+  "Visualizza annuncio"
+ ],
+ "Puntos disponibles: {saldo} · 5 puntos = 5 días": [
+  "Available points: {saldo} · 5 points = 5 days",
+  "Dostępne punkty: {saldo} · 5 punktów = 5 dni",
+  "Punti disponibili: {saldo} · 5 punti = 5 giorni"
+ ],
+ "Saldo insuficiente. Necesitás 5 puntos disponibles.": [
+  "Insufficient balance. You need 5 available points.",
+  "Niewystarczające saldo. Potrzebujesz 5 dostępnych punktów.",
+  "Saldo insufficiente. Servono 5 punti disponibili."
+ ],
+ "Necesitás 5 puntos disponibles. No se descontó saldo.": [
+  "You need 5 available points. Nothing was deducted.",
+  "Potrzebujesz 5 dostępnych punktów. Nic nie pobrano.",
+  "Servono 5 punti disponibili. Nessun addebito effettuato."
+ ],
+ "Agregar 6 puntos de prueba": [
+  "Add 6 test points",
+  "Dodaj 6 punktów testowych",
+  "Aggiungi 6 punti di prova"
+ ],
+ "No se pudieron consultar los puntos.": [
+  "Could not load points.",
+  "Nie udało się sprawdzić punktów.",
+  "Impossibile consultare i punti."
+ ]
+});
