@@ -114,3 +114,51 @@ class MySQLScrapingQuota:
             self._lock(conn, user_id)
             conn.execute(update(cupos).where(cupos.c.usuario_id == user_id).values(
                 ejecuciones_habilitadas=cupos.c.ejecuciones_habilitadas+6))
+
+    def history(self, user_id, offset=0):
+        with self._engine().connect() as conn:
+            rows = conn.execute(select(operaciones).where(operaciones.c.usuario_id == user_id)
+                .order_by(operaciones.c.creado_en.desc(), operaciones.c.operacion_id)
+                .offset(offset).limit(25)).mappings().all()
+            history = []
+            for row in rows[:24]:
+                prepared = decode(row['contexto_json']) or {}
+                outcome = decode(row['resultado_json']) or {}
+                context = prepared.get('context', {})
+                history.append({'operation_id': row['operacion_id'], 'source': row['origen'],
+                    'state': row['estado'], 'query': prepared.get('user_message', ''),
+                    'city': context.get('ciudad', ''), 'category': context.get('categoria', ''),
+                    'created_at': row['creado_en'].isoformat() if row['creado_en'] else None,
+                    'product_count': len(outcome.get('products') or [])})
+            return {'operations': history, 'has_more': len(rows)>24}
+
+    def image_stage(self, operation_id, user_id, index, *, token=None, stage=None):
+        """Claim once or save a gallery without changing the scraping allowance."""
+        import uuid
+        with self._engine().begin() as conn:
+            self._lock(conn, user_id)
+            row = conn.execute(select(operaciones).where(operaciones.c.operacion_id == operation_id,
+                operaciones.c.usuario_id == user_id).with_for_update()).mappings().first()
+            if not row:
+                raise PreparationError('Operación no encontrada.', 404)
+            if row['estado'] != 'consumed':
+                raise PreparationError('El scraping todavía no tiene resultados confirmados.', 409)
+            outcome = decode(row['resultado_json']) or {}
+            if not 0 <= index < len(outcome.get('products') or []):
+                raise PreparationError('Producto no encontrado.', 404)
+            stages = outcome.setdefault('image_stages', {})
+            previous = stages.get(str(index), {})
+            if token is None:
+                if previous.get('status') == 'complete':
+                    return previous
+                if previous.get('status') in ('loading', 'pending'):
+                    raise PreparationError('Las imágenes están pendientes de confirmación. No se reenviará la solicitud.', 409)
+                previous = {'status': 'loading', 'token': str(uuid.uuid4())}
+                stages[str(index)] = previous
+            else:
+                if previous.get('token') != token:
+                    raise PreparationError('La preparación de imágenes cambió.', 409)
+                stages[str(index)] = stage
+            conn.execute(update(operaciones).where(operaciones.c.operacion_id == operation_id,
+                operaciones.c.usuario_id == user_id).values(resultado_json=json.dumps(outcome, ensure_ascii=False)))
+            return stages[str(index)]

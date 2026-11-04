@@ -32,6 +32,6 @@ def publications_for_city(country, city, offset=0, category_id=None, terms=None)
     if terms:
         query = query.filter(or_(*(or_(Publicacion.titulo.ilike('%'+term+'%'), Publicacion.texto.ilike('%'+term+'%'), Publicacion.descripcion.ilike('%'+term+'%')) for term in terms)))
     rows = query.order_by(Publicacion.fecha_creacion.desc(), Publicacion.id.desc()).offset(offset).limit(25).all()
-    return [dict(id=row.id, titulo=row.titulo, descripcion=row.descripcion,
+    return [dict(id=row.id, titulo=row.texto or row.titulo, descripcion=row.descripcion,
                  imagen=row.imagen, precio=row.precio, moneda=row.moneda,
                  ciudad=city) for row in rows[:24]], len(rows) > 24

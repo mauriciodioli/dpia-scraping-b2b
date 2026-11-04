@@ -75,7 +75,7 @@ function renderQueryResult(data){
   const external=['amazon','ebay','aliexpress'].includes(source);
   if(external){
    const grid=document.createElement('div');grid.className='scraped-products';
-   for(const product of outcome.products||[]){
+   for(const [productIndex,product] of (outcome.products||[]).entries()){
     const card=document.createElement('article');card.className='scraped-product';card.dataset.realProduct='';
     const visual=document.createElement('div');visual.className='scraped-product-visual';
     const imageUrl=safeQueryUrl(product.image);
@@ -87,6 +87,7 @@ function renderQueryResult(data){
     card.append(visual,name,price,currency,marketplace);
     const productUrl=safeQueryUrl(product.url);
     if(productUrl){const link=document.createElement('a');link.href=productUrl;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Ver producto';card.append(link);}
+    if(source==='amazon'&&(data.request_id||lastQueryOperationId)&&window.DPIAHistory)card.append(window.DPIAHistory.imageButton(data.request_id||lastQueryOperationId,productIndex,product,outcome.image_stages?.[String(productIndex)]));
     grid.append(card);
    }
    section.append(grid);
@@ -111,7 +112,7 @@ async function loadQueryOperation(id){
  try{
   const response=await fetch('/api/consultas/operaciones/'+encodeURIComponent(id),{cache:'no-store'}),data=await response.json();
   if(!response.ok||!data.success)throw new Error(data.error||'No se pudo consultar el estado.');
-  lastQueryOperationId=id;renderQueryResult(data.payload);updateScrapingStatus(data.payload);window.DPIACredits?.refresh();
+  lastQueryOperationId=id;renderQueryResult(data.payload);window.DPIACredits?.refresh();
   status.textContent=data.state==='pending'?'La ejecución sigue pendiente. No se reenviará.':data.state==='failed'?'La ejecución falló.':'Estado recuperado del servidor.';
  }catch(error){status.textContent=error.message;}
 }
@@ -129,7 +130,7 @@ function updateScrapingStatus(data){
   setScrapingStatus('complete',count?`${count} resultados disponibles · Consultar`:'Búsqueda completada sin resultados · Consultar');
  }
 }
-document.querySelector('#scrapingActivity').onclick=()=>{show('consultPage');document.querySelector('#queryResults').scrollIntoView({behavior:'smooth',block:'start'});};
+document.querySelector('#scrapingActivity').onclick=()=>{document.querySelector('#scrapingActivity').hidden=true;show('consultPage');document.querySelector('#queryResults').scrollIntoView({behavior:'smooth',block:'start'});};
 async function generateDPIAQuery(){
  if(queryBusy||!queryPrepared)return;
  if(!currentEmail){openAuth();return;}

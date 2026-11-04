@@ -180,3 +180,54 @@ def direct_scraping():
     except SQLAlchemyError:
         db.session.rollback()
         return jsonify(success=False,error='No se pudo verificar la consulta.'),503
+
+
+@query_bp.get('/historial')
+def query_history():
+    if type(session.get('user_id')) is not int:
+        return jsonify(success=False,error='Iniciá sesión para ver tu historial.'),401
+    quota=current_app.extensions.get('scraping_quota')
+    if quota is None:return persistence_unavailable()
+    offset=request.args.get('offset','0')
+    if not offset.isdecimal() or len(offset)>6:
+        return jsonify(success=False,error='Página inválida.'),400
+    try:
+        return jsonify(success=True,**quota.history(session['user_id'],int(offset)))
+    except PreparationError as exc:
+        return jsonify(success=False,error=str(exc)),exc.status
+    except SQLAlchemyError:
+        return persistence_unavailable()
+
+
+@query_bp.post('/operaciones/<operation_id>/imagenes')
+def query_product_images(operation_id):
+    if type(session.get('user_id')) is not int:
+        return jsonify(success=False,error='Iniciá sesión para preparar imágenes.'),401
+    quota=current_app.extensions.get('scraping_quota')
+    if quota is None:return persistence_unavailable()
+    try:
+        body=request.get_json(silent=True)
+        if not isinstance(body,dict) or set(body)-{'product_index','filters'} or type(body.get('product_index')) is not int:
+            raise PreparationError('Seleccioná un producto del resultado guardado.')
+        from services.query_images import prepare_images
+        return jsonify(prepare_images(quota,operation_id,session['user_id'],body['product_index'],
+                                      body.get('filters',{}),current_app.config))
+    except PreparationError as exc:
+        return jsonify(success=False,error=str(exc)),exc.status
+    except SQLAlchemyError:
+        return persistence_unavailable()
+
+
+@query_bp.post('/operaciones/<operation_id>/publicar')
+def publish_query_product(operation_id):
+    if type(session.get('user_id')) is not int:
+        return jsonify(success=False,error='Iniciá sesión para publicar.'),401
+    quota=current_app.extensions.get('scraping_quota')
+    if quota is None:return persistence_unavailable()
+    try:
+        from services.query_publication import publish_product
+        return jsonify(publish_product(quota,operation_id,session['user_id'],request.get_json(silent=True)))
+    except PreparationError as exc:
+        return jsonify(success=False,error=str(exc)),exc.status
+    except SQLAlchemyError:
+        return jsonify(success=False,error='No se confirmó el guardado. Consultá tus publicaciones antes de reintentar.'),503
