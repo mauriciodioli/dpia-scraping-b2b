@@ -47,39 +47,72 @@ async function prepareDPIAQuery(){
 }
 function sourcePreferenceKey(){return 'dpia-query-sources:'+currentEmail;}
 function savedQuerySources(){
- try{const saved=JSON.parse(localStorage.getItem(sourcePreferenceKey()));return Array.isArray(saved)&&saved.length&&saved.every(s=>querySources.includes(s))?[...new Set(saved)]:null;}catch(_){return null;}
+ try{const saved=JSON.parse(localStorage.getItem(sourcePreferenceKey()));return Array.isArray(saved)&&saved.length&&saved.every(s=>querySources.includes(s))&&saved.filter(s=>['amazon','ebay','aliexpress'].includes(s)).length<=1?[...new Set(saved)]:null;}catch(_){return null;}
 }
 function openSourceModal(generateAfter=false){
  if(queryBusy)return;
  pendingSourcesGeneration=generateAfter;
- const selected=savedQuerySources()||querySources.slice(0,3);
- document.querySelector('#allQuerySources').checked=selected.length===querySources.length;
+ const selected=savedQuerySources()||['amazon'];
+ document.querySelector('#allQuerySources').checked=['local','dpia','historial'].every(source=>selected.includes(source));
  for(const checkbox of document.querySelectorAll('[name="querySource"]'))checkbox.checked=selected.includes(checkbox.value);
  document.querySelector('#querySourceError').textContent='';document.querySelector('#querySourcesModal').hidden=false;
  document.querySelector('#confirmQuerySources').focus();
 }
 function closeSourceModal(){document.querySelector('#querySourcesModal').hidden=true;pendingSourcesGeneration=false;}
+let lastQueryOperationId=null;
+function safeQueryUrl(value){
+ try{const url=new URL(value);return ['https:','http:'].includes(url.protocol)&&!url.username?url.href:null;}catch(_){return null;}
+}
 function renderQueryResult(data){
  const container=document.querySelector('#queryResults');container.replaceChildren();
+ const states={complete:'Completado',partial:'Completado con advertencias',empty:'Completado sin productos',pending:'Pendiente de confirmación',failed:'Fallido',clarification_required:'Requiere aclaración'};
  for(const [source,outcome] of Object.entries(data.sources||{})){
-  const article=document.createElement('article');article.className='prompt-result';
-  const title=document.createElement('strong');title.textContent=source;article.append(title);
-  if(outcome.error){const p=document.createElement('p');p.textContent=outcome.error;article.append(p);}
-  else if(!outcome.data?.length){const p=document.createElement('p');p.textContent='Sin resultados para este origen.';article.append(p);}
-  else for(const row of outcome.data){
-   const detail=document.createElement('p');
-   detail.textContent=row.titulo||row.producto||row.Producto||row.search_query||JSON.stringify(row);
-   const description=document.createElement('small');description.textContent=row.descripcion||'';article.append(detail,description);
-   for(const product of row.items||[]){const p=document.createElement('p');p.textContent=[product.titulo,product.precio].filter(v=>v!=null).join(' · ');article.append(p);}
+  const section=document.createElement('section');section.className='source-result';section.dataset.source=source;
+  const title=document.createElement('h3');title.textContent=source;section.append(title);
+  const state=document.createElement('p');state.className='query-state';state.textContent=states[outcome.status]||'Pendiente de confirmación';section.append(state);
+  if(outcome.error){const error=document.createElement('p');error.textContent=outcome.error;section.append(error);}
+  const external=['amazon','ebay','aliexpress'].includes(source);
+  if(external){
+   const grid=document.createElement('div');grid.className='scraped-products';
+   for(const product of outcome.products||[]){
+    const card=document.createElement('article');card.className='scraped-product';card.dataset.realProduct='';
+    const visual=document.createElement('div');visual.className='scraped-product-visual';
+    const imageUrl=safeQueryUrl(product.image);
+    if(imageUrl){const image=document.createElement('img');image.src=imageUrl;image.alt='';image.loading='lazy';image.onerror=()=>image.remove();visual.append(image);}
+    const name=document.createElement('strong');name.textContent=product.title;
+    const price=document.createElement('p');price.textContent=product.price==null?'Precio no informado':typeof product.price==='object'?JSON.stringify(product.price):String(product.price);
+    const currency=document.createElement('small');currency.textContent=product.currency||'Moneda no informada';
+    const marketplace=document.createElement('small');marketplace.textContent=product.marketplace||source;
+    card.append(visual,name,price,currency,marketplace);
+    const productUrl=safeQueryUrl(product.url);
+    if(productUrl){const link=document.createElement('a');link.href=productUrl;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Ver producto';card.append(link);}
+    grid.append(card);
+   }
+   section.append(grid);
+   if(outcome.status==='pending'&&lastQueryOperationId){const refresh=document.createElement('button');refresh.type='button';refresh.textContent='Consultar estado';refresh.onclick=()=>loadQueryOperation(lastQueryOperationId);section.append(refresh);}
+  }else{
+   for(const row of outcome.data||[]){const article=document.createElement('article');article.className='prompt-result';const name=document.createElement('strong');name.textContent=row.titulo||row.producto||row.Producto||'';const description=document.createElement('p');description.textContent=row.descripcion||'';article.append(name,description);section.append(article);}
+   if(!outcome.data?.length){const empty=document.createElement('p');empty.textContent='Sin resultados para este origen.';section.append(empty);}
   }
-  container.append(article);
+  container.append(section);
  }
- for(const row of data.rows||[]){
-  const card=document.createElement('article');card.className='prompt-result';const title=document.createElement('strong');title.textContent=row.Producto;
-  const detail=document.createElement('p');detail.textContent=row.descripcion;card.append(title,detail);container.append(card);
+ if(data.rows?.length){
+  const candidates=document.createElement('details'),heading=document.createElement('summary');
+  candidates.className='query-candidates';heading.textContent='Candidatos de OpenAI · sin verificar';candidates.append(heading);
+  for(const row of data.rows){const card=document.createElement('article');card.className='prompt-result';const title=document.createElement('strong');title.textContent=row.Producto;const detail=document.createElement('p');detail.textContent=row.descripcion;card.append(title,detail);candidates.append(card);}
+  container.append(candidates);
  }
  const download=document.createElement('button');download.type='button';download.textContent='Descargar JSON';
  download.onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='dpia-results.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};container.append(download);
+}
+async function loadQueryOperation(id){
+ const status=document.querySelector('#queryStatus');show('consultPage');
+ try{
+  const response=await fetch('/api/consultas/operaciones/'+encodeURIComponent(id),{cache:'no-store'}),data=await response.json();
+  if(!response.ok||!data.success)throw new Error(data.error||'No se pudo consultar el estado.');
+  lastQueryOperationId=id;renderQueryResult(data.payload);window.DPIACredits?.refresh();
+  status.textContent=data.state==='pending'?'La ejecución sigue pendiente. No se reenviará.':data.state==='failed'?'La ejecución falló.':'Estado recuperado del servidor.';
+ }catch(error){status.textContent=error.message;}
 }
 async function generateDPIAQuery(){
  if(queryBusy||!queryPrepared)return;
@@ -90,12 +123,17 @@ async function generateDPIAQuery(){
  status.textContent='Buscando en los orígenes seleccionados…';queryRequestId ||= crypto.randomUUID();
  try{
   const response=await fetch('/api/consultas/generar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...queryPrepared.body,sources,request_id:queryRequestId}),signal:AbortSignal.timeout(650000)});
-  const data=await response.json();if(response.status===401)openAuth();if(!response.ok||!data.success)throw new Error(data.error||'No se pudo generar la consulta.');
+  const data=await response.json();if(response.status===401)openAuth();
+  if(response.status===402&&data.code==='insufficient_credit'){window.DPIACredits?.insufficient(data);return;}
+  if(!response.ok||!data.success)throw new Error(data.error||'No se pudo generar la consulta.');
+  lastQueryOperationId=data.request_id||queryRequestId;window.DPIACredits?.refresh();
   if(!queryPrepared||JSON.stringify(queryBody())!==queryPrepared.fingerprint){status.textContent='El pedido cambió. Prepará nuevamente la consulta.';return;}
   if(data.result.needs_clarification){status.textContent=data.result.clarifying_question;return;}
-  renderQueryResult(data);status.textContent='Consulta completada. Revisá los resultados de cada origen.';
- }catch(error){status.textContent=error.name==='TimeoutError'?'La consulta sigue pendiente. No se reenviará automáticamente.':error.message;}
- finally{queryBusy=false;button.disabled=false;}
+  renderQueryResult(data);
+  const outcomes=Object.values(data.sources||{});
+  status.textContent=outcomes.some(row=>row.status==='pending')?'La ejecución sigue pendiente. No se reenviará.':outcomes.some(row=>row.status==='failed')?'La ejecución falló.':'Consulta completada. Revisá los resultados de cada origen.';
+ }catch(error){status.textContent=error.name==='TimeoutError'?'La consulta sigue pendiente. No se reenviará automáticamente.':error.message;if(queryRequestId){lastQueryOperationId=queryRequestId;const refresh=document.createElement('button');refresh.textContent='Consultar estado';refresh.onclick=()=>loadQueryOperation(lastQueryOperationId);document.querySelector('#queryResults').append(refresh);}}
+ finally{queryBusy=false;button.disabled=false;window.DPIACredits?.refresh();}
 }
 document.querySelector('#queryScope').addEventListener('change',()=>{refreshQuerySelectors();syncLocalCategory();});
 for(const id of ['queryCategory','queryPostal','promptText','searchText'])document.querySelector('#'+id).addEventListener('input',invalidateQuery);
@@ -103,7 +141,7 @@ document.querySelector('#generateQuery').onclick=generateDPIAQuery;
 document.querySelector('#changeQuerySources').onclick=()=>openSourceModal(false);
 document.querySelector('#closeQuerySources').onclick=closeSourceModal;
 document.querySelector('#querySourcesModal').onclick=e=>{if(e.target.id==='querySourcesModal')closeSourceModal();};
-document.querySelector('#allQuerySources').onchange=e=>{for(const box of document.querySelectorAll('[name="querySource"]'))box.checked=e.target.checked;};
+document.querySelector('#allQuerySources').onchange=e=>{for(const box of document.querySelectorAll('[name="querySource"]'))if(['local','dpia','historial'].includes(box.value))box.checked=e.target.checked;};
 document.querySelector('#confirmQuerySources').onclick=()=>{
  const sources=[...document.querySelectorAll('[name="querySource"]:checked')].map(box=>box.value);
  if(!sources.length){document.querySelector('#querySourceError').textContent='Seleccioná al menos un origen de búsqueda.';return;}
@@ -114,4 +152,4 @@ function syncLocalCategory(){const option=document.querySelector('#queryCategory
 document.querySelector('#queryCategory').addEventListener('change',syncLocalCategory);
 
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!document.querySelector('#querySourcesModal').hidden)closeSourceModal();});
-for(const box of document.querySelectorAll('[name="querySource"]'))box.addEventListener('change',()=>{document.querySelector('#allQuerySources').checked=[...document.querySelectorAll('[name="querySource"]')].every(item=>item.checked);});
+for(const box of document.querySelectorAll('[name="querySource"]'))box.addEventListener('change',()=>{if(box.checked&&['amazon','ebay','aliexpress'].includes(box.value)){for(const other of document.querySelectorAll('[name="querySource"]'))if(other!==box&&['amazon','ebay','aliexpress'].includes(other.value))other.checked=false;}document.querySelector('#allQuerySources').checked=[...document.querySelectorAll('[name="querySource"]')].filter(item=>['local','dpia','historial'].includes(item.value)).every(item=>item.checked);});

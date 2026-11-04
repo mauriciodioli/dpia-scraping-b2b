@@ -382,13 +382,19 @@ está limitado a 10 MB y las imágenes decodificadas a 5 MB. Los adjuntos no se 
 en el historial. La API de imágenes está documentada en
 [OpenAI Images and vision](https://developers.openai.com/api/docs/guides/images-vision).
 
-La deduplicación e historial se guardan en SQLite local
-`src/instance/queries.sqlite3` (`QUERY_STORE_PATH`), con permiso de archivo 0600,
-excluido de Git y del contexto Docker. Cada ID pertenece a un usuario y a un cuerpo
-de solicitud; una repetición recupera el resultado y no relanza proveedores. Los
-estados pendientes/fallidos no se reenvían automáticamente: un timeout puede dejar
-un trabajo remoto activo. Si se usa Docker, montar esa ruta como volumen para
-conservar el historial al recrear el contenedor. No se agregan tablas a MySQL.
+El almacenamiento local agregado para historial, deduplicación y contador fue
+retirado por solicitud del usuario. No se instaló una persistencia alternativa.
+Las consultas de texto a publicaciones existentes siguen disponibles. El historial,
+el contador y la ejecución facturable permanecen no disponibles hasta definir
+una persistencia autorizada. La interfaz muestra esa condición sin inventar saldos.
 
 Pruebas específicas: `test_query_workflow.py`, `test_query_generation.py` y
 `test_catalog_ui.py`, con SQLite e interceptación HTTP. No consumen OpenAI ni Apify.
+
+## Estado del contador y del historial
+
+Se retiraron los módulos de almacenamiento local del contador y del historial,
+junto con su configuración. No se modificaron tablas MySQL ni se añadió otra base
+de datos. El scraping real queda bloqueado mientras no haya persistencia autorizada
+para el contador y la protección contra reenvíos. La pantalla Puntos no presenta
+un saldo inicial ficticio. Los paquetes permanecen como demostración sin pagos.

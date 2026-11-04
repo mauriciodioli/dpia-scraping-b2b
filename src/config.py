@@ -77,5 +77,7 @@ OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
 
 # Server-only credential with scraper:write for explicit marketplace dispatch.
 DPIA_SCRAPING_KEY = os.environ.get('DPIA_SCRAPING_KEY', '')
-QUERY_STORE_PATH = str(BASE_DIR / 'instance' / 'queries.sqlite3')
 MAX_CONTENT_LENGTH = 10 * 1024 * 1024
+
+# Explicit opt-in required before any live OpenAI/Apify functional test.
+LIVE_PROVIDER_CALLS_ENABLED = os.environ.get('LIVE_PROVIDER_CALLS_ENABLED', 'false').lower() == 'true'

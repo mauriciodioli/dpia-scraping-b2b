@@ -8,7 +8,7 @@ ALL=EXTERNAL+INTERNAL
 
 
 def normalize_sources(value):
-    if value is None:return list(EXTERNAL)
+    if value is None:return ['amazon']
     if not isinstance(value,list) or not value or len(value)>7 or any(not isinstance(s,str) for s in value):
         raise PreparationError('Seleccioná al menos un origen de búsqueda.')
     if any(s not in (*ALL,'todos') for s in value):raise PreparationError('Origen de búsqueda inválido.')

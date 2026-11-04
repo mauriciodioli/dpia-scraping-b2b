@@ -1,27 +1,62 @@
-/* V12 demonstration: separate anonymous free, monthly free, and paid credits. Not a billing authority. */
+/* Server-authoritative six-execution allowance. No fake purchases or local balances. */
 (()=>{
-const $=id=>document.getElementById(id),KEY='dpia-credit-demo-v12';
-const strings={es:['Puntos FREE','Gratis mensuales','Puntos pagados','Sin iniciar sesión','Renovación mensual (demo)','No vencen mensualmente','Mejorá tu plan','Continuar','No hay pagos conectados. Esto es una demostración.','Simular consumo: −30 pts','Reiniciar demo','Consumidos','puntos cargados'],en:['FREE points','Monthly free','Paid points','Not signed in','Monthly renewal (demo)','No monthly expiration','Upgrade plan','Continue','Payments are not connected. This is a demo.','Simulate usage: −30 pts','Reset demo','Used','points loaded'],pl:['Punkty FREE','Darmowe miesięczne','Punkty płatne','Bez logowania','Odnowienie miesięczne (demo)','Bez miesięcznego wygaśnięcia','Ulepsz plan','Kontynuuj','Płatności nie są podłączone. To demo.','Symuluj zużycie: −30 pkt','Resetuj demo','Zużyto','załadowanych punktów'],it:['Punti FREE','Gratis mensili','Punti acquistati','Senza accesso','Rinnovo mensile (demo)','Non scadono ogni mese','Migliora piano','Continua','Pagamenti non collegati. Questa è una demo.','Simula consumo: −30 pt','Reimposta demo','Utilizzati','punti caricati']};
-const tr=i=>(strings[$('languageSelect').value]||strings.es)[i];
-let s;try{s=JSON.parse(localStorage.getItem(KEY)||'null')}catch{};
-if(!s||!Number.isFinite(s.anonymous)||!Number.isFinite(s.monthly)||!Number.isFinite(s.paid))s={anonymous:30,monthly:100,paid:0,anonUsed:0,monthlyUsed:0,paidUsed:0,month:new Date().toISOString().slice(0,7)};
-let logged=false,chosen=300;
-const save=()=>localStorage.setItem(KEY,JSON.stringify(s));
-function refreshSession(){logged=!!(document.getElementById('userBtn')?.textContent||'').match(/@/);}
-function render(){refreshSession();const free=logged?s.monthly:s.anonymous,paid=logged?s.paid:0,used=logged?s.monthlyUsed+s.paidUsed:s.anonUsed,total=free+paid+used,pct=total?Math.round(100*used/total):0;
-$('walletNum').textContent=free+paid;$('balanceNum').textContent=free+paid;$('freeRemaining').textContent=free;$('paidRemaining').textContent=paid;$('freeCaption').textContent=logged?tr(1):tr(0);$('paidCaption').textContent=tr(2);$('freeRenew').textContent=logged?tr(4):tr(3);$('paidDetail').textContent=tr(5);$('balanceLabel').textContent=logged?tr(1)+' + '+tr(2):tr(0);$('openUpgrade').firstChild.textContent='✦ '+tr(6)+' ';$('usageTitle').textContent=tr(11);$('usagePct').textContent=pct+'%';$('usageUsed').textContent=used+' '+tr(11).toLowerCase();$('usageTotal').textContent=total+' '+tr(12);$('creditMeterFill').style.width=pct+'%';$('creditMeterFill').style.background=pct<50?'#30D49A':pct<80?'#ffaf35':'#ff5668';$('creditMeter').setAttribute('aria-valuenow',pct);$('simulateUsage').textContent=tr(9);$('resetUsage').textContent=tr(10);$('simulateUsage').disabled=free+paid<30;$('demoTopup').hidden=true;
-}
-function consume(n){refreshSession();if(logged){const fromFree=Math.min(n,s.monthly);s.monthly-=fromFree;s.monthlyUsed+=fromFree;const fromPaid=Math.min(n-fromFree,s.paid);s.paid-=fromPaid;s.paidUsed+=fromPaid;}else{const x=Math.min(n,s.anonymous);s.anonymous-=x;s.anonUsed+=x;}save();render();}
-$('simulateUsage').onclick=()=>consume(30);
-$('resetUsage').onclick=()=>{s={anonymous:30,monthly:100,paid:0,anonUsed:0,monthlyUsed:0,paidUsed:0,month:new Date().toISOString().slice(0,7)};save();render()};
-const overlay=$('upgradeOverlay');$('openUpgrade').onclick=()=>{overlay.hidden=false};$('closeUpgrade').onclick=()=>overlay.hidden=true;overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.hidden=true});document.addEventListener('keydown',e=>{if(e.key==='Escape')overlay.hidden=true});
-function choose(n){chosen=n;document.querySelectorAll('[data-upgrade]').forEach(b=>b.classList.toggle('active',Number(b.dataset.upgrade)===n));$('upgradeContinue').textContent=tr(7)+' · '+n+' pts';}
-document.querySelectorAll('[data-upgrade]').forEach(b=>b.onclick=()=>choose(Number(b.dataset.upgrade)));$('upgradeContinue').onclick=()=>{$('upgradeNote').textContent=tr(8)};
-document.querySelectorAll('.plans [data-points]').forEach(b=>b.onclick=()=>{choose(Number(b.dataset.points));overlay.hidden=false});
-$('demoTopup').hidden=true; // No fake purchases: paid credits must only be granted by verified server-side payments.
-$('languageSelect').addEventListener('change',()=>queueMicrotask(render));
-const obs=new MutationObserver(render);obs.observe($('userBtn'),{childList:true,subtree:true,characterData:true});
-// Demo monthly reset, based on browser date; production must use server ledger and billing cycle.
-const month=new Date().toISOString().slice(0,7);if(s.month!==month){s.monthly=100;s.monthlyUsed=0;s.month=month;save()}
-render();
+ const $=id=>document.getElementById(id),tr=text=>window.DPIAI18N?.translate(text)||text;
+ let credits=null,account=null,generation=0,chosen=300,returnToQuery=false;
+ const states={reserved:'Reservada',dispatching:'En curso o pendiente',pending:'Pendiente de confirmación',consumed:'Consumida',released:'Liberada'};
+ function render(){
+  const logged=typeof currentEmail==='string'&&!!currentEmail;
+  const available=credits?.available??'—',reserved=credits?.reserved??'—',consumed=credits?.consumed??'—',initial=credits?.initial??'—';
+  $('walletNum').textContent=available;$('balanceNum').textContent=available;$('scrapingBalanceUnit').textContent=tr('ejec.');
+  $('balanceLabel').textContent=tr('Scrapings disponibles');$('freeCaption').textContent=tr('Iniciales');$('freeRemaining').textContent=initial;
+  $('freeRenew').textContent=tr('Por usuario autenticado');$('paidCaption').textContent=tr('Reservadas o pendientes');$('paidRemaining').textContent=reserved;
+  $('paidDetail').textContent=tr('Retenidas hasta confirmar el resultado');$('consumedExecutions').textContent=consumed;$('availableExecutions').textContent=available;
+  $('usageTitle').textContent=tr('Consumidas');const percent=credits?Math.round(100*credits.consumed/credits.initial):0;
+  $('usagePct').textContent=credits?percent+'%':'—';$('usageUsed').textContent=consumed+' '+tr('consumidas');$('usageTotal').textContent=initial+' '+tr('iniciales');
+  $('creditMeterFill').style.width=percent+'%';$('creditMeterFill').style.background=percent<50?'#30d49a':percent<80?'#ffaf35':'#ff5668';$('creditMeter').setAttribute('aria-valuenow',String(percent));
+  $('creditDemoHint').textContent=tr(logged?'Un punto representa una ejecución de scraping. No se descuentan tokens.':'Iniciá sesión para consultar tus ejecuciones.');
+  $('creditOperations').replaceChildren();
+  for(const operation of credits?.operations||[]){
+   const row=document.createElement('li'),name=document.createElement('span'),button=document.createElement('button');
+   name.textContent=operation.source+' · '+tr(states[operation.state]||'Pendiente de confirmación');button.type='button';button.textContent=tr('Ver resultado');
+   button.onclick=()=>loadQueryOperation(operation.operation_id);row.append(name,button);$('creditOperations').append(row);
+  }
+  choose(chosen);
+ }
+ async function refresh(){
+  const current=typeof currentEmail==='string'?currentEmail:null,serial=++generation;
+  if(account!==current){credits=null;account=current;}
+  if(!current){credits=null;render();return;}
+  try{
+   const response=await fetch('/api/consultas/creditos',{cache:'no-store'}),data=await response.json();
+   if(serial!==generation||currentEmail!==current)return;
+   if(!response.ok||!data.success||!data.credits)throw new Error(data.error||'No se pudieron consultar las ejecuciones.');
+   credits=data.credits;$('creditStatus').textContent='';
+  }catch(error){if(serial!==generation)return;credits=null;$('creditStatus').textContent=tr(error.message);}
+  render();
+ }
+ function choose(points){
+  chosen=points;document.querySelectorAll('[data-upgrade]').forEach(button=>button.classList.toggle('active',Number(button.dataset.upgrade)===points));
+  $('upgradeContinue').textContent=tr('Pagos no habilitados');$('upgradeContinue').disabled=true;
+ }
+ function open(insufficient=false,data=null){
+  if(!currentEmail){openAuth();return;}
+  returnToQuery=insufficient;$('upgradeTitle').textContent=tr(insufficient?'Crédito insuficiente':'Agregar crédito');
+  $('upgradeSubtitle').textContent=tr('Paquetes de demostración. No acreditan ejecuciones.');
+  $('insufficientCreditSummary').hidden=!insufficient;$('cancelCreditUpgrade').hidden=!insufficient;
+  if(insufficient){$('insufficientAvailable').textContent=data?.credits?.available??0;$('insufficientRequired').textContent=data?.required??1;$('insufficientMissing').textContent=data?.missing??1;}
+  $('upgradeNote').textContent=tr('Precios de referencia. Sin cobros ni acreditaciones.');$('upgradeOverlay').hidden=false;
+ }
+ function close(){
+  $('upgradeOverlay').hidden=true;
+  if(returnToQuery){show('consultPage');returnToQuery=false;}
+ }
+ $('openUpgrade').onclick=()=>open();$('closeUpgrade').onclick=close;$('cancelCreditUpgrade').onclick=close;
+ $('upgradeOverlay').onclick=event=>{if(event.target===$('upgradeOverlay'))close();};
+ document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('upgradeOverlay').hidden)close();});
+ document.querySelectorAll('[data-upgrade]').forEach(button=>button.onclick=()=>choose(Number(button.dataset.upgrade)));
+ document.querySelectorAll('.plans [data-points]').forEach(button=>button.onclick=()=>{choose(Number(button.dataset.points));open();});
+ $('languageSelect').addEventListener('change',()=>queueMicrotask(render));
+ new MutationObserver(()=>refresh()).observe($('userBtn'),{childList:true,subtree:true,characterData:true});
+ window.DPIACredits={refresh,insufficient:data=>{refresh();open(true,data);}};
+ render();refresh();
 })();
