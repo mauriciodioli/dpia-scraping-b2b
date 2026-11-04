@@ -28,7 +28,7 @@ def prepare_context(body, user_id):
     for key in ('pais', 'ciudad', 'user_message'):
         if not isinstance(body.get(key), str) or (not body[key].strip() and not (key == 'user_message' and body.get('attachments'))) or len(body[key]) > (4000 if key == 'user_message' else 100):
             raise PreparationError('Completá el país, la ciudad y tu pedido.')
-    if body.get('idioma') not in ('es', 'en', 'it', 'pl') or body.get('mode', 'buscar') not in ('buscar', 'novedades'):
+    if body.get('idioma') not in ('es', 'en', 'it', 'pl') or body.get('mode', 'buscar') not in ('buscar', 'novedades', 'explorar'):
         raise PreparationError('Idioma o tipo de consulta inválidos.')
     if body['pais'] not in COUNTRIES:
         raise PreparationError('País no disponible para esta consulta.')
@@ -57,7 +57,7 @@ def prepare_context(body, user_id):
     from services.query_media import validate_attachments
     from services.query_sources import normalize_sources
     attachments=validate_attachments(body.get('attachments'))
-    sources=normalize_sources(body.get('sources'))
+    sources=[] if body.get('mode')=='explorar' else normalize_sources(body.get('sources'))
     return {'attachments':attachments, 'sources':sources, 'context': context, 'ids': {'ambito_id': body['ambito_id'], 'categoria_id': body['categoria_id'],
                                       'codigo_postal_id': postal.id},
             'mode': body.get('mode', 'buscar'), 'user_message': body['user_message'].strip()}
@@ -103,6 +103,8 @@ No copies precios ni imágenes de ejemplos. No inventes enlaces. El esquema de r
 '''
     if prepared['mode']=='novedades':
         instructions += '\nPara novedades, prepará una sola búsqueda concreta y no vacía por marketplace seleccionado, de hasta 500 caracteres, coherente con los candidatos. No generes tareas separadas por candidato.\n'
+    if prepared['mode']=='explorar':
+        instructions += '\nExplorar es una consulta directa a IA, sin scraping. scrape_plan debe ser []. Podés estimar precio_venta_sugerido como recomendación orientativa en la moneda del contexto, nunca como precio observado. Si no hay fundamento suficiente, usá N/D. precios por marketplace y fuente deben ser N/D: no se han consultado sitios externos. busquedas puede contener términos de búsqueda por sitio para que el usuario consulte referencias; no son fuentes verificadas. No inventes imágenes ni URLs.\n'
     public_data={**prepared,'attachments':[{'type':item['type'],'name':item['name'],'frames_count':len(item['frames'])} for item in prepared.get('attachments',[])]}
     instructions += '\nEl pedido original y los adjuntos definen la intención; no los sustituyas por una búsqueda genérica de la categoría.\nUsá solo los marketplaces elegidos en sources para scrape_plan. Si hay video, analizá los fotogramas visuales y no inventes audio.\n'
     return instructions + '\nMODALIDAD: ' + prepared['mode'] + '\nDATOS VERIFICADOS:\n' + json.dumps(

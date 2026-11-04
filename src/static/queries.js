@@ -50,6 +50,14 @@ async function openNovelQuery(){
  status.textContent='Revisá los datos y el pedido. Preparar consulta muestra el resumen; ejecutar buscará novedades con OpenAI y DPIA.';
 }
 
+async function openExploreQuery(){
+ if(queryBusy)return;
+ await openNovelQuery();queryMode='explorar';invalidateQuery();
+ const scope=document.querySelector('#queryScope').selectedOptions[0]?.textContent||'',category=document.querySelector('#queryCategory').selectedOptions[0]?.textContent||'';
+ const drafts={es:`Sugerí productos útiles de ${category}, en ${scope}, para ${city}, ${country}. Explicá sus ventajas y proponé precios de venta orientativos cuando puedas fundamentarlos. Indicá sitios donde pueda comparar opciones.`,en:`Suggest useful products in ${category}, within ${scope}, for ${city}, ${country}. Explain their benefits and suggest indicative selling prices when justified. Include sites where I can compare options.`,it:`Suggerisci prodotti utili di ${category}, nell'ambito ${scope}, per ${city}, ${country}. Spiega i vantaggi e proponi prezzi indicativi quando motivati. Indica siti dove confrontare le opzioni.`,pl:`Zaproponuj przydatne produkty w kategorii ${category}, w obszarze ${scope}, dla ${city}, ${country}. Wyjaśnij zalety i zaproponuj uzasadnione ceny orientacyjne. Wskaż serwisy do porównania ofert.`};
+ document.querySelector('#promptText').value=drafts[catalogLanguage()]||drafts.es;
+ document.querySelector('#queryStatus').textContent='Revisá el pedido. Explorar genera sugerencias con IA, sin consumir ejecuciones de scraping.';
+}
 function queryBody(){return {pais:country,ciudad:city,idioma:catalogLanguage(),ambito_id:Number(document.querySelector('#queryScope').value),categoria_id:Number(document.querySelector('#queryCategory').value),codigo_postal_id:Number(document.querySelector('#queryPostal').value),mode:queryMode,user_message:document.querySelector('#promptText').value.trim(),attachments:media};}
 function startHomeQuery(){
  document.querySelector('#promptText').value=document.querySelector('#searchText').value.trim();queryMode='buscar';invalidateQuery();show('consultPage');prepareDPIAQuery();
@@ -68,7 +76,7 @@ async function prepareDPIAQuery(){
   queryPrepared={body:structuredClone(body),fingerprint:JSON.stringify(body)};
   document.querySelector('#promptResult').textContent=data.summary;document.querySelector('#promptResult').hidden=false;
   document.querySelector('#generateQuery').hidden=false;document.querySelector('#generateQuery').disabled=false;
-  document.querySelector('#generateQuery').textContent=body.mode==='novedades'?'Buscar novedades':body.mode==='buscar'&&!body.attachments.length?'Iniciar búsqueda':'Generar candidatos';
+  document.querySelector('#generateQuery').textContent=body.mode==='explorar'?'Explorar con IA':body.mode==='novedades'?'Buscar novedades':body.mode==='buscar'&&!body.attachments.length?'Iniciar búsqueda':'Generar candidatos';
   status.textContent='Revisá el resumen y elegí los orígenes de búsqueda.';
  }catch(error){status.textContent=error.name==='TimeoutError'?'La preparación tardó demasiado. Reintentá.':error.message;}
  finally{queryBusy=false;}
@@ -126,7 +134,26 @@ function renderQueryResult(data){
   }
   container.append(section);
  }
- if(data.rows?.length){
+ if(data.flow==='explorar'){
+  const heading=document.createElement('h3');heading.textContent='Sugerencias de IA';container.append(heading);
+  const note=document.createElement('p');note.className='hint';note.textContent='Precios estimados, sin verificar disponibilidad. Los enlaces permiten comparar opciones; no son fuentes consultadas.';container.append(note);
+  const grid=document.createElement('div');grid.className='scraped-products';
+  for(const item of data.result?.items||[]){
+   const card=document.createElement('article');card.className='scraped-product';card.dataset.aiSuggestion='';
+   const title=document.createElement('strong');title.textContent=item.producto;
+   const description=document.createElement('p');description.textContent=item.descripcion;
+   const price=document.createElement('p');price.textContent=typeof item.precio_venta_sugerido==='number'?`Precio sugerido: ${item.precio_venta_sugerido} ${data.result.constraints.price.currency}`:'Precio sugerido: N/D';
+   const source=document.createElement('small');source.textContent='Sin fuente verificada';card.append(title,description,price,source);
+   const searches={amazon:'https://www.amazon.com/s?k=',ebay:'https://www.ebay.com/sch/i.html?_nkw=',aliexpress:'https://www.aliexpress.com/w/wholesale-'};
+   for(const [site,base] of Object.entries(searches)){
+    const terms=item.busquedas?.[site]||item.producto;
+    const link=document.createElement('a');link.href=base+encodeURIComponent(terms);link.target='_blank';link.rel='noopener noreferrer';link.textContent='Comparar en '+site;card.append(link);
+   }
+   grid.append(card);
+  }
+  container.append(grid);
+ }
+ if(data.flow!=='explorar'&&data.rows?.length){
   const candidates=document.createElement('details'),heading=document.createElement('summary');
   candidates.className='query-candidates';heading.textContent='Candidatos de OpenAI · sin verificar';candidates.append(heading);
   for(const row of data.rows){const card=document.createElement('article');card.className='prompt-result';const title=document.createElement('strong');title.textContent=row.Producto;const detail=document.createElement('p');detail.textContent=row.descripcion;card.append(title,detail);candidates.append(card);}
@@ -167,7 +194,8 @@ async function generateDPIAQuery(){
  if(queryBusy||!queryPrepared)return;
  if(!currentEmail){openAuth();return;}
  if(JSON.stringify(queryBody())!==queryPrepared.fingerprint){invalidateQuery();document.querySelector('#queryStatus').textContent='El pedido cambió. Prepará nuevamente la consulta.';return;}
- const sources=savedQuerySources();if(!sources){openSourceModal(true);return;}
+ const exploring=queryPrepared.body.mode==='explorar';
+ const sources=exploring?['dpia']:savedQuerySources();if(!sources){openSourceModal(true);return;}
  if(queryPrepared.body.mode==='novedades'&&sources.filter(source=>['amazon','ebay','aliexpress'].includes(source)).length!==1){document.querySelector('#queryStatus').textContent='Elegí un marketplace para buscar novedades.';openSourceModal(true);return;}
  queryBusy=true;const button=document.querySelector('#generateQuery'),status=document.querySelector('#queryStatus');button.disabled=true;
  const novel=queryPrepared.body.mode==='novedades',email=currentEmail;
@@ -175,7 +203,7 @@ async function generateDPIAQuery(){
  queryRequestId ||= crypto.randomUUID();
  if(direct)setScrapingStatus('running','Scrapeando…');
  if(novel)setScrapingStatus('preparing','Preparando novedades con IA…');
- status.textContent=novel?'Preparando una búsqueda de novedades con OpenAI…':'Buscando en los orígenes seleccionados…';
+ status.textContent=exploring?'Generando sugerencias con IA…':novel?'Preparando una búsqueda de novedades con OpenAI…':'Buscando en los orígenes seleccionados…';
  let polling=false;
  const operationId=queryRequestId;
  const progress=novel?setInterval(async()=>{
@@ -191,13 +219,13 @@ async function generateDPIAQuery(){
   const data=await response.json();if(novel&&currentEmail!==email)return;if(response.status===401)openAuth();
   if(response.status===402&&data.code==='insufficient_credit'){if(direct||novel)setScrapingStatus('failed','No se inició: ejecuciones insuficientes · Consultar');window.DPIACredits?.insufficient(data);return;}
   if(!response.ok||!data.success){const confirmedRejection=response.status<500||data.code==='persistence_not_configured'||data.not_started===true;if((direct||novel)&&confirmedRejection)setScrapingStatus('failed','No se inició la búsqueda · Consultar');const error=new Error(data.error||'No se pudo generar la consulta.');error.confirmedRejection=confirmedRejection;throw error;}
-  lastQueryOperationId=data.request_id||queryRequestId;window.DPIACredits?.refresh();
+  if(!exploring)lastQueryOperationId=data.request_id||queryRequestId;window.DPIACredits?.refresh();
   if(!direct&&!novel&&(!queryPrepared||JSON.stringify(queryBody())!==queryPrepared.fingerprint)){status.textContent='El pedido cambió. Prepará nuevamente la consulta.';return;}
   if(data.result?.needs_clarification){status.textContent=data.result.clarifying_question;if(novel)setScrapingStatus('failed','La consulta necesita una aclaración · Consultar');renderQueryResult(data);return;}
   renderQueryResult(data);if(direct||novel)updateScrapingStatus(data);
   const outcomes=Object.values(data.sources||{});
   status.textContent=outcomes.some(row=>row.status==='pending')?'La ejecución sigue pendiente. No se reenviará.':outcomes.some(row=>row.status==='failed')?'La ejecución falló.':'Consulta completada. Revisá los resultados de cada origen.';
- }catch(error){if((direct||novel)&&!error.confirmedRejection)setScrapingStatus('pending','Scraping pendiente de confirmación · Consultar');status.textContent=error.name==='TimeoutError'?'La consulta sigue pendiente. No se reenviará automáticamente.':error.message;if(queryRequestId){lastQueryOperationId=queryRequestId;const refresh=document.createElement('button');refresh.className='action-button';refresh.textContent='Consultar estado';refresh.onclick=()=>loadQueryOperation(lastQueryOperationId);document.querySelector('#queryResults').append(refresh);}}
+ }catch(error){if((direct||novel)&&!error.confirmedRejection)setScrapingStatus('pending','Scraping pendiente de confirmación · Consultar');status.textContent=error.name==='TimeoutError'?'La consulta sigue pendiente. No se reenviará automáticamente.':error.message;if(!exploring&&queryRequestId){lastQueryOperationId=queryRequestId;const refresh=document.createElement('button');refresh.className='action-button';refresh.textContent='Consultar estado';refresh.onclick=()=>loadQueryOperation(lastQueryOperationId);document.querySelector('#queryResults').append(refresh);}}
  finally{if(progress)clearInterval(progress);queryBusy=false;button.disabled=false;window.DPIACredits?.refresh();}
 }
 document.querySelector('#queryScope').addEventListener('change',()=>{refreshQuerySelectors();syncLocalCategory();});

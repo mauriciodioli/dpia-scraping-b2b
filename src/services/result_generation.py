@@ -76,7 +76,7 @@ def validate_result(result, prepared):
     # model guesses as observed prices, margins, sources or product galleries.
     for item in result['items']:
         item['precios']={source:'N/D' for source in ('amazon','ebay','aliexpress')}
-        item['precio_venta_sugerido']='N/D'
+        if prepared['mode']!='explorar':item['precio_venta_sugerido']='N/D'
         item['margen_estimado']='N/D'
         item['fuente']='N/D'
         for key in ('imagen','imagen2','imagen3','imagen4','imagen5','imagen6'):item[key]='N/D'

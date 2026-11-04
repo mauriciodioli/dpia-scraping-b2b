@@ -24,7 +24,7 @@ def prepare():
         # Construct only on the server. It is neither returned nor stored in a session cookie.
         build_private_prompt(prepared)
         return jsonify(success=True, summary=public_summary(prepared), context=prepared['context'],
-                       generation_available=bool(prepared['mode']=='novedades' and current_app.config.get('OPENAI_API_KEY') and current_app.config.get('LIVE_PROVIDER_CALLS_ENABLED') and current_app.extensions.get('scraping_quota')),
+                       generation_available=bool(prepared['mode'] in ('novedades','explorar') and current_app.config.get('OPENAI_API_KEY') and current_app.config.get('LIVE_PROVIDER_CALLS_ENABLED') and (prepared['mode']=='explorar' or current_app.extensions.get('scraping_quota'))),
                        external_execution_available=bool(current_app.config.get('LIVE_PROVIDER_CALLS_ENABLED') and current_app.extensions.get('scraping_quota')),history_available=bool(current_app.extensions.get('scraping_quota')))
     except PreparationError as exc:
         return jsonify(success=False, error=str(exc)), exc.status
@@ -113,6 +113,12 @@ def generate_query():
     try:
         body=request.get_json(silent=True)
         prepared=prepare_context(body,session['user_id'])
+        if prepared['mode']=='explorar':
+            if not current_app.config.get('LIVE_PROVIDER_CALLS_ENABLED'):
+                raise PreparationError('Las llamadas reales están deshabilitadas.',503)
+            result=generate(prepared,current_app.config)
+            return jsonify(success=True,flow='explorar',result=result,rows=sheet_rows(result),sources={},
+                           context_ids=prepared['ids'])
         external=[source for source in prepared['sources'] if source in EXTERNAL]
         if len(external)>1:
             raise PreparationError('Elegí un solo marketplace por ejecución.')
