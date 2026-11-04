@@ -18,7 +18,7 @@ function refreshQuerySelectors(category=null, scopeId=null){
  invalidateQuery();
 }
 function invalidateQuery(){queryPrepared=null;document.querySelector('#generateQuery').hidden=true;document.querySelector('#queryResults').replaceChildren();document.querySelector('#promptResult').hidden=true;}
-function chooseQueryCategory(item, scopeId=null){queryMode='buscar';refreshQuerySelectors(item, scopeId);}
+function chooseQueryCategory(item, scopeId=null){queryMode='buscar';refreshQuerySelectors(item, scopeId);localCategory={id:String(item.categoria_id),name:item.nombre};}
 function openNovelQuery(){queryMode='novedades';refreshQuerySelectors();show('consultPage');const category=document.querySelector('#queryCategory').selectedOptions[0]?.textContent||'';document.querySelector('#promptText').value=`Encontrar productos novedosos de ${category} en ${city}, ${country}. Priorizar tendencias y publicaciones locales.`;}
 function queryBody(){return {pais:country,ciudad:city,idioma:catalogLanguage(),ambito_id:Number(document.querySelector('#queryScope').value),categoria_id:Number(document.querySelector('#queryCategory').value),codigo_postal_id:Number(document.querySelector('#queryPostal').value),mode:queryMode,user_message:(document.querySelector('#promptText').value||document.querySelector('#searchText').value).trim()};}
 async function prepareDPIAQuery(){
@@ -56,3 +56,10 @@ async function generateDPIAQuery(){
 document.querySelector('#queryScope').addEventListener('change',()=>refreshQuerySelectors());
 for(const id of ['queryCategory','queryPostal','promptText','searchText'])document.querySelector('#'+id).addEventListener('input',invalidateQuery);
 document.querySelector('#generateQuery').onclick=generateDPIAQuery;
+
+function syncLocalCategory(){
+ const option=document.querySelector('#queryCategory').selectedOptions[0];
+ localCategory=option ? {id:option.value,name:option.textContent} : null;
+}
+document.querySelector('#queryCategory').addEventListener('change',syncLocalCategory);
+document.querySelector('#queryScope').addEventListener('change',syncLocalCategory);

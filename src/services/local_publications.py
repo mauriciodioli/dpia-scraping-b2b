@@ -7,7 +7,7 @@ from services.locations import postal_ids_for_city
 from utils.db import db
 
 
-def publications_for_city(country, city, offset=0):
+def publications_for_city(country, city, offset=0, category_id=None):
     ids = postal_ids_for_city(country, city)
     if not ids:
         return [], False
@@ -24,9 +24,12 @@ def publications_for_city(country, city, offset=0):
         Publicacion.codigo_postal_id.is_(None), ~any_relation,
         func.trim(Publicacion.codigoPostal).in_(codes),
     ))
-    rows = Publicacion.query.filter(
+    query = Publicacion.query.filter(
         func.lower(func.trim(Publicacion.estado)) == 'activo', local,
-    ).order_by(Publicacion.fecha_creacion.desc(), Publicacion.id.desc()).offset(offset).limit(25).all()
+    )
+    if category_id is not None:
+        query = query.filter(Publicacion.categoria_id == category_id)
+    rows = query.order_by(Publicacion.fecha_creacion.desc(), Publicacion.id.desc()).offset(offset).limit(25).all()
     return [dict(id=row.id, titulo=row.titulo, descripcion=row.descripcion,
                  imagen=row.imagen, precio=row.precio, moneda=row.moneda,
                  ciudad=city) for row in rows[:24]], len(rows) > 24

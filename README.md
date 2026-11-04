@@ -313,5 +313,9 @@ antiguas sin asociaciones explícitas, el texto exacto de `publicacion.codigoPos
 El código postal se utiliza internamente y no se muestra en las tarjetas. No se
 modifica ninguna publicación ni se crean tablas al arrancar. La columna
 `codigo_postal_id` corresponde al esquema aportado de la base existente.
-Las ciudades sin coordenadas configuradas ofrecen un enlace de búsqueda en
-OpenStreetMap, sin mostrar el mapa de otra ciudad.
+El mapa conserva su visor integrado de OpenStreetMap dentro de un acordeón
+que permite plegarlo sin salir de Local.
+
+Al elegir una categoría y entrar en Local se conserva su `categoria_id`: el listado
+combina esa categoría con todos los códigos postales de la ciudad, también al
+cargar más páginas. Si no hay coincidencias se muestra el estado vacío.

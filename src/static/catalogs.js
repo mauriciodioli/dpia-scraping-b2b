@@ -92,6 +92,7 @@ function renderCategories() {
 async function loadCatalogs() {
  const generation = ++catalogGeneration, language = catalogLanguage();
  activeCatalogScope = null;
+ localCategory = null;
  catalogAmbitos = []; catalogCategorias = []; catalogPostalCodes = [];
  if(typeof refreshQuerySelectors==='function')refreshQuerySelectors();
  catalogState = {ambitos:'loading', categorias:'loading'};
