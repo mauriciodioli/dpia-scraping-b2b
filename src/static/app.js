@@ -4,13 +4,23 @@ function setTheme(t){document.documentElement.dataset.theme=t;localStorage.setIt
 setTheme(localStorage.getItem('dpia-theme')||'dark');
 $('#themeToggle').onclick=()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
 function updateUser(email){currentEmail=email||null;$('#userBtn').textContent=currentEmail||'Ingresar';$('#userBtn').title=currentEmail?'Cerrar sesión':'Iniciar sesión';}
-function openAuth(){$('#authOverlay').hidden=false;}
+function openAuth(){$('#authOverlay').hidden=false;syncCookieConsent();}
 function closeAuth(){$('#authOverlay').hidden=true;}
 $('#closeAuth').onclick=closeAuth;
 $('#authOverlay').onclick=e=>{if(e.target===$('#authOverlay'))closeAuth()};
 $('#userBtn').onclick=async()=>{if(currentEmail){await fetch('/api/auth/logout',{method:'POST'});updateUser(null);notify('Sesión cerrada')}else openAuth()};
+function syncCookieConsent(){
+ $('#googleSignIn').hidden=!$('#authCookieConsent').checked;
+}
+try{$('#authCookieConsent').checked=localStorage.getItem('dpia-session-cookies')==='accepted-v1';}catch(_){}
+syncCookieConsent();
+$('#authCookieConsent').onchange=()=>{
+ try{if($('#authCookieConsent').checked)localStorage.setItem('dpia-session-cookies','accepted-v1');else localStorage.removeItem('dpia-session-cookies');}catch(_){}
+ syncCookieConsent();
+};
 let googleLoginPending=false;
 async function completeGoogleLogin({credential}){
+ if(!$('#authCookieConsent').checked){openAuth();$('#authHelp').textContent='Aceptá las cookies de sesión para continuar.';$('#authCookieConsent').focus();return;}
  if(googleLoginPending)return;
  googleLoginPending=true;
  const help=$('#authHelp');
@@ -28,6 +38,11 @@ async function completeGoogleLogin({credential}){
  }catch(_){help.textContent='No se pudo completar la conexión con DPIA. Reintentá.';}
  finally{googleLoginPending=false;}
 }
+function renderGoogleSignIn(){
+ if(!googleClientId||!window.google?.accounts?.id)return;
+ $('#googleSignIn').replaceChildren();
+ google.accounts.id.renderButton($('#googleSignIn'),{theme:document.documentElement.dataset.theme==='dark'?'filled_black':'outline',size:'large',width:290,text:'signin_with',locale:window.DPIAI18N?.language||'es'});
+}
 async function initAuth(){
  try{
   const [me,cfg]=await Promise.all([fetch('/api/auth/me').then(r=>r.json()),fetch('/api/auth/config').then(r=>r.json())]);
@@ -35,7 +50,7 @@ async function initAuth(){
   if(!googleClientId){$('#authHelp').textContent='Configurá GOOGLE_CLIENT_ID para habilitar el acceso real con Google.';return;}
   const render=()=>{if(!window.google?.accounts?.id){setTimeout(render,200);return;}
    google.accounts.id.initialize({client_id:googleClientId,callback:completeGoogleLogin});
-   google.accounts.id.renderButton($('#googleSignIn'),{theme:document.documentElement.dataset.theme==='dark'?'filled_black':'outline',size:'large',width:290,text:'signin_with',locale:window.DPIAI18N?.language||'es'});
+   renderGoogleSignIn();
    $('#authHelp').textContent='Google verifica tu identidad. DPIA muestra el email de tu cuenta.';
   };render();
  }catch(e){$('#authHelp').textContent='No se pudo consultar la configuración de autenticación.';}
@@ -45,5 +60,5 @@ let saved=null;try{saved=JSON.parse(localStorage.getItem('dpia-demo')||'null')}c
 // Keep language choice persistent and translate dynamically rendered UI.
 window.DPIAI18N?.refresh();
 
-$('#languageSelect').addEventListener('change',()=>queueMicrotask(()=>{loadCatalogs();if(step===1)loadCities(country)}));
+$('#languageSelect').addEventListener('change',()=>queueMicrotask(()=>{renderGoogleSignIn();loadCatalogs();if(step===1)loadCities(country)}));
 loadCatalogs();

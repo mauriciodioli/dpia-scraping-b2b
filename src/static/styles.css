@@ -267,3 +267,5 @@ html[data-theme="dark"] .credit-demo-topup{background:linear-gradient(115deg,#5d
 .query-context #queryCity{display:block;width:100%;padding:12px;border-radius:14px;background:transparent;color:inherit;border:1px solid #85819c;margin-top:6px}
 
 #localMap{margin:16px 0 24px}#localMap summary{cursor:pointer;font-weight:700;padding:14px 0}#localPublications .product p{font-size:13px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}#localPublications .product{min-width:0}#retryLocalPublications,#moreLocalPublications{padding:12px 20px;border-radius:18px;margin-bottom:20px}
+
+.auth-cookie-consent{display:flex;align-items:flex-start;gap:10px;text-align:left;font-size:13px;line-height:1.5;margin:20px 0}.auth-cookie-consent input{flex-shrink:0;width:18px;height:18px;margin:1px 0;accent-color:#7952e8}
