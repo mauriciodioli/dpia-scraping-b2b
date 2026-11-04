@@ -16,7 +16,8 @@
  function requestDelete(publication,card,button){
   if(deleting)return;
   selected={publication,card,email:currentEmail};previousFocus=button;
-  $('deletePublicationDescription').textContent=`¿Eliminar «${publication.titulo}»? Esta acción elimina únicamente esta publicación y sus asociaciones.`;
+  $('deletePublicationDescription').dataset.catalogName='';
+  $('deletePublicationDescription').textContent=tr('¿Eliminar «{titulo}»? Esta acción elimina únicamente esta publicación y sus asociaciones.').replace('{titulo}',publication.titulo);
   $('deletePublicationStatus').textContent='';$('deletePublicationConfirm').disabled=false;
   $('profileOverlay').setAttribute('aria-hidden','true');
   $('deletePublicationOverlay').hidden=false;$('deletePublicationCancel').focus();
@@ -26,17 +27,17 @@
   card.dataset.publicationId=String(publication.id);
   const imageUrl=safeQueryUrl(publication.imagen);
   if(imageUrl){const image=document.createElement('img');image.src=imageUrl;image.alt='';image.loading='lazy';image.onerror=()=>image.remove();card.append(image);}
-  const title=document.createElement('strong');title.textContent=publication.titulo;
-  const description=document.createElement('p');description.textContent=publication.descripcion||'';
+  const title=document.createElement('strong');title.textContent=publication.titulo;title.dataset.catalogName='';
+  const description=document.createElement('p');description.textContent=publication.descripcion||'';description.dataset.catalogName='';
   const price=document.createElement('p');price.textContent=publication.precio==null?'Precio no informado':`${publication.precio} ${publication.moneda||''}`.trim();
   card.append(title,description,price);
   if(publication.can_delete&&String(publication.estado).trim().toLowerCase()==='activo'&&promotionSummary){
    const active=promotionSummary.promociones.find(row=>row.publicacion_id===publication.id);
-   if(active){const info=document.createElement('small');info.textContent=tr('Destacada hasta')+' '+new Date(active.fin_en).toLocaleString();card.append(info);}
+   if(active){const info=document.createElement('small');info.textContent=tr('Destacada hasta')+' '+new Date(active.fin_en).toLocaleString(catalogLanguage());card.append(info);}
    else{const promote=document.createElement('button');promote.className='action-button';promote.type='button';promote.textContent='Destacar 5 días · 5 puntos';promote.onclick=()=>requestPromotion(publication,promote);card.append(promote);}
   }
   if(publication.can_delete&&Number.isInteger(publication.id)&&publication.id>0){
-   const button=document.createElement('button');button.type='button';button.textContent='Eliminar publicación';
+   const button=document.createElement('button');button.className='action-button danger-button';button.type='button';button.textContent='Eliminar publicación';
    button.onclick=()=>requestDelete(publication,card,button);card.append(button);
   }
   return card;
@@ -47,7 +48,7 @@
   const overlay=document.createElement('div');overlay.className='auth-overlay';overlay.id='promotePublicationOverlay';
   const dialog=document.createElement('div');dialog.className='auth-dialog';dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-labelledby','promotePublicationTitle');
   const title=document.createElement('h2');title.id='promotePublicationTitle';title.textContent='Destacar publicación';
-  const text=document.createElement('p');text.textContent=tr('Destacar «{titulo}» durante 5 días cuesta 5 puntos. Saldo disponible: {saldo}. Se mostrará a otros usuarios de la misma zona.').replace('{titulo}',publication.titulo).replace('{saldo}',promotionSummary.saldo);
+  const text=document.createElement('p');text.dataset.catalogName='';text.textContent=tr('Destacar «{titulo}» durante 5 días cuesta 5 puntos. Saldo disponible: {saldo}. Se mostrará a otros usuarios de la misma zona.').replace('{titulo}',publication.titulo).replace('{saldo}',promotionSummary.saldo);
   const status=document.createElement('p');status.setAttribute('role','status');
   const cancel=document.createElement('button');cancel.className='action-button';cancel.textContent='Cancelar';
   const confirm=document.createElement('button');confirm.className='action-button';confirm.textContent='Confirmar · Gastar 5 puntos';confirm.disabled=promotionSummary.saldo<5;
@@ -63,7 +64,7 @@
     if(currentEmail!==email)return;
     if(!response.ok||!data.success)throw new Error(data.error||'No se confirmó la promoción.');
     saved=true;overlay.remove();$('profileOverlay').removeAttribute('aria-hidden');homePublicationsCache=null;await load();window.DPIACredits?.refresh();
-   }catch(error){status.textContent=error.name==='TimeoutError'?'Resultado pendiente. Actualizá el perfil para comprobarlo o reintentá esta misma operación.':error.message;}
+   }catch(error){status.textContent=tr(error.name==='TimeoutError'?'Resultado pendiente. Actualizá el perfil para comprobarlo o reintentá esta misma operación.':error.message);}
    finally{promoting=false;cancel.disabled=false;confirm.disabled=false;if(saved)$('closeProfile').focus();}
   };
   dialog.append(title,text,status,cancel,confirm);overlay.append(dialog);document.body.append(overlay);$('profileOverlay').setAttribute('aria-hidden','true');cancel.focus();
@@ -88,7 +89,7 @@
    for(const publication of data.publicaciones)$('publicationHistory').append(cardFor(publication));
    offset+=data.publicaciones.length;$('moreMyPublications').hidden=!data.has_more;
    $('profileStatus').textContent=$('publicationHistory').children.length?'':'Todavía no tenés publicaciones guardadas.';
-  }catch(error){if(serial===generation&&email===currentEmail)$('profileStatus').textContent=error.message;}
+  }catch(error){if(serial===generation&&email===currentEmail)$('profileStatus').textContent=tr(error.message);}
  }
  async function confirmDelete(){
   if(deleting||!selected||selected.email!==currentEmail)return;
@@ -103,7 +104,7 @@
    // Refresh the currently visible local list, preserving its filters.
    if(typeof page!=='undefined'&&page==='mapPage')loadLocalPublications();
    $('profileStatus').textContent='Publicación eliminada.';$('closeProfile').focus();
-  }catch(error){if(target.email===currentEmail)$('deletePublicationStatus').textContent=error.message;}
+  }catch(error){if(target.email===currentEmail)$('deletePublicationStatus').textContent=tr(error.message);}
   finally{deleting=false;$('deletePublicationConfirm').disabled=false;}
  }
  function openProfile(){
@@ -120,9 +121,10 @@
  $('profileLogout').onclick=async()=>{
   if(deleting||promoting)return;
   try{const response=await fetch('/api/auth/logout',{method:'POST'});if(!response.ok)throw new Error('No se pudo cerrar la sesión.');clear();updateUser(null);notify('Sesión cerrada');}
-  catch(error){$('profileStatus').textContent=error.message;}
+  catch(error){$('profileStatus').textContent=tr(error.message);}
  };
  let identity=typeof currentEmail==='string'?currentEmail:null;
  new MutationObserver(()=>{const next=typeof currentEmail==='string'?currentEmail:null;if(next!==identity){identity=next;clear();}}).observe($('userBtn'),{childList:true,subtree:true,characterData:true});
+ $('languageSelect')?.addEventListener('change',()=>{if(!$('profileOverlay').hidden&&!promoting&&!deleting)load();});
  window.DPIAPublications={openProfile,refresh:()=>load()};
 })();

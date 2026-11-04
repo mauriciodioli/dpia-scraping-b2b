@@ -106,3 +106,131 @@ Object.assign(DPIA_TRANSLATIONS, {
  'Destacar «{titulo}» durante 5 días cuesta 5 puntos. Saldo disponible: {saldo}. Se mostrará a otros usuarios de la misma zona.':['Featuring “{titulo}” for 5 days costs 5 points. Available balance: {saldo}. It will be shown to other users in the same area.','Promowanie „{titulo}” przez 5 dni kosztuje 5 punktów. Dostępne saldo: {saldo}. Ogłoszenie zobaczą inni użytkownicy z tej samej okolicy.','Mettere in evidenza «{titulo}» per 5 giorni costa 5 punti. Saldo disponibile: {saldo}. Sarà mostrato agli altri utenti della stessa zona.'],
  'Las ejecuciones de scraping y los puntos para destacar son saldos independientes.':['Scraping executions and promotion points are separate balances.','Uruchomienia scrapingu i punkty promocji mają oddzielne salda.','Le esecuzioni di scraping e i punti promozione sono saldi separati.']
 });
+
+Object.assign(DPIA_TRANSLATIONS, {
+ "Mi perfil": [
+  "My profile",
+  "Mój profil",
+  "Il mio profilo"
+ ],
+ "Mis publicaciones": [
+  "My publications",
+  "Moje ogłoszenia",
+  "I miei annunci"
+ ],
+ "Actualizar publicaciones": [
+  "Refresh publications",
+  "Odśwież ogłoszenia",
+  "Aggiorna annunci"
+ ],
+ "Eliminar publicación": [
+  "Delete publication",
+  "Usuń ogłoszenie",
+  "Elimina annuncio"
+ ],
+ "Cerrar perfil": [
+  "Close profile",
+  "Zamknij profil",
+  "Chiudi profilo"
+ ],
+ "Ver más publicaciones": [
+  "More publications",
+  "Więcej ogłoszeń",
+  "Altri annunci"
+ ],
+ "Cancelar": [
+  "Cancel",
+  "Anuluj",
+  "Annulla"
+ ],
+ "Cargando tus publicaciones…": [
+  "Loading your publications…",
+  "Wczytywanie Twoich ogłoszeń…",
+  "Caricamento dei tuoi annunci…"
+ ],
+ "Todavía no tenés publicaciones guardadas.": [
+  "You have no saved publications yet.",
+  "Nie masz jeszcze zapisanych ogłoszeń.",
+  "Non hai ancora annunci salvati."
+ ],
+ "No se pudieron consultar tus publicaciones.": [
+  "Could not load your publications.",
+  "Nie udało się wczytać Twoich ogłoszeń.",
+  "Impossibile caricare i tuoi annunci."
+ ],
+ "Eliminando publicación…": [
+  "Deleting publication…",
+  "Usuwanie ogłoszenia…",
+  "Eliminazione annuncio…"
+ ],
+ "Publicación eliminada.": [
+  "Publication deleted.",
+  "Ogłoszenie usunięte.",
+  "Annuncio eliminato."
+ ],
+ "Precio no informado": [
+  "Price not provided",
+  "Nie podano ceny",
+  "Prezzo non indicato"
+ ],
+ "¿Eliminar «{titulo}»? Esta acción elimina únicamente esta publicación y sus asociaciones.": [
+  "Delete “{titulo}”? This deletes only this publication and its associations.",
+  "Usunąć „{titulo}”? Ta czynność usuwa tylko to ogłoszenie i jego powiązania.",
+  "Eliminare «{titulo}»? Questa azione elimina solo questo annuncio e le sue associazioni."
+ ],
+ "No se pudo confirmar la eliminación. Actualizá el listado antes de reintentar.": [
+  "Deletion could not be confirmed. Refresh the list before trying again.",
+  "Nie udało się potwierdzić usunięcia. Odśwież listę przed ponowną próbą.",
+  "Impossibile confermare l’eliminazione. Aggiorna l’elenco prima di riprovare."
+ ],
+ "No se pudo cerrar la sesión.": [
+  "Could not sign out.",
+  "Nie udało się wylogować.",
+  "Impossibile uscire."
+ ],
+ "Sesión cerrada": [
+  "Signed out",
+  "Wylogowano",
+  "Disconnessione effettuata"
+ ],
+ "No se pudieron consultar los puntos de promoción.": [
+  "Could not load promotion points.",
+  "Nie udało się wczytać punktów promocji.",
+  "Impossibile caricare i punti promozione."
+ ],
+ "No se confirmó la promoción.": [
+  "Promotion was not confirmed.",
+  "Promocja nie została potwierdzona.",
+  "Promozione non confermata."
+ ],
+ "Resultado pendiente. Actualizá el perfil para comprobarlo o reintentá esta misma operación.": [
+  "Result pending. Refresh your profile to check, or retry this same operation.",
+  "Wynik oczekuje na potwierdzenie. Odśwież profil lub ponów tę samą operację.",
+  "Risultato in attesa. Aggiorna il profilo per verificare o riprova la stessa operazione."
+ ],
+ "Necesitás 5 puntos de promoción. No se descontó saldo.": [
+  "You need 5 promotion points. No points were deducted.",
+  "Potrzebujesz 5 punktów promocji. Nie pobrano punktów.",
+  "Servono 5 punti promozione. Non sono stati addebitati punti."
+ ],
+ "Esta publicación ya tiene una promoción vigente.": [
+  "This publication already has an active promotion.",
+  "To ogłoszenie ma już aktywną promocję.",
+  "Questo annuncio ha già una promozione attiva."
+ ],
+ "Solo podés destacar publicaciones activas.": [
+  "Only active publications can be featured.",
+  "Można promować tylko aktywne ogłoszenia.",
+  "Puoi mettere in evidenza solo annunci attivi."
+ ],
+ "La publicación está vinculada a un pedido.": [
+  "The publication is linked to an order.",
+  "Ogłoszenie jest powiązane z zamówieniem.",
+  "L’annuncio è collegato a un ordine."
+ ],
+ "No se pudo eliminar la publicación. No se confirmaron cambios.": [
+  "Could not delete the publication. No changes were confirmed.",
+  "Nie udało się usunąć ogłoszenia. Nie potwierdzono zmian.",
+  "Impossibile eliminare l’annuncio. Nessuna modifica confermata."
+ ]
+});
