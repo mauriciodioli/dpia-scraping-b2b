@@ -28,7 +28,7 @@ def result_schema(prepared):
     props=schema['properties']
     props['type']={'type':'string','enum':['results']}
     props['version']={'type':'string','enum':['dpia.results.v2']}
-    props['query']['properties']['raw_user_message']={'type':'string','enum':[prepared['user_message']]}
+    props['query']['properties']['raw_user_message']={'type':'string'}
     props['context']=obj({key:{'type':'integer' if isinstance(value,int) else 'string','enum':[value]}
                           for key,value in prepared['context'].items()})
     props['constraints']['properties']['price']=obj({'min':PRICE,'max':PRICE,'currency':{'type':'string','enum':[base['constraints']['price']['currency']]}})
@@ -58,7 +58,8 @@ def result_schema(prepared):
 def validate_result(result, prepared):
     try:Draft202012Validator(result_schema(prepared)).validate(result)
     except ValidationError:raise PreparationError('La respuesta generada no cumple el formato DPIA.',502) from None
-    if result['context']!=prepared['context']:
+    if (result['context']!=prepared['context'] or
+            result['query']['raw_user_message']!=prepared['user_message']):
         raise PreparationError('La respuesta no corresponde a tu consulta.',502)
     if result['needs_clarification']:
         if result['items'] or not result['clarifying_question'].strip():
