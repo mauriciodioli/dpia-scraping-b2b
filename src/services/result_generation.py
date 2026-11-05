@@ -64,8 +64,14 @@ def validate_result(result, prepared):
     if result['needs_clarification']:
         if result['items'] or not result['clarifying_question'].strip():
             raise PreparationError('La aclaración recibida no es válida.',502)
-    elif not 5<=len(result['items'])<=10 or result['clarifying_question']:
-        raise PreparationError('La cantidad de candidatos recibida no es válida.',502)
+    else:
+        count=len(result['items'])
+        if not 5<=count<=10:
+            logging.getLogger(__name__).warning('DPIA response validation: reason=candidate_count count=%d needs_clarification=false question_present=%s',count,bool(result['clarifying_question']))
+            raise PreparationError(f'La IA devolvió {count} candidatos sin solicitar aclaración; se requieren entre 5 y 10. No se inició el scraping.',502)
+        if result['clarifying_question']:
+            logging.getLogger(__name__).warning('DPIA response validation: reason=unexpected_clarification count=%d needs_clarification=false question_present=true',count)
+            raise PreparationError('La IA devolvió candidatos y una pregunta de aclaración incompatible. No se inició el scraping.',502)
     allowed={s for s in prepared.get('sources',['amazon','ebay','aliexpress']) if s in ('amazon','ebay','aliexpress','mercadolibre')}
     plans=[row['source'] for row in result['scrape_plan']]
     if len(set(plans))!=len(plans) or set(plans)!=allowed:
