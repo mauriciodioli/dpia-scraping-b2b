@@ -27,7 +27,7 @@
   card.dataset.publicationId=String(publication.id);
   const imageUrl=safeQueryUrl(publication.imagen);
   if(imageUrl){const image=document.createElement('img');image.src=imageUrl;image.alt='';image.loading='lazy';image.onerror=()=>image.remove();card.append(image);}
-  const title=document.createElement('strong');title.textContent=publication.titulo;title.dataset.catalogName='';
+  const title=document.createElement('button');title.type='button';title.className='publication-detail-link';const heading=document.createElement('strong');heading.textContent=publication.titulo;heading.dataset.catalogName='';title.append(heading);title.onclick=()=>openHomePublication({id:publication.id});
   const description=document.createElement('p');description.textContent=publication.descripcion||'';description.dataset.catalogName='';
   const price=document.createElement('p');price.textContent=publication.precio==null?'Precio no informado':`${publication.precio} ${publication.moneda||''}`.trim();
   card.append(title,description,price);

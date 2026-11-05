@@ -377,3 +377,19 @@ html[data-theme="dark"] dialog.image-preparation-confirm{border-color:#8064aa80}
 html[data-theme="dark"] #queryPublicationForm :is(input,textarea,select){background:#302342;color:#f3ecff;border-color:#8064aa}
 html[data-theme="dark"] #publicationCurrency{color-scheme:dark}
 @media(max-width:420px){dialog.image-preparation-confirm{padding:22px}.image-preparation-confirm-actions{flex-direction:column-reverse}}
+
+#productImagesForm[hidden],#productImagesStatus[hidden]{display:none}
+#productImagesOverlay{padding:24px 16px;overflow-y:auto}
+#productImagesOverlay>.profile-dialog{max-height:calc(100dvh - 48px);padding-bottom:32px;scroll-padding-bottom:24px}
+#queryPublicationStatus:not(:empty){margin-top:20px;padding-bottom:12px}
+.publication-detail-link{padding:0;background:transparent;color:inherit;text-align:left;font-weight:700;font-size:inherit;line-height:1.4}
+.publication-detail-link:hover{text-decoration:underline}
+.publication-detail-link:focus-visible{outline:3px solid #ffbf36;outline-offset:4px}
+.publication-detail-overlay{z-index:240;padding:24px 16px}
+.publication-detail-dialog{max-height:calc(100dvh - 48px);text-align:left}
+.publication-detail-gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px}
+.publication-detail-gallery img{width:100%;height:220px;object-fit:contain;background:#fff;border-radius:12px}
+.publication-detail-description{white-space:pre-wrap;overflow-wrap:anywhere}
+.publication-detail-price{font-size:22px;font-weight:700}
+.publication-detail-metadata{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:14px}
+.publication-detail-metadata dd{margin:0;overflow-wrap:anywhere}

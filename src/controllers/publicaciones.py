@@ -986,6 +986,29 @@ def my_publications():
         return jsonify(success=False, error='No se pudieron consultar tus publicaciones.'), 503
 
 
+@publicaciones.get('/api/publicaciones/<int:publication_id>')
+def publication_detail(publication_id):
+    try:
+        row=db.session.get(Publicacion,publication_id)
+        user=authenticated_publication_user()
+        if not row or (str(row.estado).strip().lower()!='activo' and (not user or row.user_id!=user.id)):
+            return jsonify(success=False,error='Publicación no encontrada.'),404
+        photos=db.session.query(Image.filepath).join(Public_imagen_video,Public_imagen_video.imagen_id==Image.id).filter(
+            Public_imagen_video.publicacion_id==row.id,Public_imagen_video.media_type=='imagen').order_by(Public_imagen_video.id).all()
+        images=list(dict.fromkeys([url for url in [row.imagen,*[photo[0] for photo in photos]] if url]))
+        postal=db.session.get(CodigoPostal,row.codigo_postal_id) if row.codigo_postal_id else None
+        category=db.session.get(AmbitoCategoria,row.categoria_id) if row.categoria_id else None
+        return jsonify(success=True,publicacion={'id':row.id,'titulo':row.texto or row.titulo,'descripcion':row.descripcion,
+            'precio':row.precio,'moneda':row.moneda,'imagenes':images,'imagen':row.imagen,'ambito':row.ambito,
+            'categoria':(category.valor or category.nombre) if category else None,
+            'codigoPostal':postal.codigoPostal if postal else row.codigoPostal,'ciudad':postal.ciudad if postal else None,
+            'pais':postal.pais if postal else None,'idioma':row.idioma,
+            'fecha':row.fecha_creacion.isoformat() if row.fecha_creacion else None,'afiliado_link':row.afiliado_link})
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify(success=False,error='No se pudo consultar la publicación.'),503
+
+
 @publicaciones.delete('/api/publicaciones/<int:publication_id>')
 def delete_publication(publication_id):
     try:

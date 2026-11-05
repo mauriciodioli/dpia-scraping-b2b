@@ -41,6 +41,8 @@
   if(chosen)chosen.stage=data;
   $('prepareProductImages').disabled=imageBusy;
   $('prepareProductImages').textContent=data.status==='complete'?'Ver imágenes':'Preparar imágenes';
+  const ready=data.status==='complete'&&data.images?.length;
+  $('productImagesForm').hidden=!!ready;$('productImagesStatus').hidden=!!ready;
   $('productGallery').replaceChildren();
   for(const value of data.images||[]){const url=safeQueryUrl(value);if(!url)continue;const label=document.createElement('label'),check=document.createElement('input'),img=document.createElement('img');check.type='checkbox';check.name='publicationPhoto';check.value=url;let saved=null;try{saved=JSON.parse(localStorage.getItem(photoKey())||'null');}catch(_){}check.checked=!Array.isArray(saved)||saved.includes(url);check.onchange=()=>{try{localStorage.setItem(photoKey(),JSON.stringify([...document.querySelectorAll('[name="publicationPhoto"]:checked')].map(n=>n.value)));}catch(_){}};img.src=url;img.alt='Imagen del producto';img.loading='lazy';img.onerror=()=>label.remove();label.append(check,img);$('productGallery').append(label);}
   $('queryPublicationForm').hidden=!(data.status==='complete'&&data.images?.length);
@@ -56,6 +58,7 @@
   if(!currentEmail){openAuth();return;}
   chosen={operation,index,email:currentEmail,product};$('prepareProductImages').disabled=imageBusy;$('prepareProductImages').textContent='Preparar imágenes';$('queryPublicationForm').hidden=true;$('queryPublicationStatus').textContent='';$('publicationTitle').value=product.title.slice(0,120);$('publicationDescription').value=product.title;$('publicationCurrency').value=product.currency||'';$('productImagesTitle').textContent=product.title;
   $('imagePriceMin').value='0';$('imagePriceMax').value='';$('imageRatingMin').value='';$('imageReviewsMin').value='';
+  $('productImagesForm').hidden=false;$('productImagesStatus').hidden=false;
   $('productGallery').replaceChildren();$('productImagesStatus').textContent='Se usará el producto original del trabajo DPIA. Preparar imágenes no publica el producto.';
   if(stage){if(stage.filters){$('imagePriceMin').value=stage.filters.precio_minimo;$('imagePriceMax').value=stage.filters.precio_maximo??'';$('imageRatingMin').value=stage.filters.rating_minimo??'';$('imageReviewsMin').value=stage.filters.resenas_minimas??'';}gallery(stage);}
   $('productImagesOverlay').hidden=false;$('closeProductImages').focus();if(!stage)refreshChosen({...chosen});
@@ -160,8 +163,10 @@
     imagenes:[...document.querySelectorAll('[name="publicationPhoto"]:checked')].map(input=>input.value)})}),data=await response.json();
    if(currentEmail!==target.email)return;
    if(!response.ok||!data.success||!data.guardado)throw new Error(data.error||'No se pudo confirmar la publicación.');
-   $('queryPublicationStatus').textContent='Publicación guardada · ID '+data.publicacion_id+' · Disponible en Mi perfil → Mis publicaciones.';
-   const button=document.createElement('button');button.className='action-button';button.type='button';button.textContent='Ver mis publicaciones';button.onclick=()=>{$('productImagesOverlay').hidden=true;window.DPIAPublications?.openProfile();};$('queryPublicationStatus').append(button);
+   closeImages();
+   notify('Publicación guardada');
+   window.DPIAPublications?.openProfile();
+   $('queryPublicationStatus').textContent='Publicación guardada · ID '+data.publicacion_id;
   }catch(error){$('queryPublicationStatus').textContent=error.message;$('saveQueryPublication').disabled=false;}
   finally{imageBusy=false;}
  }
