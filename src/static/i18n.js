@@ -339,3 +339,10 @@ Object.assign(DPIA_TRANSLATIONS, {
 });
 
 Object.assign(DPIA_TRANSLATIONS, {'Próximamente':['Coming soon','Wkrótce','Prossimamente'],'Todavía no disponible en la API DPIA':['Not yet available in the DPIA API','Jeszcze niedostępne w API DPIA','Non ancora disponibile nell’API DPIA']});
+
+Object.assign(DPIA_TRANSLATIONS, {
+ '¿Hasta cuánto querés gastar? Modificá el rango sugerido.':['How much do you want to spend? Edit the suggested range.','Ile chcesz wydać? Zmień sugerowany zakres.','Quanto vuoi spendere? Modifica l’intervallo suggerito.'],
+ 'Presupuesto':['Budget','Budżet','Budget'], 'Por producto':['Per product','Za produkt','Per prodotto'], 'En total':['In total','Łącznie','In totale'],
+ 'Desde':['From','Od','Da'], 'Hasta':['To','Do','A'], 'Moneda':['Currency','Waluta','Valuta'],
+ 'Rango inicial de ejemplo, editable; no representa precios de mercado.':['Editable example range; it does not represent market prices.','Edytowalny przykładowy zakres; nie odzwierciedla cen rynkowych.','Intervallo di esempio modificabile; non rappresenta prezzi di mercato.']
+});

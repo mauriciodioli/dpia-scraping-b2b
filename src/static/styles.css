@@ -336,3 +336,5 @@ button.action-button.danger-button{background:#fff1f3;color:#a51f43;border-color
 html[data-theme="dark"] button.action-button.danger-button{background:#432338;color:#ffbdcd;border-color:#89506a}
 @media(hover:hover){button.action-button.danger-button:hover:not(:disabled){background:#ffe0e8;color:#8e183a}html[data-theme="dark"] button.action-button.danger-button:hover:not(:disabled){background:#583047;color:#ffe0e8}}
 @media(max-width:520px){#reloadMyPublications,#moreMyPublications{width:100%;margin:8px 0}#publicationHistory .scraped-product .action-button{padding:11px 9px}}
+
+#queryBudget[hidden]{display:none}#queryBudget input{display:block;width:100%;box-sizing:border-box;padding:12px;border-radius:14px;background:transparent;color:inherit;border:1px solid #85819c;margin-top:6px}

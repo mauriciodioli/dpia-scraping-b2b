@@ -22,7 +22,7 @@ COUNTRIES = {'Argentina': ('AR', 'ARS'), 'Uruguay': ('UY', 'UYU'),
 
 
 def prepare_context(body, user_id):
-    allowed = {'pais', 'ciudad', 'codigo_postal_id', 'ambito_id', 'categoria_id', 'idioma', 'user_message', 'mode', 'attachments', 'sources', 'request_id'}
+    allowed = {'pais', 'ciudad', 'codigo_postal_id', 'ambito_id', 'categoria_id', 'idioma', 'user_message', 'mode', 'attachments', 'sources', 'request_id', 'budget_currency'}
     if not isinstance(body, dict) or set(body) - allowed:
         raise PreparationError('Solicitud de consulta inválida.')
     for key in ('pais', 'ciudad', 'user_message'):
@@ -32,6 +32,8 @@ def prepare_context(body, user_id):
         raise PreparationError('Idioma o tipo de consulta inválidos.')
     if body['pais'] not in COUNTRIES:
         raise PreparationError('País no disponible para esta consulta.')
+    if 'budget_currency' in body and (body.get('mode')!='explorar' or not isinstance(body['budget_currency'],str) or body['budget_currency'] not in ('ARS','UYU','EUR','PLN','MXN','USD','GBP','BRL','CAD','AUD','COP')):
+        raise PreparationError('Moneda de presupuesto inválida.')
     for key in ('codigo_postal_id', 'ambito_id', 'categoria_id'):
         if type(body.get(key)) is not int or not 0 < body[key] <= 2147483647:
             raise PreparationError('Elegí un ámbito y una categoría para continuar.')
@@ -60,7 +62,7 @@ def prepare_context(body, user_id):
     sources=[] if body.get('mode')=='explorar' else normalize_sources(body.get('sources'))
     if 'mercadolibre' in sources and body['pais'] not in ('Argentina','México'):
         raise PreparationError('Mercado Libre no está disponible para el país seleccionado.')
-    return {'attachments':attachments, 'sources':sources, 'context': context, 'ids': {'ambito_id': body['ambito_id'], 'categoria_id': body['categoria_id'],
+    return {**({'budget_currency':body['budget_currency']} if 'budget_currency' in body else {}), 'attachments':attachments, 'sources':sources, 'context': context, 'ids': {'ambito_id': body['ambito_id'], 'categoria_id': body['categoria_id'],
                                       'codigo_postal_id': postal.id},
             'mode': body.get('mode', 'buscar'), 'user_message': body['user_message'].strip()}
 
@@ -68,6 +70,7 @@ def prepare_context(body, user_id):
 def result_template(prepared):
     context = prepared['context']
     shipping, currency = COUNTRIES[context['pais']]
+    if prepared['mode']=='explorar':currency=prepared.get('budget_currency',currency)
     return {'type': 'results', 'version': 'dpia.results.v2', 'needs_clarification': False,
             'clarifying_question': '', 'context': context,
             'query': {'raw_user_message': prepared['user_message'], 'normalized_intent': '',
@@ -95,7 +98,7 @@ Si faltan datos críticos, incluyendo límites de precio exigidos por el usuario
 una sola pregunta en clarifying_question e items=[]. No adivines requisitos críticos.
 La ausencia de presupuesto no es un dato crítico si el usuario pide recomendaciones generales o precios orientativos.
 En esos casos proponé candidatos sin exigir un rango de precios; usá "N/D" cuando no puedas fundamentar un precio.
-Respetá moneda y shipping_to del país del contexto; no reutilices EUR o IT para Argentina.
+Respetá shipping_to del país del contexto. Para la moneda usá budget_currency si está presente; de lo contrario usá la moneda del país. La moneda elegida no cambia el país de destino. No hagas conversiones de divisas ni inventes tipos de cambio.
 Si la modalidad es novedades, priorizá novedades y tendencias comprobables sin inventar métricas.
 Cada item debe tener producto, categoria, pais, fuente, motivo_tendencia, descripcion,
 precios {amazon, ebay, aliexpress}, precio_venta_sugerido, margen_estimado, fecha, motivo_tendencia_extendido,
@@ -108,7 +111,7 @@ No copies precios ni imágenes de ejemplos. No inventes enlaces. El esquema de r
     if prepared['mode']=='novedades':
         instructions += '\nPara novedades, prepará una sola búsqueda concreta y no vacía por marketplace seleccionado, de hasta 500 caracteres, coherente con los candidatos. No generes tareas separadas por candidato.\n'
     if prepared['mode']=='explorar':
-        instructions += '\nExplorar es una consulta directa a IA, sin scraping. scrape_plan debe ser []. Podés estimar precio_venta_sugerido como recomendación orientativa en la moneda del contexto, nunca como precio observado. Si no hay fundamento suficiente, usá N/D. precios por marketplace y fuente deben ser N/D: no se han consultado sitios externos. busquedas puede contener términos de búsqueda por sitio para que el usuario consulte referencias; no son fuentes verificadas. No inventes imágenes ni URLs.\n'
+        instructions += '\nExplorar es una consulta directa a IA, sin scraping. En esta modalidad no solicites aclaraciones: el ámbito, la categoría y la ubicación verificados permiten recomendar productos. Devolvé needs_clarification=false, clarifying_question="" y entre 5 y 10 candidatos coherentes con el pedido. Si no se indicó presupuesto, no apliques límites de precio: constraints.price.min y max deben ser "N/D". Respetá el presupuesto de compra indicado en el pedido. Si es por producto, aplicá el rango a cada producto; si es total, aplicalo al conjunto recomendado y no copies ese total como límite unitario. Distinguí presupuesto de compra de precio de venta sugerido. No pidas presupuesto para proponer precios orientativos. scrape_plan debe ser []. Podés estimar precio_venta_sugerido como recomendación orientativa en la moneda de presupuesto elegida (o la del país si no se eligió), nunca como precio observado. Si no hay fundamento suficiente, usá N/D. precios por marketplace y fuente deben ser N/D: no se han consultado sitios externos. busquedas puede contener términos de búsqueda por sitio para que el usuario consulte referencias; no son fuentes verificadas. No inventes imágenes ni URLs.\n'
     public_data={**prepared,'attachments':[{'type':item['type'],'name':item['name'],'frames_count':len(item['frames'])} for item in prepared.get('attachments',[])]}
     instructions += '\nEl pedido original y los adjuntos definen la intención; no los sustituyas por una búsqueda genérica de la categoría.\nUsá solo los marketplaces elegidos en sources para scrape_plan. Si hay video, analizá los fotogramas visuales y no inventes audio.\n'
     return instructions + '\nMODALIDAD: ' + prepared['mode'] + '\nDATOS VERIFICADOS:\n' + json.dumps(

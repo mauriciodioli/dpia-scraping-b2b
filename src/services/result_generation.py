@@ -29,7 +29,7 @@ def result_schema(prepared):
     props['query']['properties']['raw_user_message']={'type':'string','enum':[prepared['user_message']]}
     props['context']=obj({key:{'type':'integer' if isinstance(value,int) else 'string','enum':[value]}
                           for key,value in prepared['context'].items()})
-    props['constraints']['properties']['price']=obj({'min':PRICE,'max':PRICE,'currency':TEXT})
+    props['constraints']['properties']['price']=obj({'min':PRICE,'max':PRICE,'currency':{'type':'string','enum':[base['constraints']['price']['currency']]}})
     props['constraints']['properties']['delivery_max_days']={'anyOf':[{'type':'integer','minimum':0},{'type':'string','enum':['N/D']}]}
     props['scrape_plan']={'type':'array','items':obj({'source':{'type':'string','enum':[s for s in prepared.get('sources',['amazon','ebay','aliexpress']) if s in ('amazon','ebay','aliexpress','mercadolibre')] or ['amazon','ebay','aliexpress']},
         'country_domain':TEXT,'search_query':TEXT,'search_url':TEXT,'max_results':{'type':'integer','minimum':1,'maximum':20}})}
@@ -45,6 +45,11 @@ def result_schema(prepared):
     # Allow an empty clarification response, otherwise require the requested batch.
     props['items']={'anyOf':[{'type':'array','items':obj(fields),'minItems':0,'maxItems':0},
                             {'type':'array','items':obj(fields),'minItems':5,'maxItems':10}]}
+    if prepared['mode']=='explorar':
+        props['needs_clarification']={'type':'boolean','enum':[False]}
+        props['clarifying_question']={'type':'string','enum':['']}
+        props['items']={'type':'array','items':obj(fields),'minItems':5,'maxItems':10}
+        props['scrape_plan']['maxItems']=0
     return schema
 
 

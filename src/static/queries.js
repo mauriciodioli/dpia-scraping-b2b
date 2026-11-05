@@ -1,6 +1,6 @@
 // The original user request is preserved; context and identity are verified by Flask.
 let queryMode='buscar', queryPrepared=null, queryBusy=false, queryRequestId=null, pendingSourcesGeneration=false;
-let novelAutoDraft='', exploreAutoDraft='';
+let novelAutoDraft='', exploreAutoDraft='', exploreBudgetDraft='', queryBudgetCountry='';
 const externalQuerySources=['amazon','ebay','aliexpress','mercadolibre'];
 const querySources=[...externalQuerySources,'local','dpia','historial'];
 function sourceAvailableForCountry(source){return source!=='mercadolibre'||['Argentina','México'].includes(country);}
@@ -24,7 +24,7 @@ function refreshQuerySelectors(category=null, scopeId=null){
  if([...postalSelect.options].some(option=>option.value===oldPostal))postalSelect.value=oldPostal;
  invalidateQuery();if(queryMode==='novedades')updateNovelDraft();else if(queryMode==='explorar')updateExploreDraft();
 }
-function invalidateQuery(){if(queryBusy)return;queryPrepared=null;queryRequestId=null;document.querySelector('#generateQuery').hidden=true;document.querySelector('#queryResults').replaceChildren();document.querySelector('#promptResult').hidden=true;}
+function invalidateQuery(){document.querySelector('#queryBudget').hidden=queryMode!=='explorar';if(queryBusy)return;queryPrepared=null;queryRequestId=null;document.querySelector('#generateQuery').hidden=true;document.querySelector('#queryResults').replaceChildren();document.querySelector('#promptResult').hidden=true;}
 function chooseQueryCategory(item, scopeId=null){queryMode='buscar';refreshQuerySelectors(item,scopeId);localCategory={id:String(item.categoria_id),name:item.nombre};}
 function updateNovelDraft(force=false){
  const prompt=document.querySelector('#promptText'),scope=document.querySelector('#queryScope'),category=document.querySelector('#queryCategory');
@@ -55,7 +55,7 @@ async function openNovelQuery(){
 async function openExploreQuery(){
  if(queryBusy)return;
  await openNovelQuery();queryMode='explorar';invalidateQuery();
- updateExploreDraft(true);
+ setupExploreBudget();updateExploreDraft(true);
  document.querySelector('#queryStatus').textContent='Revisá el pedido. Explorar genera sugerencias con IA, sin consumir ejecuciones de scraping.';
 }
 function updateExploreDraft(force=false){
@@ -64,9 +64,39 @@ function updateExploreDraft(force=false){
  if(!scopeSelect.value||!categorySelect.value){exploreAutoDraft='';prompt.value='';return;}
  const scope=scopeSelect.selectedOptions[0].textContent,category=categorySelect.selectedOptions[0].textContent;
  const drafts={es:`Sugerí productos útiles de ${category}, en ${scope}, para ${city}, ${country}. Explicá sus ventajas y proponé precios de venta orientativos cuando puedas fundamentarlos. Indicá sitios donde pueda comparar opciones.`,en:`Suggest useful products in ${category}, within ${scope}, for ${city}, ${country}. Explain their benefits and suggest indicative selling prices when justified. Include sites where I can compare options.`,it:`Suggerisci prodotti utili di ${category}, nell'ambito ${scope}, per ${city}, ${country}. Spiega i vantaggi e proponi prezzi indicativi quando motivati. Indica siti dove confrontare le opzioni.`,pl:`Zaproponuj przydatne produkty w kategorii ${category}, w obszarze ${scope}, dla ${city}, ${country}. Wyjaśnij zalety i zaproponuj uzasadnione ceny orientacyjne. Wskaż serwisy do porównania ofert.`};
- exploreAutoDraft=drafts[catalogLanguage()]||drafts.es;prompt.value=exploreAutoDraft;
+ exploreBudgetDraft=exploreBudgetText();exploreAutoDraft=(drafts[catalogLanguage()]||drafts.es)+'\n'+exploreBudgetDraft;prompt.value=exploreAutoDraft;
 }
-function queryBody(){return {pais:country,ciudad:city,idioma:catalogLanguage(),ambito_id:Number(document.querySelector('#queryScope').value),categoria_id:Number(document.querySelector('#queryCategory').value),codigo_postal_id:Number(document.querySelector('#queryPostal').value),mode:queryMode,user_message:document.querySelector('#promptText').value.trim(),attachments:media};}
+function setupExploreBudget(){
+ const currency={Argentina:'ARS',Uruguay:'UYU','España':'EUR',Italia:'EUR',Polonia:'PLN','México':'MXN'}[country]||'USD';
+ if(queryBudgetCountry!==country){
+  const range={ARS:[10000,100000],UYU:[500,5000],EUR:[10,100],PLN:[50,500],MXN:[200,2000],USD:[10,100]}[currency];
+  document.querySelector('#queryBudgetMin').value=range[0];document.querySelector('#queryBudgetMax').value=range[1];queryBudgetCountry=country;
+  document.querySelector('#queryBudgetCurrency').value=currency;
+ }
+}
+function exploreBudgetText(){
+ const min=document.querySelector('#queryBudgetMin').value,max=document.querySelector('#queryBudgetMax').value,currency=document.querySelector('#queryBudgetCurrency').value;
+ const total=document.querySelector('#queryBudgetType').value==='total';
+ const units={es:total?'en total':'por producto',en:total?'in total':'per product',it:total?'in totale':'per prodotto',pl:total?'łącznie':'za produkt'};
+ const lang=catalogLanguage(),unit=units[lang]||units.es;
+ return ({es:`Presupuesto de compra: de ${min} a ${max} ${currency} ${unit}. Respetá este máximo; no lo confundas con el precio de venta sugerido.`,en:`Purchase budget: ${min} to ${max} ${currency} ${unit}. Respect this maximum; do not confuse it with the suggested selling price.`,it:`Budget di acquisto: da ${min} a ${max} ${currency} ${unit}. Rispetta questo massimo; non confonderlo con il prezzo di vendita suggerito.`,pl:`Budżet zakupu: od ${min} do ${max} ${currency} ${unit}. Przestrzegaj tego limitu; nie myl go z sugerowaną ceną sprzedaży.`})[lang]||`Presupuesto de compra: de ${min} a ${max} ${currency} ${unit}.`;
+}
+function syncExploreBudget(){
+ if(queryMode!=='explorar')return;
+ const prompt=document.querySelector('#promptText'),automatic=prompt.value===exploreAutoDraft,next=exploreBudgetText();
+ if(automatic){updateExploreDraft(true);}else{
+  prompt.value=exploreBudgetDraft&&prompt.value.includes(exploreBudgetDraft)?prompt.value.replace(exploreBudgetDraft,next):prompt.value.trim()+'\n'+next;
+  exploreBudgetDraft=next;
+ }
+ invalidateQuery();
+}
+document.querySelector('#queryBudgetCurrency').addEventListener('change',()=>{
+ const currency=document.querySelector('#queryBudgetCurrency').value;
+ const range={ARS:[10000,100000],UYU:[500,5000],EUR:[10,100],PLN:[50,500],MXN:[200,2000],USD:[10,100],GBP:[10,100],BRL:[50,500],CAD:[15,150],AUD:[15,150],COP:[50000,500000]}[currency];
+ document.querySelector('#queryBudgetMin').value=range[0];document.querySelector('#queryBudgetMax').value=range[1];syncExploreBudget();
+});
+for(const id of ['queryBudgetType','queryBudgetMin','queryBudgetMax'])document.querySelector('#'+id).addEventListener(id==='queryBudgetType'?'change':'input',syncExploreBudget);
+function queryBody(){return {pais:country,ciudad:city,idioma:catalogLanguage(),ambito_id:Number(document.querySelector('#queryScope').value),categoria_id:Number(document.querySelector('#queryCategory').value),codigo_postal_id:Number(document.querySelector('#queryPostal').value),mode:queryMode,...(queryMode==='explorar'?{budget_currency:document.querySelector('#queryBudgetCurrency').value}:{}),user_message:document.querySelector('#promptText').value.trim(),attachments:media};}
 function startHomeQuery(){
  document.querySelector('#promptText').value=document.querySelector('#searchText').value.trim();queryMode='buscar';invalidateQuery();show('consultPage');prepareDPIAQuery();
 }
@@ -74,6 +104,12 @@ async function prepareDPIAQuery(){
  if(queryBusy)return;show('consultPage');
  if(!currentEmail){openAuth();return;}
  await queryMediaPending;if(queryBusy)return;
+ if(queryMode==='explorar'){
+  const min=document.querySelector('#queryBudgetMin'),max=document.querySelector('#queryBudgetMax');
+  max.setCustomValidity('');
+  if(!min.value||!max.value||Number(max.value)<Number(min.value))max.setCustomValidity(({es:'Ingresá un rango válido: el máximo debe ser mayor o igual al mínimo.',en:'Enter a valid range: maximum must be at least the minimum.',it:'Inserisci un intervallo valido: il massimo deve essere almeno il minimo.',pl:'Podaj poprawny zakres: maksimum nie może być mniejsze od minimum.'})[catalogLanguage()]||'Invalid range');
+  if(!min.reportValidity()||!max.reportValidity())return;
+ }
  const status=document.querySelector('#queryStatus'),body=queryBody();
  if(!body.ambito_id||!body.categoria_id){status.textContent='Elegí un ámbito y una categoría para continuar.';document.querySelector(body.ambito_id?'#queryCategory':'#queryScope').focus();return;}
  if(!body.user_message&&!body.attachments.length){status.textContent='Escribí tu pedido o adjuntá una imagen o video.';return;}
