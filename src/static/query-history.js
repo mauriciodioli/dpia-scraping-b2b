@@ -40,7 +40,7 @@
  function gallery(data){
   if(chosen)chosen.stage=data;
   $('prepareProductImages').disabled=imageBusy;
-  $('prepareProductImages').textContent=data.tracking_supported===false?'Ver estado guardado':['pending','running','complete','failed'].includes(data.status)?'Consultar estado':'Preparar imágenes';
+  $('prepareProductImages').textContent=data.tracking_supported===false?'Ver estado guardado':data.status==='complete'?'Ver imágenes':'Preparar imágenes';
   $('productGallery').replaceChildren();
   for(const value of data.images||[]){const url=safeQueryUrl(value);if(!url)continue;const label=document.createElement('label'),check=document.createElement('input'),img=document.createElement('img');check.type='checkbox';check.name='publicationPhoto';check.value=url;let saved=null;try{saved=JSON.parse(localStorage.getItem(photoKey())||'null');}catch(_){}check.checked=!Array.isArray(saved)||saved.includes(url);check.onchange=()=>{try{localStorage.setItem(photoKey(),JSON.stringify([...document.querySelectorAll('[name="publicationPhoto"]:checked')].map(n=>n.value)));}catch(_){}};img.src=url;img.alt='Imagen del producto';img.loading='lazy';img.onerror=()=>label.remove();label.append(check,img);$('productGallery').append(label);}
   $('queryPublicationForm').hidden=!(data.status==='complete'&&data.images?.length);
@@ -64,7 +64,7 @@
   if(imageBusy||!chosen||chosen.email!==currentEmail)return;
   const form=$('productImagesForm');if(!form.reportValidity())return;
   const target={...chosen};
-  if(['pending','running','complete','failed'].includes(target.stage?.status)){await refreshChosen(target);return;}
+  if(target.stage?.status==='complete'||target.stage?.tracking_supported===false){await refreshChosen(target);return;}
   imageBusy=true;$('prepareProductImages').disabled=true;
   $('productImagesStatus').textContent='Consultando imágenes en DPIA…';
   const filters={precio_minimo:Number($('imagePriceMin').value),precio_maximo:$('imagePriceMax').value===''?null:Number($('imagePriceMax').value),rating_minimo:$('imageRatingMin').value===''?null:Number($('imageRatingMin').value),resenas_minimas:$('imageReviewsMin').value===''?null:Number($('imageReviewsMin').value)};

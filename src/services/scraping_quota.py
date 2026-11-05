@@ -189,7 +189,7 @@ class MySQLScrapingQuota:
                                       product_index=int(index),product=products[int(index)],stage=stage))
             return tasks
 
-    def image_task(self, operation_id, user_id, index, *, initial=None, claim=False, token=None, changes=None, now=None):
+    def image_task(self, operation_id, user_id, index, *, initial=None, claim=False, retry=False, token=None, changes=None, now=None):
         """Atomic queue/lease/CAS inside resultado_json; never changes point charges."""
         import time
         import uuid
@@ -210,6 +210,10 @@ class MySQLScrapingQuota:
                 stage={**initial,'queue_kind':'base44_images','status':'pending',
                     'idempotency_key':'pwa-images:'+str(uuid.uuid4()),
                     'created_at':now,'updated_at':now,'next_check_at':0,'lease_until':0}
+            elif retry:
+                if not old or old.get('queue_kind')!='base44_images':return old
+                if old.get('status')=='complete' or old.get('lease_until',0)>now:return old
+                stage={**old,'retry_requested':True,'status':'pending','next_check_at':0,'updated_at':now}
             elif claim:
                 if (not old or old.get('queue_kind')!='base44_images' or
                     old.get('status') not in ('pending','running') or

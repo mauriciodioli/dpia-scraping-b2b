@@ -83,6 +83,8 @@ def prepare_images(quota, operation_id, user_id, index, filters, config):
     from services.base44_images import Base44Images, valid_uuid, product_reference, public_stage
     outcome=json.loads(operation['outcome'])
     old=outcome.get('image_stages',{}).get(str(index),{})
+    if old.get('queue_kind')=='base44_images' and old.get('status')!='complete':
+        old=quota.image_task(operation_id,user_id,index,retry=True)
     if old.get('status')=='complete' or old.get('queue_kind')=='base44_images':
         return {'success':True,**public_stage(old),'diagnostics':diagnosis}
     if old:

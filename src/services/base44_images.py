@@ -106,7 +106,7 @@ def remote_gallery(job,product_id):
 
 
 def process_image_task(app,task):
-    """One durable claim. Uncertain/restarted submissions are GET-only reconciliations."""
+    """One durable claim; only an explicit button action authorizes resubmission."""
     from model.usuario import Usuario
     from utils.db import db
     quota=app.extensions['scraping_quota'];op=task['operation_id'];uid=task['user_id'];index=task['product_index']
@@ -126,13 +126,13 @@ def process_image_task(app,task):
         found=remote_gallery(job,stage['producto_id'])
         if found:finish(found);return
         # A previous attempt may still run remotely. Never automatically repeat it.
-        if stage.get('submitted_at'):
+        if stage.get('submitted_at') and not stage.get('retry_requested'):
             finish({'status':'pending','error':'Preparación pendiente de confirmación en DPIA. No se reenviará automáticamente.'});return
         if not any(p.get('producto_id')==stage['producto_id'] for p in job.get('productos',[]) if isinstance(p,dict)):
             finish({'status':'failed','images':[],'error':'El producto ya no pertenece al trabajo original.'});return
         client.authorize()
         # Persist the intent before POST; this survives a process/browser restart.
-        if not save({'submitted_at':time.time(),'status':'pending'}):return
+        if not save({'submitted_at':time.time(),'status':'pending','retry_requested':False}):return
         reply=client.request('POST','/base44/imagenes',json={'trabajo_id':stage['trabajo_id'],
             'productos':[{'producto_id':stage['producto_id']}],'idempotency_key':stage['idempotency_key']})
         if reply.get('trabajo_id')!=stage['trabajo_id']:
@@ -143,9 +143,13 @@ def process_image_task(app,task):
         status=getattr(exc,'remote_status',None)
         if status in (400,401,403,404,410,415):
             finish({'status':'failed','images':[],'error':'DPIA rechazó la preparación o el trabajo ya no está disponible (HTTP '+str(status)+').'})
-        elif status==409 and getattr(exc,'remote_busy',False):
-            # Confirmed remote lock/conflict; no invented progress beyond this evidence.
-            finish({'status':'running','error':'El trabajo está ocupado en DPIA. Se consultará su resultado sin reenviarlo.'})
+        elif status==409:
+            try:
+                found=remote_gallery(client.job(stage['trabajo_id']),stage['producto_id'])
+            except PreparationError:
+                found=None
+            finish(found or {'status':'running' if getattr(exc,'remote_busy',False) else 'pending',
+                'error':'DPIA informó un conflicto. Se consultará el estado del trabajo.'})
         else:finish({'status':'pending','error':str(exc)})
     except Exception:
         # No exception repr: DB/provider exceptions may embed credentials.
