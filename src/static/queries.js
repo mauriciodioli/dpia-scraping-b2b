@@ -202,6 +202,7 @@ function renderQueryResult(data){
     const terms=item.busquedas?.[site]||item.producto;
     const link=document.createElement('a');link.href=base+encodeURIComponent(terms);link.target='_blank';link.rel='noopener noreferrer';link.textContent='Comparar en '+site;card.append(link);
    }
+   if(window.DPIAExplorePreview){window.DPIAExplorePreview.addImage(card,item.imagen,item.producto);card.append(window.DPIAExplorePreview.button(item,context,data.context_ids,{constraints:data.result.constraints,query:data.result.query}));}
    grid.append(card);
   }
   container.append(grid);

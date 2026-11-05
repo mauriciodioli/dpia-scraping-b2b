@@ -346,3 +346,10 @@ Object.assign(DPIA_TRANSLATIONS, {
  'Desde':['From','Od','Da'], 'Hasta':['To','Do','A'], 'Moneda':['Currency','Waluta','Valuta'],
  'Rango inicial de ejemplo, editable; no representa precios de mercado.':['Editable example range; it does not represent market prices.','Edytowalny przykładowy zakres; nie odzwierciedla cen rynkowych.','Intervallo di esempio modificabile; non rappresenta prezzi di mercato.']
 });
+
+Object.assign(DPIA_TRANSLATIONS, {
+ 'Sugerencia de IA':['AI suggestion','Sugestia AI','Suggerimento IA'],
+ 'Elegí un marketplace':['Choose a marketplace','Wybierz marketplace','Scegli un marketplace'],
+ 'Integraciones existentes. La disponibilidad para tu país y los permisos se verificarán al habilitar la búsqueda.':['Existing integrations. Availability for your country and permissions will be checked when search is enabled.','Istniejące integracje. Dostępność w Twoim kraju i uprawnienia zostaną sprawdzone po włączeniu wyszukiwania.','Integrazioni esistenti. Disponibilità nel tuo Paese e permessi saranno verificati quando la ricerca sarà abilitata.'],
+ 'Vista previa: elegir un marketplace no inicia scraping ni consume créditos.':['Preview: choosing a marketplace does not start scraping or use credits.','Podgląd: wybór marketplace nie uruchamia scrapingu ani nie zużywa punktów.','Anteprima: scegliere un marketplace non avvia lo scraping né consuma crediti.']
+});
