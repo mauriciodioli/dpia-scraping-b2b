@@ -404,3 +404,15 @@ header #userBtn[hidden],header #balanceBtn[hidden]{display:none}
 .account-wallet>.action-button{margin-top:16px}
 html[data-theme="dark"] .account-panel{background:#211735;border-color:#8064aa50}
 @media(max-width:420px){.account-actions{grid-template-columns:1fr}}
+
+/* Camera choices share the current search controls and file inputs. */
+.search{position:relative}
+.search-media-control{display:flex;flex-shrink:0}
+.search-media-menu{position:absolute;right:8px;top:calc(100% + 8px);z-index:20;width:min(320px,calc(100vw - 40px));padding:6px;border:1px solid #c9b8e5;border-radius:16px;background:#f8f6ff;box-shadow:0 12px 30px #21143626}
+.search-media-menu[hidden]{display:none}
+.search .search-media-menu button{display:block;width:100%;height:auto;min-height:44px;margin:0;padding:12px;text-align:left;font-size:14px;line-height:1.4;border-radius:10px;white-space:normal;transform:none}
+.search-media-menu button:focus-visible,.search #cameraBtn:focus-visible{outline:3px solid #ffbf36;outline-offset:2px}
+html[data-theme="dark"] .search-media-menu{background:#291d46;border-color:#8064aa;box-shadow:0 12px 30px #0005}
+
+.account-wallet-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px}
+#profileIdentity[hidden],#profilePublicationsSection[hidden]{display:none}

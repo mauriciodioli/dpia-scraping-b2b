@@ -23,6 +23,18 @@ Object.assign(DPIA_TRANSLATIONS, {
  'Elegí tus ámbitos en Personalizar.':['Choose your interests in Customize.','Wybierz zainteresowania w Dostosuj.','Scegli i tuoi interessi in Personalizza.'],
  'No hay categorías disponibles para este ámbito.':['No categories available for this interest.','Brak kategorii dla tego zainteresowania.','Nessuna categoria disponibile per questo interesse.']
 });
+// Declarative bindings keep UI labels in the existing translation catalogue.
+const DPIA_I18N_BINDINGS={
+ 'search.prompt':'¿Qué querés buscar o preguntar?', 'search.label':'Buscar',
+ 'search.camera':'Adjuntar foto o video', 'search.photo':'Tomar o seleccionar una foto',
+ 'search.video':'Grabar o seleccionar un video', 'search.audio':'Grabar audio', 'search.send':'Preparar consulta'
+};
+Object.assign(DPIA_TRANSLATIONS,{
+ '¿Qué querés buscar o preguntar?':['What would you like to search for or ask?','Czego chcesz szukać lub o co zapytać?','Cosa vuoi cercare o chiedere?'],
+ 'Adjuntar foto o video':['Attach a photo or video','Dodaj zdjęcie lub film','Allega una foto o un video'],
+ 'Tomar o seleccionar una foto':['Take or choose a photo','Zrób lub wybierz zdjęcie','Scatta o scegli una foto'],
+ 'Grabar o seleccionar un video':['Record or choose a video','Nagraj lub wybierz film','Registra o scegli un video']
+});
 (()=>{
  const languages=['es','en','pl','it'];
  let language=localStorage.getItem('dpia-language')||'es';
@@ -59,7 +71,7 @@ Object.assign(DPIA_TRANSLATIONS, {
    const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
    let node;
    while((node=walker.nextNode())){
-    if(node.parentElement?.closest('script,style,[data-catalog-name]'))continue;
+    if(node.parentElement?.closest('script,style,[data-catalog-name],[data-i18n]'))continue;
     const current=node.nodeValue;
     const previous=sourceText.get(node);
     if(!previous||current!==previous.rendered)sourceText.set(node,{original:current,rendered:current});
@@ -72,13 +84,21 @@ Object.assign(DPIA_TRANSLATIONS, {
    const elements=root.querySelectorAll?root.querySelectorAll('[placeholder],[title],[aria-label]'):[];
    for(const el of elements){
     for(const attr of ['placeholder','title','aria-label']){
-     if(!el.hasAttribute(attr))continue;
+     if(!el.hasAttribute(attr)||el.hasAttribute('data-i18n-'+attr))continue;
      const current=el.getAttribute(attr),key=attr+'|'+el.id;
      let records=sourceAttr.get(el)||{};
      if(!records[attr]||current!==records[attr].rendered)records[attr]={original:current,rendered:current};
      const next=translate(records[attr].original);
      if(next!==current)el.setAttribute(attr,next);
      records[attr].rendered=next;sourceAttr.set(el,records);
+    }
+   }
+   for(const el of root.querySelectorAll('[data-i18n],[data-i18n-placeholder],[data-i18n-title],[data-i18n-aria-label]')){
+    for(const attr of ['text','placeholder','title','aria-label']){
+     const key=el.getAttribute(attr==='text'?'data-i18n':'data-i18n-'+attr);
+     if(!key)continue;const value=translate(DPIA_I18N_BINDINGS[key]||key);
+     if(attr==='text'){if(el.textContent!==value)el.textContent=value;}
+     else if(el.getAttribute(attr)!==value)el.setAttribute(attr,value);
     }
    }
    document.documentElement.lang=language;

@@ -1,13 +1,13 @@
 /* Owned publications only; IDs come from confirmed MySQL records. */
 (()=>{
  const $=id=>document.getElementById(id),tr=text=>window.DPIAI18N?.translate(text)||text;
- let generation=0,offset=0,selected=null,deleting=false,previousFocus=null,promotionSummary=null,promoting=false;
+ let generation=0,offset=0,selected=null,deleting=false,previousFocus=null,promotionSummary=null,promoting=false,profileView='publications';
  function clear(){
   generation++;offset=0;selected=null;promotionSummary=null;document.querySelector('#promotePublicationOverlay')?.remove();
   $('publicationHistory').replaceChildren();$('profileOverlay').hidden=true;
   $('deletePublicationOverlay').hidden=true;
  }
- function close(){if(deleting||promoting)return;clear();const target=$('accountProfile');(target&&!target.hidden&&!$('accountPage').hidden?target:document.querySelector('nav [data-page=accountPage]')).focus();}
+ function close(){if(deleting||promoting)return;clear();const target=$(profileView==='profile'?'accountProfile':'accountPublications');(target&&!target.hidden&&!$('accountPage').hidden?target:document.querySelector('nav [data-page=accountPage]')).focus();}
  function cancelDelete(){
   if(deleting)return;
   selected=null;$('deletePublicationOverlay').hidden=true;
@@ -107,10 +107,17 @@
   }catch(error){if(target.email===currentEmail)$('deletePublicationStatus').textContent=tr(error.message);}
   finally{deleting=false;$('deletePublicationConfirm').disabled=false;}
  }
- function openProfile(){
+ function renderProfileView(){
+  $('profileTitle').textContent=tr(profileView==='profile'?'Mi perfil':'Mis publicaciones');
+  $('profileIdentity').hidden=profileView!=='profile';
+  $('profilePublicationsSection').hidden=profileView==='profile';
+ }
+ function openProfile(view='publications'){
   if(!currentEmail){openAuth();return;}
+  profileView=view==='profile'?'profile':'publications';renderProfileView();
   $('profileOverlay').removeAttribute('aria-hidden');$('profileOverlay').hidden=false;
-  $('profileEmail').textContent=currentEmail;$('closeProfile').focus();load();
+  $('profileEmail').textContent=currentEmail;$('closeProfile').focus();
+  if(profileView==='publications')load();
  }
  $('closeProfile').onclick=close;$('reloadMyPublications').onclick=()=>load();
  $('moreMyPublications').onclick=()=>load(true);
@@ -125,6 +132,6 @@
  };
  let identity=typeof currentEmail==='string'?currentEmail:null;
  new MutationObserver(()=>{const next=typeof currentEmail==='string'?currentEmail:null;if(next!==identity){identity=next;clear();}}).observe($('userBtn'),{childList:true,subtree:true,characterData:true});
- $('languageSelect')?.addEventListener('change',()=>{if(!$('profileOverlay').hidden&&!promoting&&!deleting)load();});
+ $('languageSelect')?.addEventListener('change',()=>{if(!$('profileOverlay').hidden&&!promoting&&!deleting){renderProfileView();if(profileView==='publications')load();}});
  window.DPIAPublications={openProfile,refresh:()=>load()};
 })();

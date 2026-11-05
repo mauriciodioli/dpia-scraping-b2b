@@ -9,7 +9,7 @@
   byId('accountStatus').textContent=logged?byId('creditStatus').textContent:'';
  }
  byId('accountLogin').onclick=()=>openAuth();
- byId('accountProfile').onclick=()=>window.DPIAPublications?.openProfile();
+ byId('accountProfile').onclick=()=>window.DPIAPublications?.openProfile('profile');
  byId('accountPublications').onclick=()=>window.DPIAPublications?.openProfile();
  byId('accountRecharge').onclick=()=>byId('openUpgrade').click();
  byId('accountHistory').onclick=()=>{show('creditsPage');byId('creditOperations').scrollIntoView({block:'start'});};
