@@ -6,7 +6,8 @@ main_bp = Blueprint("main", __name__)
 
 @main_bp.get("/")
 def index():
-    return render_template("index.html")
+    from services.query_sources import ENABLED_EXTERNAL
+    return render_template("index.html", enabled_scraping_marketplaces=list(ENABLED_EXTERNAL))
 
 
 @main_bp.get('/api/publicaciones/locales')

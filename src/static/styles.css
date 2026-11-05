@@ -416,3 +416,10 @@ html[data-theme="dark"] .search-media-menu{background:#291d46;border-color:#8064
 
 .account-wallet-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px}
 #profileIdentity[hidden],#profilePublicationsSection[hidden]{display:none}
+
+.query-source-options label:has(input:disabled),.ai-preview-market:has(input:disabled){opacity:.55;cursor:not-allowed}
+.query-source-options [data-marketplace-disabled],.ai-preview-market>small{display:block;font-size:11px;line-height:1.4}
+
+#changeQuerySources[hidden],.query-source-options[hidden],#queryAIOrigin[hidden]{display:none}
+.query-ai-origin{padding:16px;margin:16px 0;border:1px solid #8064aa80;border-radius:16px;text-align:left}
+.query-ai-origin p{margin-bottom:0}

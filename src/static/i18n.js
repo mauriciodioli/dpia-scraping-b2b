@@ -405,3 +405,21 @@ Object.assign(DPIA_TRANSLATIONS, {
  'Recargar puntos':['Top up points','Doładuj punkty','Ricarica punti'],
  'Historial de puntos':['Points history','Historia punktów','Cronologia punti']
 });
+
+Object.assign(DPIA_TRANSLATIONS,{
+ 'Todavía no habilitado':['Not enabled yet','Jeszcze niedostępne','Non ancora abilitato'],
+ 'Por ahora, solo Amazon está habilitado para scraping.':['Only Amazon is currently enabled for scraping.','Obecnie tylko Amazon jest dostępny do scrapingu.','Al momento solo Amazon è abilitato per lo scraping.']
+});
+
+Object.assign(DPIA_I18N_BINDINGS,{
+ 'sources.aiNotice':'La consulta se enviará a OpenAI. No se iniciará scraping.',
+ 'sources.novelNotice':'Primero se prepara la búsqueda con OpenAI y luego se consulta Amazon.',
+ 'sources.confirmAI':'Confirmar y consultar con IA',
+ 'sources.confirmSearch':'Confirmar e iniciar búsqueda'
+});
+Object.assign(DPIA_TRANSLATIONS,{
+ 'La consulta se enviará a OpenAI. No se iniciará scraping.':['Your query will be sent to OpenAI. No scraping will start.','Zapytanie zostanie wysłane do OpenAI. Scraping nie zostanie uruchomiony.','La richiesta verrà inviata a OpenAI. Non verrà avviato alcuno scraping.'],
+ 'Primero se prepara la búsqueda con OpenAI y luego se consulta Amazon.':['OpenAI prepares the search first, then Amazon is queried.','Najpierw OpenAI przygotowuje wyszukiwanie, a następnie przeszukiwany jest Amazon.','Prima OpenAI prepara la ricerca, poi viene consultato Amazon.'],
+ 'Confirmar y consultar con IA':['Confirm and ask AI','Potwierdź i zapytaj AI','Conferma e chiedi all’IA'],
+ 'Confirmar e iniciar búsqueda':['Confirm and start search','Potwierdź i rozpocznij wyszukiwanie','Conferma e avvia la ricerca']
+});

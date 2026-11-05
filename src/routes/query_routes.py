@@ -114,6 +114,8 @@ def generate_query():
     from services.query_preparation import result_template
     try:
         body=request.get_json(silent=True)
+        from services.query_sources import require_enabled_marketplaces
+        if isinstance(body,dict) and body.get('mode')!='explorar':require_enabled_marketplaces(body.get('sources'))
         prepared=prepare_context(body,session['user_id'])
         if prepared['mode']=='explorar':
             if not current_app.config.get('LIVE_PROVIDER_CALLS_ENABLED'):
@@ -170,6 +172,8 @@ def direct_scraping():
             raise PreparationError('Elegí expresamente un marketplace para iniciar scraping.')
         if len(body['sources'])!=1 or body['sources'][0] not in EXTERNAL:
             raise PreparationError('Elegí un solo marketplace para scraping directo.')
+        from services.query_sources import require_enabled_marketplaces
+        require_enabled_marketplaces(body['sources'])
         if body.get('attachments') or body.get('mode')!='buscar':
             raise PreparationError('El scraping directo admite únicamente texto de búsqueda.')
         try:

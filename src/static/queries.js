@@ -3,7 +3,7 @@ let queryMode='buscar', queryPrepared=null, queryBusy=false, queryRequestId=null
 let novelAutoDraft='', exploreAutoDraft='', exploreBudgetDraft='', queryBudgetCountry='';
 const externalQuerySources=['amazon','ebay','aliexpress','mercadolibre'];
 const querySources=[...externalQuerySources,'local','dpia','historial'];
-function sourceAvailableForCountry(source){return source!=='mercadolibre'||['Argentina','México'].includes(country);}
+function sourceAvailableForCountry(source){return (!externalQuerySources.includes(source)||(window.DPIA_ENABLED_MARKETPLACES||['amazon']).includes(source))&&(source!=='mercadolibre'||['Argentina','México'].includes(country));}
 function refreshQuerySelectors(category=null, scopeId=null){
  const scopeSelect=document.querySelector('#queryScope'), categorySelect=document.querySelector('#queryCategory'), postalSelect=document.querySelector('#queryPostal');
  const oldScope=scopeSelect.value,oldCategory=categorySelect.value,oldPostal=postalSelect.value;
@@ -132,12 +132,28 @@ function savedQuerySources(){
 function openSourceModal(generateAfter=false){
  if(queryBusy)return;
  pendingSourcesGeneration=generateAfter;
+ const exploring=queryMode==='explorar',novel=queryMode==='novedades';
+ document.querySelector('#queryAIOrigin').hidden=!exploring&&!novel;
+ document.querySelector('#queryAIOriginNotice').setAttribute('data-i18n',novel?'sources.novelNotice':'sources.aiNotice');
+ document.querySelector('#querySourcesHint').hidden=exploring;
+ document.querySelector('#allQuerySources').closest('label').hidden=exploring;
+ document.querySelector('.query-source-options').hidden=exploring;
+ const confirm=document.querySelector('#confirmQuerySources');
+ if(generateAfter)confirm.setAttribute('data-i18n',exploring?'sources.confirmAI':'sources.confirmSearch');
+ else{confirm.removeAttribute('data-i18n');confirm.textContent=window.DPIAI18N.translate('Guardar y continuar');}
+ window.DPIAI18N.refresh();
  const selected=savedQuerySources()||['amazon'];
  document.querySelector('#allQuerySources').checked=['local','dpia','historial'].every(source=>selected.includes(source));
  for(const checkbox of document.querySelectorAll('[name="querySource"]')){
-  const source=checkbox.value,available=source==='allegro'?country==='Polonia':sourceAvailableForCountry(source);
-  if(['mercadolibre','allegro'].includes(source))checkbox.closest('label').hidden=!available;
-  checkbox.disabled=source==='allegro'||!available;checkbox.checked=!checkbox.disabled&&selected.includes(source);
+  const source=checkbox.value,label=checkbox.closest('label');
+  const regional=source==='allegro'?country==='Polonia':source!=='mercadolibre'||['Argentina','México'].includes(country);
+  if(['mercadolibre','allegro'].includes(source))label.hidden=!regional;
+  checkbox.disabled=source==='allegro'||!sourceAvailableForCountry(source);checkbox.checked=!checkbox.disabled&&selected.includes(source);
+  if(externalQuerySources.includes(source)){
+   let note=label.querySelector('[data-marketplace-disabled]');
+   if(checkbox.disabled){if(!note){note=document.createElement('small');note.dataset.marketplaceDisabled='';label.append(note);}note.textContent=window.DPIAI18N.translate('Todavía no habilitado');}
+   else note?.remove();
+  }
  }
  document.querySelector('#querySourceError').textContent='';document.querySelector('#querySourcesModal').hidden=false;
  document.querySelector('#confirmQuerySources').focus();
@@ -252,11 +268,12 @@ function updateScrapingStatus(data){
  }
 }
 document.querySelector('#scrapingActivity').onclick=async()=>{const badge=document.querySelector('#scrapingActivity'),id=badge.dataset.operationId;badge.hidden=true;show('consultPage');if(id)await loadQueryOperation(id);document.querySelector('#queryResults').scrollIntoView({behavior:'smooth',block:'start'});};
-async function generateDPIAQuery(){
+async function generateDPIAQuery(sourceConfirmed=false){
  if(queryBusy||!queryPrepared)return;
  if(!currentEmail){openAuth();return;}
  if(JSON.stringify(queryBody())!==queryPrepared.fingerprint){invalidateQuery();document.querySelector('#queryStatus').textContent='El pedido cambió. Prepará nuevamente la consulta.';return;}
  const exploring=queryPrepared.body.mode==='explorar';
+ if(sourceConfirmed!==true){openSourceModal(true);return;}
  const sources=exploring?['dpia']:savedQuerySources();if(!sources){openSourceModal(true);return;}
  if(queryPrepared.body.mode==='novedades'&&sources.filter(source=>externalQuerySources.includes(source)).length!==1){document.querySelector('#queryStatus').textContent='Elegí un marketplace para buscar novedades.';openSourceModal(true);return;}
  queryBusy=true;const button=document.querySelector('#generateQuery'),status=document.querySelector('#queryStatus');button.disabled=true;
@@ -294,17 +311,21 @@ async function generateDPIAQuery(){
 }
 document.querySelector('#queryScope').addEventListener('change',()=>{refreshQuerySelectors();syncLocalCategory();});
 for(const id of ['queryCategory','queryPostal','promptText','searchText'])document.querySelector('#'+id).addEventListener('input',invalidateQuery);
-document.querySelector('#generateQuery').onclick=generateDPIAQuery;
+document.querySelector('#generateQuery').onclick=()=>generateDPIAQuery();
 document.querySelector('#changeQuerySources').onclick=()=>openSourceModal(false);
 document.querySelector('#closeQuerySources').onclick=closeSourceModal;
 document.querySelector('#querySourcesModal').onclick=e=>{if(e.target.id==='querySourcesModal')closeSourceModal();};
 document.querySelector('#allQuerySources').onchange=e=>{for(const box of document.querySelectorAll('[name="querySource"]'))if(['local','dpia','historial'].includes(box.value))box.checked=e.target.checked;};
 document.querySelector('#confirmQuerySources').onclick=()=>{
+ if(queryMode==='explorar'){
+  const generate=pendingSourcesGeneration;closeSourceModal();if(generate)generateDPIAQuery(true);return;
+ }
+ const previous=savedQuerySources();
  const sources=[...document.querySelectorAll('[name="querySource"]:checked:not(:disabled)')].map(box=>box.value);
  if(pendingSourcesGeneration&&queryMode==='novedades'&&sources.filter(source=>externalQuerySources.includes(source)).length!==1){document.querySelector('#querySourceError').textContent='Elegí un marketplace para buscar novedades.';return;}
  if(!sources.length){document.querySelector('#querySourceError').textContent='Seleccioná al menos un origen de búsqueda.';return;}
  try{localStorage.setItem(sourcePreferenceKey(),JSON.stringify(sources));}catch(_){document.querySelector('#querySourceError').textContent='No se pudieron guardar los orígenes.';return;}
- const generate=pendingSourcesGeneration;queryRequestId=null;closeSourceModal();if(generate)generateDPIAQuery();
+ const generate=pendingSourcesGeneration;if(JSON.stringify(previous)!==JSON.stringify(sources))queryRequestId=null;closeSourceModal();if(generate)generateDPIAQuery(true);
 };
 function syncLocalCategory(){const option=document.querySelector('#queryCategory').selectedOptions[0];localCategory=option?.value?{id:option.value,name:option.textContent}:null;}
 document.querySelector('#queryCategory').addEventListener('change',()=>{syncLocalCategory();invalidateQuery();if(queryMode==='novedades')updateNovelDraft();else if(queryMode==='explorar')updateExploreDraft();});

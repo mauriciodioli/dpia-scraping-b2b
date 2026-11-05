@@ -30,9 +30,9 @@
  function controls(target){
   if(!active(target))return;
   const started=operation(target)?.submitted;
-  dialog.querySelector('#aiPreviewSearch').disabled=!!target.busy||!target.marketplace;
+  dialog.querySelector('#aiPreviewSearch').disabled=!!target.busy||!target.marketplace||!(window.DPIA_ENABLED_MARKETPLACES||['amazon']).includes(target.marketplace);
   dialog.querySelector('#aiPreviewSearch').textContent=tr(target.busy?'Buscando…':started?'Consultar estado':'Buscar productos reales');
-  dialog.querySelectorAll('[name="aiPreviewMarketplace"]').forEach(node=>node.disabled=!!target.busy);
+  dialog.querySelectorAll('[name="aiPreviewMarketplace"]').forEach(node=>node.disabled=!!target.busy||!(window.DPIA_ENABLED_MARKETPLACES||['amazon']).includes(node.value));
  }
  function results(target,data){
   if(!active(target))return;
@@ -62,7 +62,7 @@
   return response.json();
  }
  async function search(){
-  const target=selected;if(!target||target.busy||!target.marketplace)return;
+  const target=selected;if(!target||target.busy||!target.marketplace||!(window.DPIA_ENABLED_MARKETPLACES||['amazon']).includes(target.marketplace))return;
   if(currentEmail!==target.email){close();return;}
   target.busy=true;controls(target);
   const status=dialog.querySelector('#aiPreviewSearchStatus');status.textContent=tr('Verificando consulta…');
@@ -132,8 +132,8 @@
   // The existing backend checks live availability and permissions before dispatch.
   for(const source of externalQuerySources){
    if(!names[source]||(source==='mercadolibre'&&!['Argentina','México'].includes(context.pais)))continue;
-   const label=element('label',undefined,'ai-preview-market'),radio=element('input');radio.type='radio';radio.name='aiPreviewMarketplace';radio.value=source;
-   radio.onchange=()=>{selected.marketplace=source;dialog.querySelector('#aiPreviewResults').replaceChildren();dialog.querySelector('#aiPreviewSearchStatus').textContent='';controls(selected);};label.append(radio,element('span',names[source]));options.append(label);
+   const label=element('label',undefined,'ai-preview-market'),radio=element('input');radio.type='radio';radio.name='aiPreviewMarketplace';radio.value=source;radio.disabled=!(window.DPIA_ENABLED_MARKETPLACES||['amazon']).includes(source);
+   radio.onchange=()=>{selected.marketplace=source;dialog.querySelector('#aiPreviewResults').replaceChildren();dialog.querySelector('#aiPreviewSearchStatus').textContent='';controls(selected);};label.append(radio,element('span',names[source]));if(radio.disabled)label.append(element('small',tr('Todavía no habilitado')));options.append(label);
   }
   fieldset.append(options);markets.append(fieldset,element('p',tr('DPIA verifica la disponibilidad para tu país y los permisos antes de iniciar scraping.'),'hint'));
   const note=element('p',tr('Cada búsqueda iniciada consume 1 punto. Consultar el estado no repite el scraping.'),'ai-preview-note');
