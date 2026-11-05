@@ -39,8 +39,8 @@
  }
  function gallery(data){
   if(chosen)chosen.stage=data;
-  $('prepareProductImages').disabled=imageBusy||['pending','running','failed'].includes(data.status);
-  $('prepareProductImages').textContent=data.status==='complete'?'Consultar estado':'Preparar imágenes';
+  $('prepareProductImages').disabled=imageBusy;
+  $('prepareProductImages').textContent=['pending','running','complete','failed'].includes(data.status)?'Consultar estado':'Preparar imágenes';
   $('productGallery').replaceChildren();
   for(const value of data.images||[]){const url=safeQueryUrl(value);if(!url)continue;const label=document.createElement('label'),check=document.createElement('input'),img=document.createElement('img');check.type='checkbox';check.name='publicationPhoto';check.value=url;let saved=null;try{saved=JSON.parse(localStorage.getItem(photoKey())||'null');}catch(_){}check.checked=!Array.isArray(saved)||saved.includes(url);check.onchange=()=>{try{localStorage.setItem(photoKey(),JSON.stringify([...document.querySelectorAll('[name="publicationPhoto"]:checked')].map(n=>n.value)));}catch(_){}};img.src=url;img.alt='Imagen del producto';img.loading='lazy';img.onerror=()=>label.remove();label.append(check,img);$('productGallery').append(label);}
   $('queryPublicationForm').hidden=!(data.status==='complete'&&data.images?.length);
@@ -50,24 +50,24 @@
   const diagnosis=d?`Precio: ${d.price??'N/D'} · Rating: ${d.rating??'N/D'} · Reseñas: ${d.rating_missing?'No exigidas sin rating':d.reviews}. `:'';
   const reasons=d?Object.entries(d.checks).filter(([,ok])=>!ok).map(([key])=>({precio:'precio',rating:'rating',resenas:'reseñas'}[key])):[];
   const text=data.status==='not_started'?'Aplicá los filtros y prepará las imágenes cuando quieras.':data.status==='running'?'Preparación en ejecución confirmada en DPIA. Podés cerrar este modal.':data.status==='pending'?'Preparación pendiente de confirmación. Podés cerrar este modal y continuar navegando.':data.status==='filtered'?`No cumple los filtros de ${reasons.join(', ')}. Podés ajustarlos antes de preparar imágenes.`:data.status==='complete'?(data.images?.length?'Imágenes preparadas.':'La API no devolvió imágenes válidas.'):data.error||'Preparación pendiente de confirmación.';
-  $('productImagesStatus').textContent=diagnosis+text;
+  $('productImagesStatus').textContent=diagnosis+text+(['pending','running'].includes(data.status)&&data.error?' '+data.error:'');
  }
  function openImages(operation,index,product,stage){
   if(!currentEmail){openAuth();return;}
   chosen={operation,index,email:currentEmail,product};$('prepareProductImages').disabled=imageBusy;$('prepareProductImages').textContent='Preparar imágenes';$('queryPublicationForm').hidden=true;$('queryPublicationStatus').textContent='';$('publicationTitle').value=product.title.slice(0,120);$('publicationDescription').value=product.title;$('publicationCurrency').value=product.currency||'';$('productImagesTitle').textContent=product.title;
-  $('imagePriceMin').value='0';$('imagePriceMax').value='';$('imageRatingMin').value='4.4';$('imageReviewsMin').value='50';
+  $('imagePriceMin').value='0';$('imagePriceMax').value='';$('imageRatingMin').value='';$('imageReviewsMin').value='';
   $('productGallery').replaceChildren();$('productImagesStatus').textContent='Se usará el producto original del trabajo DPIA. Preparar imágenes no publica el producto.';
-  if(stage){if(stage.filters){$('imagePriceMin').value=stage.filters.precio_minimo;$('imagePriceMax').value=stage.filters.precio_maximo??'';$('imageRatingMin').value=stage.filters.rating_minimo;$('imageReviewsMin').value=stage.filters.resenas_minimas;}gallery(stage);}
+  if(stage){if(stage.filters){$('imagePriceMin').value=stage.filters.precio_minimo;$('imagePriceMax').value=stage.filters.precio_maximo??'';$('imageRatingMin').value=stage.filters.rating_minimo??'';$('imageReviewsMin').value=stage.filters.resenas_minimas??'';}gallery(stage);}
   $('productImagesOverlay').hidden=false;$('closeProductImages').focus();if(!stage)refreshChosen({...chosen});
  }
  async function prepareImages(){
   if(imageBusy||!chosen||chosen.email!==currentEmail)return;
   const form=$('productImagesForm');if(!form.reportValidity())return;
   const target={...chosen};
-  if(target.stage?.status==='complete'){await refreshChosen(target);return;}
+  if(['pending','running','complete','failed'].includes(target.stage?.status)){await refreshChosen(target);return;}
   imageBusy=true;$('prepareProductImages').disabled=true;
   $('productImagesStatus').textContent='Consultando imágenes en DPIA…';
-  const filters={precio_minimo:Number($('imagePriceMin').value),precio_maximo:$('imagePriceMax').value===''?null:Number($('imagePriceMax').value),rating_minimo:Number($('imageRatingMin').value),resenas_minimas:Number($('imageReviewsMin').value)};
+  const filters={precio_minimo:Number($('imagePriceMin').value),precio_maximo:$('imagePriceMax').value===''?null:Number($('imagePriceMax').value),rating_minimo:$('imageRatingMin').value===''?null:Number($('imageRatingMin').value),resenas_minimas:$('imageReviewsMin').value===''?null:Number($('imageReviewsMin').value)};
   try{
    const response=await fetch('/api/consultas/operaciones/'+encodeURIComponent(target.operation)+'/imagenes',{
     method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_index:target.index,filters}),signal:AbortSignal.timeout(30000)}),data=await response.json();
@@ -75,7 +75,7 @@
    if(!response.ok||!data.success)throw new Error(data.error||'No se pudieron preparar las imágenes.');
    gallery(data);trackImages();
   }catch(error){if(currentEmail===target.email)$('productImagesStatus').textContent=error.name==='TimeoutError'?'La preparación quedó pendiente. Consultá el resultado guardado antes de reintentar.':error.message;}
-  finally{imageBusy=false;$('prepareProductImages').disabled=['pending','running','failed'].includes(chosen?.stage?.status);}
+  finally{imageBusy=false;$('prepareProductImages').disabled=false;}
  }
  async function publish(){
   if(imageBusy||!chosen||chosen.email!==currentEmail||!$('queryPublicationForm').reportValidity())return;

@@ -17,15 +17,18 @@ from services.query_preparation import PreparationError
 DEFAULTS = dict(precio_minimo=0, precio_maximo=None, rating_minimo=4.4, resenas_minimas=50)
 
 
-def validate_filters(value):
+def validate_filters(value, *, optional=False):
     if not isinstance(value, dict) or set(value)-set(DEFAULTS):
         raise PreparationError('Filtros no reconocidos.')
-    result = {**DEFAULTS, **value}
+    defaults={**DEFAULTS,'rating_minimo':None,'resenas_minimas':None} if optional else DEFAULTS
+    result = {**defaults, **value}
     for key, number in result.items():
-        if key=='precio_maximo' and number is None:continue
+        if number is None and (key=='precio_maximo' or optional and key in ('rating_minimo','resenas_minimas')):continue
         if type(number) not in (int,float) or not math.isfinite(number) or number<0:
             raise PreparationError('Los filtros deben ser números finitos no negativos.')
-    if not 0<result['rating_minimo']<=5 or type(result['resenas_minimas']) is not int or result['resenas_minimas']<1:
+    rating,reviews=result['rating_minimo'],result['resenas_minimas']
+    if ((rating is not None and (rating<0 or rating>5 or not optional and rating==0)) or
+            (reviews is not None and (type(reviews) is not int or reviews<(0 if optional else 1)))):
         raise PreparationError('Revisá el rating mínimo y la cantidad de reseñas.')
     if result['precio_maximo'] is not None and result['precio_maximo']<result['precio_minimo']:
         raise PreparationError('El precio máximo no puede ser menor al mínimo.')
@@ -46,8 +49,8 @@ def diagnostics(item, filters):
     reviews=int(match[1].replace('.','').replace(',','')) if match else 0
     checks={'precio':bool(price and price>0 and price>=filters['precio_minimo'] and
               (filters['precio_maximo'] is None or price<=filters['precio_maximo'])),
-            'rating':rating is None or rating>=filters['rating_minimo'],
-            'resenas':rating is None or reviews>=filters['resenas_minimas']}
+            'rating':filters['rating_minimo'] is None or rating is None or rating>=filters['rating_minimo'],
+            'resenas':filters['resenas_minimas'] is None or rating is None or reviews>=filters['resenas_minimas']}
     return {'eligible':all(checks.values()),'checks':checks,'price':price,'rating':rating,
             'reviews':reviews,'rating_missing':rating is None}
 
@@ -74,7 +77,7 @@ def prepare_images(quota, operation_id, user_id, index, filters, config):
     if not operation:raise PreparationError('Operación no encontrada.',404)
     if operation['source']!='amazon':raise PreparationError('La galería por ASIN está disponible para Amazon.')
     item=raw_product(operation,index)
-    filters=validate_filters(filters);diagnosis=diagnostics(item,filters)
+    filters=validate_filters(filters,optional=True);diagnosis=diagnostics(item,filters)
     if not diagnosis['eligible']:
         return {'success':True,'status':'filtered','images':[],'diagnostics':diagnosis,'filters':filters}
     from services.base44_images import Base44Images, valid_uuid, product_reference, public_stage
@@ -83,11 +86,11 @@ def prepare_images(quota, operation_id, user_id, index, filters, config):
     if old.get('status')=='complete' or old.get('queue_kind')=='base44_images':
         return {'success':True,**public_stage(old),'diagnostics':diagnosis}
     if old:
-        raise PreparationError('Esta preparación anterior no tiene seguimiento Base44. No se reiniciará automáticamente.',409)
+        raise PreparationError('Esta preparación no tiene seguimiento persistente en DPIA. No se reiniciará automáticamente.',409)
     reference=outcome.get('base44') or {}
     job_id=reference.get('trabajo_id')
     if not valid_uuid(job_id):
-        raise PreparationError('Esta búsqueda anterior no tiene identificadores Base44. Realizá una nueva búsqueda explícita para preparar imágenes.',409)
+        raise PreparationError('Esta búsqueda no tiene una referencia de trabajo guardado en DPIA. No se iniciará otro scraping automáticamente.',409)
     if not config.get('LIVE_PROVIDER_CALLS_ENABLED',False):
         raise PreparationError('Las llamadas reales están deshabilitadas.',503)
     client=Base44Images(config);client.authorize()

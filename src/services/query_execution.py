@@ -130,7 +130,7 @@ def dispatch_external(source,result,config,*,quota=None,operation_id=None,base44
         if base44:
             from services.base44_images import valid_uuid
             if valid_uuid(job_id):outcome['base44']={'trabajo_id':job_id}
-            else:outcome['image_error']='DPIA no devolvió un trabajo Base44 válido; no se prepararán imágenes.'
+            else:outcome['image_error']='DPIA no devolvió una referencia de trabajo válida; no se prepararán imágenes.'
         return finish('consumed',outcome)
     except requests.ConnectTimeout:
         return rejected('No se pudo establecer la conexión; el scraping no comenzó.')

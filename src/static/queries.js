@@ -221,7 +221,7 @@ async function loadQueryOperation(id){
  try{
   const response=await fetch('/api/consultas/operaciones/'+encodeURIComponent(id),{cache:'no-store'}),data=await response.json();
   if(!response.ok||!data.success)throw new Error(data.error||'No se pudo consultar el estado.');
-  lastQueryOperationId=id;renderQueryResult(data.payload);updateScrapingStatus(data.payload);window.DPIACredits?.refresh();
+  lastQueryOperationId=id;renderQueryResult(data.payload);window.DPIACredits?.refresh();
   status.textContent=data.state==='pending'?'La ejecución sigue pendiente. No se reenviará.':data.state==='failed'?'La ejecución falló.':'Estado recuperado del servidor.';
  }catch(error){status.textContent=error.message;}
 }

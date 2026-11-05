@@ -53,7 +53,7 @@ class Base44Images:
         return data
 
     def job(self,job_id):
-        if not valid_uuid(job_id):raise PreparationError('Falta el identificador original Base44.',409)
+        if not valid_uuid(job_id):raise PreparationError('Falta la referencia del trabajo original de DPIA.',409)
         data=self.request('GET','/base44/trabajos/'+job_id)
         if data.get('trabajo_id')!=job_id or data.get('marketplace')!='amazon':
             raise PreparationError('El trabajo no corresponde a Amazon.',409)
@@ -79,7 +79,7 @@ def product_reference(job,item):
         except (ValueError,TypeError):continue
         if original.get('asin')==asin and other_host==host:matches.append(product['producto_id'])
     if len(matches)!=1:
-        raise PreparationError('No se pudo identificar de forma única el producto original de Base44.',409)
+        raise PreparationError('No se pudo identificar de forma única el producto original en DPIA.',409)
     return matches[0]
 
 

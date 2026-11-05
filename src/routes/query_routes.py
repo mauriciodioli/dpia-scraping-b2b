@@ -178,7 +178,7 @@ def direct_scraping():
             raise PreparationError('Identificador de consulta inválido.') from None
         pipeline=body.get('image_pipeline')
         if pipeline is not None and (pipeline!='base44' or body['sources']!=['amazon']):
-            raise PreparationError('La preparación Base44 solo admite Amazon.')
+            raise PreparationError('Esta preparación de imágenes solo admite Amazon.')
         prepared=prepare_context({k:v for k,v in body.items() if k!='image_pipeline'},session['user_id'])
         if pipeline:prepared['image_pipeline']=pipeline
         if len(prepared['user_message'])>500:
