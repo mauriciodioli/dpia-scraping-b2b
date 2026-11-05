@@ -60,17 +60,54 @@
   if(stage){if(stage.filters){$('imagePriceMin').value=stage.filters.precio_minimo;$('imagePriceMax').value=stage.filters.precio_maximo??'';$('imageRatingMin').value=stage.filters.rating_minimo??'';$('imageReviewsMin').value=stage.filters.resenas_minimas??'';}gallery(stage);}
   $('productImagesOverlay').hidden=false;$('closeProductImages').focus();if(!stage)refreshChosen({...chosen});
  }
- function confirmImagePreparation(){
+ function confirmImagePreparation(message){
   return new Promise(resolve=>{
    const dialog=document.createElement('dialog');dialog.className='auth-dialog profile-dialog';
    const title=document.createElement('h2');title.textContent='Confirmar preparación de imágenes';
-   const text=document.createElement('p');text.textContent='Preparar o volver a solicitar las imágenes puede consumir puntos. ¿Querés permitirlo?';
+   const text=document.createElement('p');text.textContent=message||'Preparar o volver a solicitar las imágenes puede consumir puntos. ¿Querés permitirlo?';
    const allow=document.createElement('button');allow.type='button';allow.className='primary';allow.textContent='Permitir';
    const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancelar';
    const finish=value=>{dialog.close();dialog.remove();resolve(value);};
    allow.onclick=()=>finish(true);cancel.onclick=()=>finish(false);dialog.oncancel=event=>{event.preventDefault();finish(false);};
    dialog.append(title,text,allow,cancel);document.body.append(dialog);dialog.showModal();cancel.focus();
   });
+ }
+ async function createImageSearch(target,body){
+  if(!await confirmImagePreparation('Esta búsqueda anterior no tiene un trabajo compatible con imágenes. Crear una nueva búsqueda Amazon puede consumir 1 punto. Los resultados pueden cambiar y deberás elegir el producto nuevamente. ¿Querés permitirlo?'))return;
+  if(currentEmail!==target.email||chosen?.operation!==target.operation||chosen?.index!==target.index)return;
+  const key='dpia-image-search:'+target.email+':'+target.operation;
+  let record;
+  try{record=JSON.parse(sessionStorage.getItem(key)||'null');}catch(_){}
+  if(record?.id){
+   await loadQueryOperation(record.id);$('productImagesOverlay').hidden=true;return;
+  }
+  record={id:crypto.randomUUID()};
+  // Save before POST. An uncertain response can only be recovered by reading it.
+  sessionStorage.setItem(key,JSON.stringify(record));
+  $('productImagesStatus').textContent='Creando búsqueda Amazon compatible con imágenes…';
+  const response=await fetch('/api/consultas/scraping-directo',{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({...body,request_id:record.id}),signal:AbortSignal.timeout(200000)});
+  const data=await response.json();
+  if(currentEmail!==target.email)return;
+  if(!response.ok||!data.success){
+   if(response.status<500)sessionStorage.removeItem(key);
+   if(response.status===402)window.DPIACredits?.insufficient(data);
+   throw new Error(data.error||'No se confirmó la búsqueda.');
+  }
+  $('productImagesOverlay').hidden=true;chosen=null;
+  await loadQueryOperation(record.id);window.DPIACredits?.refresh();
+  $('queryStatus').textContent='Nueva búsqueda guardada. Elegí el producto y pulsá Preparar imágenes.';
+ }
+ let imageActivityKey='';
+ function imageActivity(task){
+  const stage=task.stage,state=['pending','running'].includes(stage.status)?'running':stage.status==='complete'?'complete':stage.status==='filtered'?'warning':'failed';
+  let notice=$('imagePreparationNotice');
+  if(!notice){notice=document.createElement('button');notice.id='imagePreparationNotice';notice.type='button';notice.className='scraping-activity';notice.style.bottom='150px';notice.setAttribute('aria-live','polite');document.body.append(notice);}
+  notice.hidden=false;notice.dataset.state=state;
+  notice.textContent=state==='running'?'Preparando imágenes… · Consultar':state==='complete'?'Las imágenes de tu producto están listas · Ver':state==='warning'?'Revisá los filtros de imágenes · Ver':'La preparación de imágenes informó un error · Ver';
+  notice.onclick=()=>{notice.hidden=true;const preview=$('aiExplorePreview');if(preview?.open)preview.close();openImages(task.operation_id,task.product_index,task.product,stage);};
+  const key=JSON.stringify([task.operation_id,task.product_index,state]);
+  if(key!==imageActivityKey){imageActivityKey=key;setQueryArtState(state==='running'?'running':state==='complete'?'success':state==='warning'?'warning':'error');}
  }
  async function prepareImages(){
   if(imageBusy||!chosen||chosen.email!==currentEmail)return;
@@ -83,13 +120,17 @@
   $('prepareProductImages').disabled=true;
   $('productImagesStatus').textContent='Consultando imágenes en DPIA…';
   const filters={precio_minimo:Number($('imagePriceMin').value),precio_maximo:$('imagePriceMax').value===''?null:Number($('imagePriceMax').value),rating_minimo:$('imageRatingMin').value===''?null:Number($('imageRatingMin').value),resenas_minimas:$('imageReviewsMin').value===''?null:Number($('imageReviewsMin').value)};
+  $('productImagesOverlay').hidden=true;
+  imageActivity({operation_id:target.operation,product_index:target.index,product:target.product,stage:{status:'pending',images:[]}});
   try{
    const response=await fetch('/api/consultas/operaciones/'+encodeURIComponent(target.operation)+'/imagenes',{
     method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_index:target.index,filters,confirmed:true}),signal:AbortSignal.timeout(30000)}),data=await response.json();
-   if(currentEmail!==target.email||chosen?.operation!==target.operation||chosen?.index!==target.index)return;
+   if(currentEmail!==target.email)return;
+   if(response.status===409&&data.code==='image_search_required'){imageActivity({operation_id:target.operation,product_index:target.index,product:target.product,stage:{status:'filtered',error:data.error,images:[]}});await createImageSearch(target,data.search_body);return;}
    if(!response.ok||!data.success)throw new Error(data.error||'No se pudieron preparar las imágenes.');
-   gallery(data);trackImages();
-  }catch(error){if(currentEmail===target.email)$('productImagesStatus').textContent=error.name==='TimeoutError'?'La preparación quedó pendiente. Consultá el resultado guardado antes de reintentar.':error.message;}
+   if(chosen?.operation===target.operation&&chosen?.index===target.index)gallery(data);
+   imageActivity({operation_id:target.operation,product_index:target.index,product:target.product,stage:data});trackImages();
+  }catch(error){if(currentEmail===target.email){const stage={status:error.name==='TimeoutError'?'pending':'failed',images:[],error:error.message};$('productImagesStatus').textContent=error.message;imageActivity({operation_id:target.operation,product_index:target.index,product:target.product,stage});}}
   finally{imageBusy=false;$('prepareProductImages').disabled=false;}
  }
  async function publish(){
@@ -157,6 +198,8 @@
   try{
    const response=await fetch('/api/consultas/imagenes/seguimiento',{cache:'no-store'});if(!response.ok)return;
    const data=await response.json();if(!data.success||email!==currentEmail||serial!==trackingGeneration)return;
+   const active=(data.preparations||[]).find(task=>['pending','running'].includes(task.stage.status));
+   if(active)imageActivity(active);
    for(const task of data.preparations||[]){
     if(chosen?.operation===task.operation_id&&chosen?.index===task.product_index){
      if(JSON.stringify(chosen.stage)!==JSON.stringify(task.stage))gallery(task.stage);
@@ -165,10 +208,7 @@
     const key='dpia-image-notice:'+JSON.stringify([email,task.operation_id,task.product_index,task.stage.updated_at]);
     let seen=false;try{seen=localStorage.getItem(key)==='1';}catch(_){}
     if(seen)continue;
-    let notice=$('imagePreparationNotice');if(!notice){notice=document.createElement('button');notice.id='imagePreparationNotice';notice.type='button';notice.className='scraping-activity';notice.style.bottom='150px';notice.setAttribute('aria-live','polite');document.body.append(notice);}
-    notice.hidden=false;notice.dataset.state=task.stage.status==='complete'?'complete':'failed';
-    notice.textContent=task.stage.status==='complete'?'Las imágenes de tu producto están listas · Ver':'La preparación de imágenes informó un error · Ver';
-    notice.onclick=()=>{notice.hidden=true;const preview=document.querySelector('#aiExplorePreview');if(preview?.open)preview.close();openImages(task.operation_id,task.product_index,task.product,task.stage);};
+    if(!(data.preparations||[]).some(t=>['pending','running'].includes(t.stage.status)))imageActivity(task);
     try{localStorage.setItem(key,'1');}catch(_){}
    }
   }catch(_){}finally{trackingBusy=false;}
@@ -189,6 +229,6 @@
  $('closeProductImages').onclick=closeImages;
  $('productImagesOverlay').onclick=e=>{if(e.target===$('productImagesOverlay'))closeImages();};
  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeImages();});
- new MutationObserver(()=>{if(identity!==currentEmail){identity=currentEmail;generation++;trackingGeneration++;if($('imagePreparationNotice'))$('imagePreparationNotice').hidden=true;setTimeout(trackImages,0);$('queryHistoryList').replaceChildren();$('ArchivosCargados').replaceChildren(new Option('Seleccioná una búsqueda',''));$('productImagesOverlay').hidden=true;chosen=null;}}).observe($('userBtn'),{childList:true,subtree:true,characterData:true});
+ new MutationObserver(()=>{if(identity!==currentEmail){identity=currentEmail;generation++;trackingGeneration++;imageActivityKey='';if($('imagePreparationNotice'))$('imagePreparationNotice').hidden=true;setTimeout(trackImages,0);$('queryHistoryList').replaceChildren();$('ArchivosCargados').replaceChildren(new Option('Seleccioná una búsqueda',''));$('productImagesOverlay').hidden=true;chosen=null;}}).observe($('userBtn'),{childList:true,subtree:true,characterData:true});
  window.DPIAHistory={showQuery,showHistory,imageButton,remoteImageButton};
 })();

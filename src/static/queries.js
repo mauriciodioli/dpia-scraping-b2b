@@ -278,7 +278,7 @@ async function generateDPIAQuery(){
   }catch(_){}finally{polling=false;}
  },3000):null;
  try{
-  const response=await fetch(direct?'/api/consultas/scraping-directo':'/api/consultas/generar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...queryPrepared.body,sources,request_id:queryRequestId}),signal:AbortSignal.timeout(650000)});
+  const response=await fetch(direct?'/api/consultas/scraping-directo':'/api/consultas/generar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...queryPrepared.body,sources,...(direct&&sources[0]==='amazon'?{image_pipeline:'base44'}:{}),request_id:queryRequestId}),signal:AbortSignal.timeout(650000)});
   const data=await response.json();if(novel&&currentEmail!==email)return;if(response.status===401)openAuth();
   if(response.status===402&&data.code==='insufficient_credit'){if(direct||novel)setScrapingStatus('failed','No se inició: ejecuciones insuficientes · Consultar');window.DPIACredits?.insufficient(data);return;}
   if(!response.ok||!data.success){const confirmedRejection=response.status<500||data.code==='persistence_not_configured'||data.not_started===true;if((direct||novel)&&confirmedRejection)setScrapingStatus('failed','No se inició la búsqueda · Consultar');const error=new Error(data.error||'No se pudo generar la consulta.');error.confirmedRejection=confirmedRejection;throw error;}

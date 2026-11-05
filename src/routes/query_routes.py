@@ -261,7 +261,7 @@ def query_product_images(operation_id):
         return jsonify(prepare_images(quota,operation_id,session['user_id'],body['product_index'],
                                       body.get('filters',{}),current_app.config,confirmed=body.get('confirmed',False)))
     except PreparationError as exc:
-        return jsonify(success=False,error=str(exc)),exc.status
+        return jsonify(success=False,error=str(exc),**({'code':'image_search_required','search_body':exc.search_body} if hasattr(exc,'search_body') else {})),exc.status
     except SQLAlchemyError:
         return persistence_unavailable()
 

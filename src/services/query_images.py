@@ -92,7 +92,12 @@ def prepare_images(quota, operation_id, user_id, index, filters, config, *, conf
     reference=outcome.get('base44') or {}
     job_id=reference.get('trabajo_id')
     if not valid_uuid(job_id):
-        raise PreparationError('Esta búsqueda no tiene una referencia de trabajo guardado en DPIA. No se iniciará otro scraping automáticamente.',409)
+        prepared=operation['prepared'];context=prepared['context']
+        error=PreparationError('Esta búsqueda anterior no creó un trabajo compatible con imágenes. Podés autorizar una nueva búsqueda Amazon.',409)
+        error.search_body={**{k:context[k] for k in ('pais','ciudad','idioma')},**prepared['ids'],
+            'mode':'buscar','sources':['amazon'],'attachments':[],'image_pipeline':'base44',
+            'user_message':prepared['user_message']}
+        raise error
     if not config.get('LIVE_PROVIDER_CALLS_ENABLED',False):
         raise PreparationError('Las llamadas reales están deshabilitadas.',503)
     client=Base44Images(config);client.authorize()
