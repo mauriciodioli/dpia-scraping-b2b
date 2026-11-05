@@ -375,3 +375,13 @@ Object.assign(DPIA_TRANSLATIONS, {
  'No quedan puntos disponibles.':['No points available.','Brak dostępnych punktów.','Non ci sono punti disponibili.'],
  'La ejecución sigue pendiente. Consultá el estado; no se reenviará.':['Execution is still pending. Check its status; it will not be resent.','Operacja nadal oczekuje. Sprawdź status; nie zostanie wysłana ponownie.','L’esecuzione è ancora in sospeso. Consulta lo stato; non verrà reinviata.']
 });
+
+Object.assign(DPIA_TRANSLATIONS, {
+ 'Cuenta':['Account','Konto','Account'],
+ 'Mi cuenta':['My account','Moje konto','Il mio account'],
+ 'Mis puntos disponibles':['My available points','Moje dostępne punkty','I miei punti disponibili'],
+ 'Ingresar con Google':['Sign in with Google','Zaloguj się przez Google','Accedi con Google'],
+ 'Iniciá sesión para acceder a tu cuenta.':['Sign in to access your account.','Zaloguj się, aby uzyskać dostęp do konta.','Accedi per visualizzare il tuo account.'],
+ 'Recargar puntos':['Top up points','Doładuj punkty','Ricarica punti'],
+ 'Historial de puntos':['Points history','Historia punktów','Cronologia punti']
+});

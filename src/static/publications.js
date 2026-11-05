@@ -7,7 +7,7 @@
   $('publicationHistory').replaceChildren();$('profileOverlay').hidden=true;
   $('deletePublicationOverlay').hidden=true;
  }
- function close(){if(deleting||promoting)return;clear();$('userBtn').focus();}
+ function close(){if(deleting||promoting)return;clear();const target=$('accountProfile');(target&&!target.hidden&&!$('accountPage').hidden?target:document.querySelector('nav [data-page=accountPage]')).focus();}
  function cancelDelete(){
   if(deleting)return;
   selected=null;$('deletePublicationOverlay').hidden=true;
