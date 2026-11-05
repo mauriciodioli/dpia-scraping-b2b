@@ -140,7 +140,7 @@ function renderQueryResult(data){
   }
   container.append(section);
  }
- if(data.flow==='explorar'){
+ if(data.flow==='explorar'&&!data.result?.needs_clarification){
   const heading=document.createElement('h3');heading.textContent='Sugerencias de IA';container.append(heading);
   const note=document.createElement('p');note.className='hint';note.textContent='Precios estimados, sin verificar disponibilidad. Los enlaces permiten comparar opciones; no son fuentes consultadas.';container.append(note);
   const grid=document.createElement('div');grid.className='scraped-products';
@@ -227,7 +227,7 @@ async function generateDPIAQuery(){
   if(!response.ok||!data.success){const confirmedRejection=response.status<500||data.code==='persistence_not_configured'||data.not_started===true;if((direct||novel)&&confirmedRejection)setScrapingStatus('failed','No se inició la búsqueda · Consultar');const error=new Error(data.error||'No se pudo generar la consulta.');error.confirmedRejection=confirmedRejection;throw error;}
   if(!exploring)lastQueryOperationId=data.request_id||queryRequestId;window.DPIACredits?.refresh();
   if(!direct&&!novel&&(!queryPrepared||JSON.stringify(queryBody())!==queryPrepared.fingerprint)){status.textContent='El pedido cambió. Prepará nuevamente la consulta.';return;}
-  if(data.result?.needs_clarification){status.textContent=data.result.clarifying_question;if(novel)setScrapingStatus('failed','La consulta necesita una aclaración · Consultar');renderQueryResult(data);return;}
+  if(data.result?.needs_clarification){status.textContent='La IA necesita una aclaración: '+data.result.clarifying_question+' Agregá la respuesta al pedido y prepará nuevamente la consulta.';if(novel)setScrapingStatus('failed','La consulta necesita una aclaración · Consultar');renderQueryResult(data);return;}
   renderQueryResult(data);if(direct||novel)updateScrapingStatus(data);
   const outcomes=Object.values(data.sources||{});
   status.textContent=outcomes.some(row=>row.status==='pending')?'La ejecución sigue pendiente. No se reenviará.':outcomes.some(row=>row.status==='failed')?'La ejecución falló.':'Consulta completada. Revisá los resultados de cada origen.';

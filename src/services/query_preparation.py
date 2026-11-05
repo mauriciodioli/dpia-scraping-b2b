@@ -93,6 +93,8 @@ No inventes precios, márgenes, disponibilidad, imágenes ni fuentes. Para datos
 Evitá duplicados y priorizá utilidad, tendencia y conversión. Descripciones en el idioma del contexto.
 Si faltan datos críticos, incluyendo límites de precio exigidos por el usuario pero no definidos, devolvé needs_clarification=true,
 una sola pregunta en clarifying_question e items=[]. No adivines requisitos críticos.
+La ausencia de presupuesto no es un dato crítico si el usuario pide recomendaciones generales o precios orientativos.
+En esos casos proponé candidatos sin exigir un rango de precios; usá "N/D" cuando no puedas fundamentar un precio.
 Respetá moneda y shipping_to del país del contexto; no reutilices EUR o IT para Argentina.
 Si la modalidad es novedades, priorizá novedades y tendencias comprobables sin inventar métricas.
 Cada item debe tener producto, categoria, pais, fuente, motivo_tendencia, descripcion,
