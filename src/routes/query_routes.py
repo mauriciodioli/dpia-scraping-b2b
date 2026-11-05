@@ -91,6 +91,8 @@ def query_operation(operation_id):
         import json
         from services.query_preparation import result_template
         outcome=json.loads(operation['outcome']) if operation.get('outcome') else {'status':'pending','products':[]}
+        from services.base44_images import public_stage
+        if 'image_stages' in outcome:outcome['image_stages']={k:public_stage(v) for k,v in outcome['image_stages'].items()}
         generated=outcome.get('generation_result')
         payload=dict(result=generated or result_template(operation['prepared']),rows=sheet_rows(generated) if generated else [],request_id=operation_id,
                      sources={operation['source']:outcome})
@@ -174,7 +176,11 @@ def direct_scraping():
             operation_id=str(uuid.UUID(body.get('request_id','')))
         except (ValueError,TypeError,AttributeError):
             raise PreparationError('Identificador de consulta inválido.') from None
-        prepared=prepare_context(body,session['user_id'])
+        pipeline=body.get('image_pipeline')
+        if pipeline is not None and (pipeline!='base44' or body['sources']!=['amazon']):
+            raise PreparationError('La preparación Base44 solo admite Amazon.')
+        prepared=prepare_context({k:v for k,v in body.items() if k!='image_pipeline'},session['user_id'])
+        if pipeline:prepared['image_pipeline']=pipeline
         if len(prepared['user_message'])>500:
             raise PreparationError('La búsqueda directa admite hasta 500 caracteres.')
         # The durable repository must reserve atomically and enforce per-user
@@ -221,13 +227,28 @@ def query_history():
         return persistence_unavailable()
 
 
-@query_bp.post('/operaciones/<operation_id>/imagenes')
+@query_bp.route('/operaciones/<operation_id>/imagenes',methods=['GET','POST'])
 def query_product_images(operation_id):
     if type(session.get('user_id')) is not int:
         return jsonify(success=False,error='Iniciá sesión para preparar imágenes.'),401
     quota=current_app.extensions.get('scraping_quota')
     if quota is None:return persistence_unavailable()
     try:
+        if request.method=='GET':
+            from model.usuario import Usuario
+            from services.base44_images import public_stage
+            user=db.session.get(Usuario,session['user_id'])
+            if not user or not user.activo:raise PreparationError('Iniciá sesión.',401)
+            value=request.args.get('product_index','')
+            if set(request.args)!={'product_index'} or not value.isdigit() or len(value)>8:
+                raise PreparationError('Seleccioná un producto válido.')
+            index=int(value);operation=quota.operation(operation_id,session['user_id'])
+            if not operation:raise PreparationError('Operación no encontrada.',404)
+            import json
+            outcome=json.loads(operation['outcome']) if operation.get('outcome') else {}
+            if not 0<=index<len(outcome.get('products') or []):raise PreparationError('Producto no encontrado.',404)
+            stage=outcome.get('image_stages',{}).get(str(index))
+            return jsonify(success=True,**public_stage(stage or {'status':'not_started','images':[]}))
         body=request.get_json(silent=True)
         if not isinstance(body,dict) or set(body)-{'product_index','filters'} or type(body.get('product_index')) is not int:
             raise PreparationError('Seleccioná un producto del resultado guardado.')
@@ -238,6 +259,27 @@ def query_product_images(operation_id):
         return jsonify(success=False,error=str(exc)),exc.status
     except SQLAlchemyError:
         return persistence_unavailable()
+
+
+@query_bp.get('/imagenes/seguimiento')
+def image_tracking():
+    if type(session.get('user_id')) is not int:
+        return jsonify(success=False,error='Iniciá sesión.'),401
+    quota=current_app.extensions.get('scraping_quota')
+    if quota is None:return persistence_unavailable()
+    try:
+        import time
+        from model.usuario import Usuario
+        from services.base44_images import public_stage
+        user=db.session.get(Usuario,session['user_id'])
+        if not user or not user.activo:raise PreparationError('Iniciá sesión.',401)
+        tasks=quota.image_tasks(session['user_id'])
+        tasks=[dict(operation_id=t['operation_id'],product_index=t['product_index'],product=t['product'],
+                    stage=public_stage(t['stage'])) for t in tasks
+               if t['stage'].get('status') in ('pending','running') or t['stage'].get('updated_at',0)>time.time()-86400]
+        return jsonify(success=True,preparations=tasks)
+    except PreparationError as exc:return jsonify(success=False,error=str(exc)),exc.status
+    except SQLAlchemyError:return persistence_unavailable()
 
 
 @query_bp.post('/operaciones/<operation_id>/publicar')

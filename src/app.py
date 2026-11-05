@@ -32,4 +32,6 @@ def create_app():
 app = create_app()
 
 if __name__ == "__main__":
+    from services.base44_images import start_image_worker
+    start_image_worker(app)
     app.run(debug=app.config["DEBUG"], host=app.config["HOST"], port=app.config["PORT"])

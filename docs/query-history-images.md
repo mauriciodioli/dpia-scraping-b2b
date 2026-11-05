@@ -22,28 +22,59 @@ privados Base44. No se generan UUID falsos ni se envían IDs PWA a rutas Base44.
 
 ## Imágenes de resultados PWA
 
-Cada producto Amazon ofrece **Preparar imágenes** y filtros de precio, rating y
-reseñas. La evaluación individual replica las reglas del Scrapeador: si no hay
-rating interpretable, se permite precio positivo sin exigir reseñas. Si hay rating,
-se exigen los umbrales elegidos (por defecto 4.4 y 50). Esta acción individual no
-aplica un Top-3 global a todos los productos.
+Las nuevas búsquedas Amazon iniciadas desde el modal de candidatos conservan
+`POST /api/consultas/scraping-directo` y envían `image_pipeline: "base44"`.
+Solo esa combinación cambia el despacho remoto a `POST /base44/scraping`, con
+una clave estable derivada de la operación PWA. La búsqueda directa tradicional,
+Novedades y los otros marketplaces conservan su transporte. La reserva de crédito
+se realiza antes de enviar; se conserva el trabajo remoto real en `resultado_json`.
 
-Flask obtiene ASIN/dominio del resultado original persistido y llama a
-`POST /imagenes/asin` con la clave privada y `scraper:write`, únicamente tras el
-clic. Conserva hasta seis URLs reales: imagen principal más galería. Los resultados
-se guardan en `resultado_json` de la operación existente. Lecturas posteriores
-reutilizan la galería; peticiones inciertas quedan pendientes sin reenvío automático.
-La preparación es una etapa de la operación y no altera su contador.
+Al preparar imágenes, Flask valida sesión, propiedad, filtros y elegibilidad.
+Consulta el trabajo mediante `GET /base44/trabajos/<trabajo_id>` y toma el
+`producto_id` original, identificado por ASIN y dominio originales coincidentes
+sin ambigüedad. No genera IDs remotos ni los deduce de posiciones o títulos.
+Los resultados antiguos sin referencias Base44 se rechazan con 409 y no se reinician.
+Las galerías antiguas ya completadas siguen siendo reutilizables.
 
-Después se puede **Guardar publicación** confirmando título, descripción, moneda
-y selección de fotos. Se conserva el precio original positivo, sin margen ni precio
-sugerido inventado. El guardado transaccional crea publicación, imágenes y relaciones
-con los IDs de catálogo y postal ya seleccionados. Un marcador en la misma
-transacción evita publicaciones duplicadas y resurrección tras eliminar una.
+`POST /api/consultas/operaciones/<id>/imagenes` registra una etapa `pending` en
+`resultado_json/image_stages`: propietario, producto, IDs remotos, filtros,
+diagnósticos, clave de idempotencia, fechas y lease. No requiere migraciones ni
+modifica el crédito de la operación ya consumida. La preparación de imágenes
+conserva la política existente: no descuenta un punto adicional.
 
-La publicación confirmada aparece en Mi perfil → Mis publicaciones y en las
-consultas locales correspondientes. La eliminación individual usa el endpoint PWA
-ya implementado y respeta sus comprobaciones de propiedad y dependencias.
+El ejecutor iniciado por `python app.py` (entrada actual del contenedor) revisa
+la cola persistente cada cinco segundos. La memoria del thread no contiene la
+cola: al reiniciar se recuperan las etapas guardadas, con leases transaccionales
+entre procesos. Solo procesa etapas explícitamente encoladas; no inicia búsquedas
+ni trabajos antiguos. No se inicia al importar el módulo ni en modo TESTING.
+Si se cambia la entrada del contenedor a WSGI deberá iniciarse explícitamente el
+mismo ejecutor; no se modifica aquí el despliegue.
+
+El worker consulta primero el trabajo original. Si falta la galería y aún no
+se envió la preparación, persiste la intención y llama a `POST /base44/imagenes`
+con `trabajo_id`, `productos: [{producto_id}]` e `idempotency_key`. Después de un
+envío incierto, solo reconcilia con GET: no repite automáticamente la operación
+pagada. Si un proceso cae después de registrar la intención y antes del POST,
+la etapa permanece pendiente de verificación; no se puede distinguir esa ventana
+de un envío cuyo resultado se perdió sin evidencia adicional del proveedor.
+
+Estados: `pending` sin confirmación, `running` ante ocupación remota explícita,
+`complete` con URLs reales y `failed` ante rechazo o fallo definitivo. Un 409
+genérico no demuestra que haya ejecución. La API aplica además sus propios filtros;
+si descarta el producto, la PWA lo informa aunque superara sus filtros locales.
+La API actual no recibe los filtros personalizados de este formulario.
+
+La consulta de estado usa GET en la misma ruta con `product_index`. El listado
+`GET /api/consultas/imagenes/seguimiento` devuelve solo preparaciones del usuario
+actual; no expone claves de idempotencia ni tokens de leases. La PWA consulta este
+estado local cada cinco segundos cuando está visible, permite cerrar el modal y
+recupera el seguimiento tras recargar. La finalización muestra un aviso dentro de
+la PWA, sin push ni permisos del navegador. Se conservan hasta seis URLs válidas,
+sin duplicados, y la selección de fotos se recuerda localmente por usuario/producto.
+
+El guardado mantiene el endpoint de publicación y su transacción original:
+requiere etapa completa, precio original positivo y selección de una a seis
+imágenes preparadas. No publica automáticamente ni llama a la publicación Base44.
 
 ## Imágenes de trabajos del Scrapeador
 
@@ -61,3 +92,11 @@ Leer el historial no ejecuta esta etapa automáticamente.
 inciertas, publicación idempotente, rollback, moneda explícita y notificación consumida.
 Las pruebas usan fixtures y HTTP simulado. No se ejecutó Apify, imágenes reales ni
 publicaciones reales. No se crearon ni alteraron tablas o endpoints del Scrapeador.
+
+### Regresión del adaptador Base44
+
+`test_base44_dispatch.py`, `test_base44_images.py` y `test_base44_images_ui.py`
+cubren el despacho opt-in, persistencia, leases, propiedad, filtros, rechazo de
+legados, galerías, timeout, recuperación sin nuevo POST, modal cerrado, recarga,
+aviso y selección/publicación explícita. Los proveedores se simulan; no se llama
+al flujo activo `/imagenes/asin` ni se ejecuta scraping pagado.

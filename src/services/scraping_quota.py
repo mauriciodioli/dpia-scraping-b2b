@@ -170,6 +170,60 @@ class MySQLScrapingQuota:
                 operaciones.c.usuario_id == user_id).values(resultado_json=json.dumps(outcome, ensure_ascii=False)))
             return stages[str(index)]
 
+    def image_tasks(self, user_id=None):
+        """Discover durable image jobs in existing JSON, including after a restart."""
+        with self._engine().connect() as conn:
+            query=select(operaciones).where(operaciones.c.origen=='amazon',
+                operaciones.c.estado=='consumed',
+                operaciones.c.resultado_json.like('%"queue_kind": "base44_images"%'))
+            if user_id is not None:query=query.where(operaciones.c.usuario_id==user_id)
+            rows=conn.execute(query).mappings().all()
+            tasks=[]
+            for row in rows:
+                outcome=decode(row['resultado_json']) or {}
+                for index,stage in outcome.get('image_stages',{}).items():
+                    if stage.get('queue_kind')!='base44_images':continue
+                    products=outcome.get('products') or []
+                    if not str(index).isdigit() or int(index)>=len(products):continue
+                    tasks.append(dict(operation_id=row['operacion_id'],user_id=row['usuario_id'],
+                                      product_index=int(index),product=products[int(index)],stage=stage))
+            return tasks
+
+    def image_task(self, operation_id, user_id, index, *, initial=None, claim=False, token=None, changes=None, now=None):
+        """Atomic queue/lease/CAS inside resultado_json; never changes point charges."""
+        import time
+        import uuid
+        now=time.time() if now is None else now
+        with self._engine().begin() as conn:
+            self._lock(conn,user_id)
+            row=conn.execute(select(operaciones).where(operaciones.c.operacion_id==operation_id,
+                operaciones.c.usuario_id==user_id).with_for_update()).mappings().first()
+            if not row:raise PreparationError('Operación no encontrada.',404)
+            if row['origen']!='amazon' or row['estado']!='consumed':
+                raise PreparationError('Se requiere una búsqueda Amazon confirmada.',409)
+            outcome=decode(row['resultado_json']) or {}
+            if type(index) is not int or not 0<=index<len(outcome.get('products') or []):
+                raise PreparationError('Producto no encontrado.',404)
+            stages=outcome.setdefault('image_stages',{});old=stages.get(str(index))
+            if initial is not None:
+                if old:return old
+                stage={**initial,'queue_kind':'base44_images','status':'pending',
+                    'idempotency_key':'pwa-images:'+str(uuid.uuid4()),
+                    'created_at':now,'updated_at':now,'next_check_at':0,'lease_until':0}
+            elif claim:
+                if (not old or old.get('queue_kind')!='base44_images' or
+                    old.get('status') not in ('pending','running') or
+                    old.get('lease_until',0)>now or old.get('next_check_at',0)>now):return None
+                stage={**old,'lease_token':str(uuid.uuid4()),'lease_until':now+240,'updated_at':now}
+            elif changes is not None:
+                if not old or old.get('lease_token')!=token:return None
+                stage={**old,**changes,'updated_at':now}
+            else:return old
+            stages[str(index)]=stage
+            conn.execute(update(operaciones).where(operaciones.c.operacion_id==operation_id,
+                operaciones.c.usuario_id==user_id).values(resultado_json=json.dumps(outcome,ensure_ascii=False)))
+            return stage
+
     def novel_generation(self, operation_id, user_id, *, token=None, result=None, error=None):
         """Durable OpenAI claim/result inside the existing reservation, without DDL."""
         import uuid

@@ -55,7 +55,7 @@ def normalize_products(rows,source):
     return products
 
 
-def dispatch_external(source,result,config,*,quota=None,operation_id=None):
+def dispatch_external(source,result,config,*,quota=None,operation_id=None,base44=False):
     import json
     if source not in EXTERNAL:raise PreparationError('Este origen no permite scraping externo.')
     user_id=result['context']['usuario']
@@ -102,10 +102,12 @@ def dispatch_external(source,result,config,*,quota=None,operation_id=None):
         'usuario':user_id,'ambito':ctx['ambito'],'Categoría':ctx['categoria'],
         'codigoPostal':ctx['codigoPostal'],'idioma':ctx['idioma']}]}
     if source=='amazon':payload['batch_size']=1
+    if base44:
+        payload.update(marketplace='amazon',idempotency_key='pwa-search:'+operation_id)
     def uncertain(message,job_id=None):
         return finish('pending',{'status':'pending','error':message,'provider_job_id':job_id,'products':[]})
     try:
-        with requests.post(DPIAClient.BASE_URL+'/scraping/'+source,headers=headers,json=payload,
+        with requests.post(DPIAClient.BASE_URL+('/base44/scraping' if base44 else '/scraping/'+source),headers=headers,json=payload,
                            timeout=(3.05,180),allow_redirects=False) as response:
             if response.status_code in (401,403,404,405):return rejected('El servicio rechazó la solicitud antes de iniciar scraping.')
             if response.status_code!=200:return uncertain('El servicio no confirmó si inició el scraping. La ejecución queda reservada.')
@@ -124,7 +126,12 @@ def dispatch_external(source,result,config,*,quota=None,operation_id=None):
         errors=any(isinstance(row,dict) and row.get('error') for row in rows)
         if errors and not products:return uncertain('El proveedor informó un fallo sin confirmar el inicio. Pendiente de revisión.',job_id)
         status='partial' if errors else 'complete' if products else 'empty'
-        return finish('consumed',{'status':status,'products':products,'data':rows,'provider_job_id':job_id})
+        outcome={'status':status,'products':products,'data':rows,'provider_job_id':job_id}
+        if base44:
+            from services.base44_images import valid_uuid
+            if valid_uuid(job_id):outcome['base44']={'trabajo_id':job_id}
+            else:outcome['image_error']='DPIA no devolvió un trabajo Base44 válido; no se prepararán imágenes.'
+        return finish('consumed',outcome)
     except requests.ConnectTimeout:
         return rejected('No se pudo establecer la conexión; el scraping no comenzó.')
     except (requests.RequestException,ValueError,TypeError,AttributeError):
@@ -150,5 +157,5 @@ def execute_sources(prepared,result,config,*,quota=None,operation_id=None):
             except SQLAlchemyError:
                 db.session.rollback();outcomes[source]={'status':'failed','error':'No se pudieron consultar las publicaciones.'}
     for source in selected:
-        outcomes[source]=dispatch_external(source,result,config,quota=quota,operation_id=operation_id)
+        outcomes[source]=dispatch_external(source,result,config,quota=quota,operation_id=operation_id,**({'base44':True} if source=='amazon' and prepared.get('image_pipeline')=='base44' else {}))
     return outcomes

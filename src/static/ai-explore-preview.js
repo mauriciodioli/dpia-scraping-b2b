@@ -47,6 +47,11 @@
     if(product.price!=null){const value=typeof product.price==='object'?JSON.stringify(product.price):String(product.price);card.append(element('p',value+' '+(product.currency||'')));}
     if(product.seller||product.vendedor)card.append(element('p',String(product.seller||product.vendedor)));
     const url=imageUrl(product.url);if(url){const link=element('a',tr('Ver producto'));link.href=url;link.target='_blank';link.rel='noopener noreferrer';card.append(link);}
+    if(source==='amazon'&&data.request_id&&window.DPIAHistory){
+     const index=(outcome.products||[]).indexOf(product),stage=outcome.image_stages?.[String(index)];
+     const action=window.DPIAHistory.imageButton(data.request_id,index,product,stage),handler=action.onclick;
+     action.onclick=()=>{close();setTimeout(handler,0);};card.append(action);
+    }
     card.append(element('small',names[source]||source));grid.append(card);
    }
    root.append(grid);
@@ -81,7 +86,7 @@
    try{sessionStorage.setItem(operationKey(target,target.marketplace),JSON.stringify(record));}catch(_){throw new Error(tr('No se pudo guardar el identificador de operación. No se inició scraping.'));}
    status.textContent=tr('Buscando productos reales…');
    const response=await fetch('/api/consultas/scraping-directo',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({pais:context.pais,ciudad:context.ciudad,idioma:context.idioma,...ids,mode:'buscar',user_message:target.item.producto.trim(),attachments:[],sources:[target.marketplace],request_id:record.id}),signal:AbortSignal.timeout(200000)});
+    body:JSON.stringify({pais:context.pais,ciudad:context.ciudad,idioma:context.idioma,...ids,mode:'buscar',...(target.marketplace==='amazon'?{image_pipeline:'base44'}:{}),user_message:target.item.producto.trim(),attachments:[],sources:[target.marketplace],request_id:record.id}),signal:AbortSignal.timeout(200000)});
    const data=await readJSON(response);
    if(!response.ok||!data.success){
     if([400,401,402,403].includes(response.status)||data.code==='persistence_not_configured')sessionStorage.removeItem(operationKey(target,target.marketplace));
