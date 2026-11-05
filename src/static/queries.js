@@ -192,6 +192,11 @@ function renderQueryResult(data){
    const description=document.createElement('p');description.textContent=item.descripcion;
    const price=document.createElement('p');price.textContent=typeof item.precio_venta_sugerido==='number'?`Precio sugerido: ${item.precio_venta_sugerido} ${data.result.constraints.price.currency}`:'Precio sugerido: N/D';
    const source=document.createElement('small');source.textContent='Sin fuente verificada';card.append(title,description,price,source);
+   const context=data.result.context,metadata=document.createElement('dl');metadata.className='ai-suggestion-context';
+   for(const [label,value] of [['Ámbito',context.ambito],['Categoría',context.categoria],['Ciudad',context.ciudad],['Código postal',context.codigoPostal],['País',context.pais],['Usuario',context.usuario],['Fecha',context.fecha],['Idioma',context.idioma]]){
+    const term=document.createElement('dt'),detail=document.createElement('dd');term.textContent=label;detail.textContent=String(value??'');metadata.append(term,detail);
+   }
+   card.append(metadata);
    const searches={amazon:'https://www.amazon.com/s?k=',ebay:'https://www.ebay.com/sch/i.html?_nkw=',aliexpress:'https://www.aliexpress.com/w/wholesale-'};
    for(const [site,base] of Object.entries(searches)){
     const terms=item.busquedas?.[site]||item.producto;

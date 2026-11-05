@@ -76,7 +76,11 @@ def validate_result(result, prepared):
         if not key or key in seen:raise PreparationError('La respuesta contiene candidatos repetidos o vacíos.',502)
         seen.add(key)
         for field in ('ambito','categoria','pais','codigoPostal','usuario','fecha','idioma'):
-            if item[field]!=prepared['context'][field]:raise PreparationError('El contexto del candidato no coincide.',502)
+            if prepared['mode']=='explorar':
+                # Card metadata belongs to DPIA's verified request/session context.
+                item[field]=prepared['context'][field]
+            elif item[field]!=prepared['context'][field]:
+                raise PreparationError('El contexto del candidato no coincide.',502)
         if item['afiliado_link']:raise PreparationError('Los candidatos no pueden incluir afiliación sin verificar.',502)
     expected=result_template(prepared)['constraints']
     if (result['constraints']['shipping_to']!=expected['shipping_to'] or

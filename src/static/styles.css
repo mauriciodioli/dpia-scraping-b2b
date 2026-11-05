@@ -346,3 +346,5 @@ html[data-theme="dark"] button.action-button.danger-button{background:#432338;co
 .consult-art[data-activity="error"]{background:radial-gradient(circle,#4a1720 20%,#d84054 55%,#ffd1d7 75%,transparent 76%);box-shadow:0 0 35px #d8405470}
 .consult-art[data-activity="warning"]{background:radial-gradient(circle,#533014 20%,#e18b28 55%,#ffe0b0 75%,transparent 76%);box-shadow:0 0 35px #e18b2870}
 @media(prefers-reduced-motion:reduce){.consult-art[data-activity="running"] .dpia-symbol{animation:none}}
+
+.ai-suggestion-context{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 10px;font-size:12px;margin:12px 0}.ai-suggestion-context dt{font-weight:600}.ai-suggestion-context dd{margin:0;overflow-wrap:anywhere}
