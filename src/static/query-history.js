@@ -40,7 +40,7 @@
  function gallery(data){
   if(chosen)chosen.stage=data;
   $('prepareProductImages').disabled=imageBusy;
-  $('prepareProductImages').textContent=data.tracking_supported===false?'Ver estado guardado':data.status==='complete'?'Ver imágenes':'Preparar imágenes';
+  $('prepareProductImages').textContent=data.status==='complete'?'Ver imágenes':'Preparar imágenes';
   $('productGallery').replaceChildren();
   for(const value of data.images||[]){const url=safeQueryUrl(value);if(!url)continue;const label=document.createElement('label'),check=document.createElement('input'),img=document.createElement('img');check.type='checkbox';check.name='publicationPhoto';check.value=url;let saved=null;try{saved=JSON.parse(localStorage.getItem(photoKey())||'null');}catch(_){}check.checked=!Array.isArray(saved)||saved.includes(url);check.onchange=()=>{try{localStorage.setItem(photoKey(),JSON.stringify([...document.querySelectorAll('[name="publicationPhoto"]:checked')].map(n=>n.value)));}catch(_){}};img.src=url;img.alt='Imagen del producto';img.loading='lazy';img.onerror=()=>label.remove();label.append(check,img);$('productGallery').append(label);}
   $('queryPublicationForm').hidden=!(data.status==='complete'&&data.images?.length);
@@ -60,17 +60,32 @@
   if(stage){if(stage.filters){$('imagePriceMin').value=stage.filters.precio_minimo;$('imagePriceMax').value=stage.filters.precio_maximo??'';$('imageRatingMin').value=stage.filters.rating_minimo??'';$('imageReviewsMin').value=stage.filters.resenas_minimas??'';}gallery(stage);}
   $('productImagesOverlay').hidden=false;$('closeProductImages').focus();if(!stage)refreshChosen({...chosen});
  }
+ function confirmImagePreparation(){
+  return new Promise(resolve=>{
+   const dialog=document.createElement('dialog');dialog.className='auth-dialog profile-dialog';
+   const title=document.createElement('h2');title.textContent='Confirmar preparación de imágenes';
+   const text=document.createElement('p');text.textContent='Preparar o volver a solicitar las imágenes puede consumir puntos. ¿Querés permitirlo?';
+   const allow=document.createElement('button');allow.type='button';allow.className='primary';allow.textContent='Permitir';
+   const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancelar';
+   const finish=value=>{dialog.close();dialog.remove();resolve(value);};
+   allow.onclick=()=>finish(true);cancel.onclick=()=>finish(false);dialog.oncancel=event=>{event.preventDefault();finish(false);};
+   dialog.append(title,text,allow,cancel);document.body.append(dialog);dialog.showModal();cancel.focus();
+  });
+ }
  async function prepareImages(){
   if(imageBusy||!chosen||chosen.email!==currentEmail)return;
   const form=$('productImagesForm');if(!form.reportValidity())return;
   const target={...chosen};
-  if(target.stage?.status==='complete'||target.stage?.tracking_supported===false){await refreshChosen(target);return;}
-  imageBusy=true;$('prepareProductImages').disabled=true;
+  if(target.stage?.status==='complete'){await refreshChosen(target);return;}
+  imageBusy=true;
+  const allowed=await confirmImagePreparation();
+  if(!allowed||chosen?.operation!==target.operation||chosen?.index!==target.index||currentEmail!==target.email){imageBusy=false;return;}
+  $('prepareProductImages').disabled=true;
   $('productImagesStatus').textContent='Consultando imágenes en DPIA…';
   const filters={precio_minimo:Number($('imagePriceMin').value),precio_maximo:$('imagePriceMax').value===''?null:Number($('imagePriceMax').value),rating_minimo:$('imageRatingMin').value===''?null:Number($('imageRatingMin').value),resenas_minimas:$('imageReviewsMin').value===''?null:Number($('imageReviewsMin').value)};
   try{
    const response=await fetch('/api/consultas/operaciones/'+encodeURIComponent(target.operation)+'/imagenes',{
-    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_index:target.index,filters}),signal:AbortSignal.timeout(30000)}),data=await response.json();
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_index:target.index,filters,confirmed:true}),signal:AbortSignal.timeout(30000)}),data=await response.json();
    if(currentEmail!==target.email||chosen?.operation!==target.operation||chosen?.index!==target.index)return;
    if(!response.ok||!data.success)throw new Error(data.error||'No se pudieron preparar las imágenes.');
    gallery(data);trackImages();

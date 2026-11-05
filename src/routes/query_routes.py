@@ -250,14 +250,16 @@ def query_product_images(operation_id):
             stage=outcome.get('image_stages',{}).get(str(index))
             public=public_stage(stage or {'status':'not_started','images':[]})
             if stage and stage.get('status') in ('pending','loading','running') and stage.get('queue_kind')!='base44_images':
-                public.update(tracking_supported=False,error='Esta preparación quedó pendiente en la integración anterior y no tiene seguimiento automático. Solo se puede consultar el último estado guardado; no se iniciará otro scraping.')
+                public.update(tracking_supported=False,error='El intento anterior no tiene un resultado confirmado. Pulsá Preparar imágenes para autorizar otro envío; puede consumir puntos.')
             return jsonify(success=True,**public)
         body=request.get_json(silent=True)
-        if not isinstance(body,dict) or set(body)-{'product_index','filters'} or type(body.get('product_index')) is not int:
+        if not isinstance(body,dict) or set(body)-{'product_index','filters','confirmed'} or type(body.get('product_index')) is not int:
             raise PreparationError('Seleccioná un producto del resultado guardado.')
+        if 'confirmed' in body and type(body['confirmed']) is not bool:
+            raise PreparationError('Confirmación inválida.')
         from services.query_images import prepare_images
         return jsonify(prepare_images(quota,operation_id,session['user_id'],body['product_index'],
-                                      body.get('filters',{}),current_app.config))
+                                      body.get('filters',{}),current_app.config,confirmed=body.get('confirmed',False)))
     except PreparationError as exc:
         return jsonify(success=False,error=str(exc)),exc.status
     except SQLAlchemyError:

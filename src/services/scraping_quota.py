@@ -189,7 +189,7 @@ class MySQLScrapingQuota:
                                       product_index=int(index),product=products[int(index)],stage=stage))
             return tasks
 
-    def image_task(self, operation_id, user_id, index, *, initial=None, claim=False, retry=False, token=None, changes=None, now=None):
+    def image_task(self, operation_id, user_id, index, *, initial=None, replace_legacy=None, claim=False, retry=False, token=None, changes=None, now=None):
         """Atomic queue/lease/CAS inside resultado_json; never changes point charges."""
         import time
         import uuid
@@ -206,7 +206,9 @@ class MySQLScrapingQuota:
                 raise PreparationError('Producto no encontrado.',404)
             stages=outcome.setdefault('image_stages',{});old=stages.get(str(index))
             if initial is not None:
-                if old:return old
+                if old and not (replace_legacy is not None and old==replace_legacy and
+                    old.get('queue_kind')!='base44_images' and old.get('status')!='complete'):
+                    return old
                 stage={**initial,'queue_kind':'base44_images','status':'pending',
                     'idempotency_key':'pwa-images:'+str(uuid.uuid4()),
                     'created_at':now,'updated_at':now,'next_check_at':0,'lease_until':0}

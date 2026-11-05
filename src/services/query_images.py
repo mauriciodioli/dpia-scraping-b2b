@@ -70,7 +70,7 @@ def raw_product(operation, index):
     raise PreparationError('No se pudo verificar el producto original.',409)
 
 
-def prepare_images(quota, operation_id, user_id, index, filters, config):
+def prepare_images(quota, operation_id, user_id, index, filters, config, *, confirmed=False):
     user=db.session.get(Usuario,user_id)
     if not user or not user.activo:raise PreparationError('Iniciá sesión con un usuario activo.',401)
     operation=quota.operation(operation_id,user_id)
@@ -83,12 +83,12 @@ def prepare_images(quota, operation_id, user_id, index, filters, config):
     from services.base44_images import Base44Images, valid_uuid, product_reference, public_stage
     outcome=json.loads(operation['outcome'])
     old=outcome.get('image_stages',{}).get(str(index),{})
+    if old and old.get('status')!='complete' and not confirmed:
+        raise PreparationError('Confirmá la preparación de imágenes: puede consumir puntos.',409)
     if old.get('queue_kind')=='base44_images' and old.get('status')!='complete':
         old=quota.image_task(operation_id,user_id,index,retry=True)
     if old.get('status')=='complete' or old.get('queue_kind')=='base44_images':
         return {'success':True,**public_stage(old),'diagnostics':diagnosis}
-    if old:
-        raise PreparationError('Esta preparación no tiene seguimiento persistente en DPIA. No se reiniciará automáticamente.',409)
     reference=outcome.get('base44') or {}
     job_id=reference.get('trabajo_id')
     if not valid_uuid(job_id):
@@ -98,5 +98,5 @@ def prepare_images(quota, operation_id, user_id, index, filters, config):
     client=Base44Images(config);client.authorize()
     job=client.job(job_id);product_id=product_reference(job,item)
     stage=quota.image_task(operation_id,user_id,index,initial={
-        'trabajo_id':job_id,'producto_id':product_id,'filters':filters,'diagnostics':diagnosis,'images':[]})
+        'trabajo_id':job_id,'producto_id':product_id,'filters':filters,'diagnostics':diagnosis,'images':[]},replace_legacy=old if old else None)
     return {'success':True,**public_stage(stage)}
