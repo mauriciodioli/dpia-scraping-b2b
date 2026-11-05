@@ -62,15 +62,16 @@
  }
  function confirmImagePreparation(message){
   return new Promise(resolve=>{
-   const dialog=document.createElement('dialog');dialog.className='auth-dialog profile-dialog';
-   const title=document.createElement('h2');title.textContent='Confirmar preparación de imágenes';
+   const dialog=document.createElement('dialog');dialog.className='auth-dialog image-preparation-confirm';
+   const title=document.createElement('h2');title.id='imagePreparationConfirmTitle';title.textContent='Confirmar preparación de imágenes';dialog.setAttribute('aria-labelledby',title.id);
    const text=document.createElement('p');text.textContent=message||'Preparar o volver a solicitar las imágenes puede consumir puntos. ¿Querés permitirlo?';
    const allow=document.createElement('button');allow.type='button';allow.className='primary';allow.textContent='Permitir';
-   const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancelar';
+   const cancel=document.createElement('button');cancel.type='button';cancel.className='action-button';cancel.textContent='Cancelar';
+   const actions=document.createElement('div');actions.className='image-preparation-confirm-actions';actions.append(cancel,allow);
    const finish=value=>{dialog.close();dialog.remove();resolve(value);};
    allow.onclick=()=>finish(true);cancel.onclick=()=>finish(false);dialog.oncancel=event=>{event.preventDefault();finish(false);};
    dialog.addEventListener('keydown',event=>{if(event.key==='Escape')event.stopPropagation();});
-   dialog.append(title,text,allow,cancel);document.body.append(dialog);dialog.showModal();cancel.focus();
+   dialog.append(title,text,actions);document.body.append(dialog);dialog.showModal();cancel.focus();
   });
  }
  async function createImageSearch(target,body){
