@@ -37,7 +37,12 @@
   $('currentQueryPanel').hidden=true;$('queryHistoryPanel').hidden=false;
   $('queryCurrentTab').setAttribute('aria-selected','false');$('queryHistoryTab').setAttribute('aria-selected','true');history();
  }
+ function showSavedPublication(stage){
+  if(!Number.isInteger(stage?.publication?.id)||stage.publication.id<=0)return false;
+  closeImages();openHomePublication({id:stage.publication.id});return true;
+ }
  function gallery(data){
+  if(showSavedPublication(data))return;
   if(chosen)chosen.stage=data;
   $('prepareProductImages').disabled=imageBusy;
   $('prepareProductImages').textContent=data.status==='complete'?'Ver imágenes':'Preparar imágenes';
@@ -55,6 +60,7 @@
   $('productImagesStatus').textContent=diagnosis+(data.tracking_supported===false?data.error:text+(['pending','running'].includes(data.status)&&data.error?' '+data.error:''));
  }
  function openImages(operation,index,product,stage){
+  if(showSavedPublication(stage))return;
   if(!currentEmail){openAuth();return;}
   chosen={operation,index,email:currentEmail,product};$('prepareProductImages').disabled=imageBusy;$('prepareProductImages').textContent='Preparar imágenes';$('queryPublicationForm').hidden=true;$('queryPublicationStatus').textContent='';$('publicationTitle').value=product.title.slice(0,120);$('publicationDescription').value=product.title;$('publicationCurrency').value=product.currency||'';$('productImagesTitle').textContent=product.title;
   $('imagePriceMin').value='0';$('imagePriceMax').value='';$('imageRatingMin').value='';$('imageReviewsMin').value='';
@@ -163,6 +169,11 @@
     imagenes:[...document.querySelectorAll('[name="publicationPhoto"]:checked')].map(input=>input.value)})}),data=await response.json();
    if(currentEmail!==target.email)return;
    if(!response.ok||!data.success||!data.guardado)throw new Error(data.error||'No se pudo confirmar la publicación.');
+   for(const button of document.querySelectorAll('[data-image-operation]')){
+    if(button.dataset.imageOperation===target.operation&&button.dataset.productIndex===String(target.index)){
+     button.textContent='Ver publicación';button.onclick=()=>openHomePublication({id:data.publicacion_id});
+    }
+   }
    closeImages();
    notify('Publicación guardada');
    window.DPIAPublications?.openProfile();
@@ -238,7 +249,7 @@
  document.addEventListener('visibilitychange',trackImages);
  setTimeout(trackImages,0);
  function imageButton(operation,index,product,stage){
-  const button=document.createElement('button');button.className='action-button';button.type='button';button.textContent=stage?.status==='complete'?'Ver imágenes / ajustar filtros':'Preparar imágenes';
+  const button=document.createElement('button');button.className='action-button';button.type='button';button.dataset.imageOperation=operation;button.dataset.productIndex=String(index);button.textContent=stage?.publication?.id?'Ver publicación':stage?.status==='complete'?'Ver imágenes / ajustar filtros':'Preparar imágenes';
   button.onclick=()=>openImages(operation,index,product,stage);return button;
  }
  $('queryCurrentTab').onclick=showQuery;$('queryHistoryTab').onclick=showHistory;
