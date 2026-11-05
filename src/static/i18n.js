@@ -353,3 +353,25 @@ Object.assign(DPIA_TRANSLATIONS, {
  'Integraciones existentes. La disponibilidad para tu país y los permisos se verificarán al habilitar la búsqueda.':['Existing integrations. Availability for your country and permissions will be checked when search is enabled.','Istniejące integracje. Dostępność w Twoim kraju i uprawnienia zostaną sprawdzone po włączeniu wyszukiwania.','Integrazioni esistenti. Disponibilità nel tuo Paese e permessi saranno verificati quando la ricerca sarà abilitata.'],
  'Vista previa: elegir un marketplace no inicia scraping ni consume créditos.':['Preview: choosing a marketplace does not start scraping or use credits.','Podgląd: wybór marketplace nie uruchamia scrapingu ani nie zużywa punktów.','Anteprima: scegliere un marketplace non avvia lo scraping né consuma crediti.']
 });
+
+Object.assign(DPIA_TRANSLATIONS, {
+ 'Buscar productos reales':['Search real products','Wyszukaj rzeczywiste produkty','Cerca prodotti reali'],
+ 'Cada búsqueda iniciada consume 1 punto. Consultar el estado no repite el scraping.':['Each started search uses 1 point. Checking status does not repeat scraping.','Każde rozpoczęte wyszukiwanie zużywa 1 punkt. Sprawdzenie statusu nie powtarza scrapingu.','Ogni ricerca avviata consuma 1 punto. Consultare lo stato non ripete lo scraping.'],
+ 'DPIA verifica la disponibilidad para tu país y los permisos antes de iniciar scraping.':['DPIA checks country availability and permissions before starting scraping.','DPIA sprawdza dostępność w kraju i uprawnienia przed rozpoczęciem scrapingu.','DPIA verifica disponibilità nel Paese e permessi prima di avviare lo scraping.']
+});
+
+Object.assign(DPIA_TRANSLATIONS, {
+ 'Buscando…':['Searching…','Wyszukiwanie…','Ricerca…'],
+ 'Verificando consulta…':['Checking request…','Sprawdzanie zapytania…','Verifica richiesta…'],
+ 'Consultando estado…':['Checking status…','Sprawdzanie statusu…','Verifica stato…'],
+ 'Buscando productos reales…':['Searching for real products…','Wyszukiwanie rzeczywistych produktów…','Ricerca di prodotti reali…'],
+ 'Estado recuperado. No se repitió el scraping.':['Status retrieved. Scraping was not repeated.','Status pobrany. Scraping nie został powtórzony.','Stato recuperato. Lo scraping non è stato ripetuto.'],
+ 'Consulta finalizada. Revisá los resultados.':['Search finished. Review the results.','Wyszukiwanie zakończone. Sprawdź wyniki.','Ricerca terminata. Controlla i risultati.'],
+ 'Búsqueda completada':['Search completed','Wyszukiwanie zakończone','Ricerca completata'],
+ 'Sin resultados':['No results','Brak wyników','Nessun risultato'],
+ 'Resultados parciales':['Partial results','Wyniki częściowe','Risultati parziali'],
+ 'La búsqueda falló':['Search failed','Wyszukiwanie nie powiodło się','Ricerca non riuscita'],
+ 'Pendiente de confirmación':['Awaiting confirmation','Oczekiwanie na potwierdzenie','In attesa di conferma'],
+ 'No quedan puntos disponibles.':['No points available.','Brak dostępnych punktów.','Non ci sono punti disponibili.'],
+ 'La ejecución sigue pendiente. Consultá el estado; no se reenviará.':['Execution is still pending. Check its status; it will not be resent.','Operacja nadal oczekuje. Sprawdź status; nie zostanie wysłana ponownie.','L’esecuzione è ancora in sospeso. Consulta lo stato; non verrà reinviata.']
+});

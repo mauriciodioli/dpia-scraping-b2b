@@ -1,4 +1,4 @@
-/* Candidate preview only. No scraping, image API, credits or publication requests. */
+/* Candidate marketplace search through existing authenticated DPIA routes. */
 (()=>{
  const names={amazon:'Amazon',ebay:'eBay',aliexpress:'AliExpress',mercadolibre:'Mercado Libre'};
  let dialog=null,selected=null,opener=null;
@@ -21,6 +21,75 @@
    const value=element('dd',String(context[key]??''));value.dataset.catalogName='';list.append(element('dt',tr(label)),value);
   }
   return list;
+ }
+ function operationKey(target,source){return 'dpia-candidate-operation:'+JSON.stringify([target.email,target.ids,target.context.pais,target.context.ciudad,target.context.idioma,target.item.producto,source]);}
+ function operation(target){
+  try{return JSON.parse(sessionStorage.getItem(operationKey(target,target.marketplace))||'null');}catch(_){return null;}
+ }
+ function active(target){return selected===target&&currentEmail===target.email&&dialog.open;}
+ function controls(target){
+  if(!active(target))return;
+  const started=operation(target)?.submitted;
+  dialog.querySelector('#aiPreviewSearch').disabled=!!target.busy||!target.marketplace;
+  dialog.querySelector('#aiPreviewSearch').textContent=tr(target.busy?'Buscando…':started?'Consultar estado':'Buscar productos reales');
+  dialog.querySelectorAll('[name="aiPreviewMarketplace"]').forEach(node=>node.disabled=!!target.busy);
+ }
+ function results(target,data){
+  if(!active(target))return;
+  const root=dialog.querySelector('#aiPreviewResults');root.replaceChildren();
+  for(const [source,outcome] of Object.entries(data.sources||{})){
+   const state=element('p',tr(({complete:'Búsqueda completada',empty:'Sin resultados',partial:'Resultados parciales',failed:'La búsqueda falló',pending:'Pendiente de confirmación'})[outcome.status]||'Pendiente de confirmación'));
+   root.append(state);if(outcome.error)root.append(element('p',outcome.error));
+   const grid=element('div',undefined,'scraped-products');
+   for(const product of outcome.products||[]){
+    const card=element('article',undefined,'scraped-product');card.dataset.realProduct='';
+    const title=element('strong',product.title||'');title.dataset.catalogName='';card.append(title);addImage(card,product.image,product.title);
+    if(product.price!=null){const value=typeof product.price==='object'?JSON.stringify(product.price):String(product.price);card.append(element('p',value+' '+(product.currency||'')));}
+    if(product.seller||product.vendedor)card.append(element('p',String(product.seller||product.vendedor)));
+    const url=imageUrl(product.url);if(url){const link=element('a',tr('Ver producto'));link.href=url;link.target='_blank';link.rel='noopener noreferrer';card.append(link);}
+    card.append(element('small',names[source]||source));grid.append(card);
+   }
+   root.append(grid);
+  }
+ }
+ async function readJSON(response){
+  if(!response.headers.get('content-type')?.includes('application/json'))throw new Error(tr('El servidor no devolvió JSON. Consultá el estado antes de reintentar.'));
+  return response.json();
+ }
+ async function search(){
+  const target=selected;if(!target||target.busy||!target.marketplace)return;
+  if(currentEmail!==target.email){close();return;}
+  target.busy=true;controls(target);
+  const status=dialog.querySelector('#aiPreviewSearchStatus');status.textContent=tr('Verificando consulta…');
+  try{
+   let record=operation(target);
+   if(record?.submitted){
+    status.textContent=tr('Consultando estado…');
+    const response=await fetch('/api/consultas/operaciones/'+encodeURIComponent(record.id),{cache:'no-store'}),data=await readJSON(response);
+    if(!response.ok||!data.success)throw new Error(data.error||tr('No se pudo consultar el estado.'));
+    results(target,data.payload);if(active(target))status.textContent=tr('Estado recuperado. No se repitió el scraping.');return;
+   }
+   const ids=target.ids,context=target.context;
+   if(!ids.ambito_id||!ids.categoria_id||!ids.codigo_postal_id)throw new Error(tr('Prepará nuevamente la consulta para recuperar su contexto.'));
+   if(!target.item.producto?.trim()||target.item.producto.length>500)throw new Error(tr('El nombre del candidato debe tener entre 1 y 500 caracteres.'));
+   const creditResponse=await fetch('/api/consultas/creditos',{cache:'no-store'}),credit=await readJSON(creditResponse);
+   if(!creditResponse.ok||!credit.success)throw new Error(credit.error||tr('No se pudieron consultar los puntos.'));
+   if(!active(target))return;
+   if(!(credit.credits?.available>=1))throw new Error(tr('No quedan puntos disponibles.'));
+   record={id:crypto.randomUUID(),submitted:true};
+   // Persist before dispatch: uncertain responses and reopened dialogs only GET status.
+   try{sessionStorage.setItem(operationKey(target,target.marketplace),JSON.stringify(record));}catch(_){throw new Error(tr('No se pudo guardar el identificador de operación. No se inició scraping.'));}
+   status.textContent=tr('Buscando productos reales…');
+   const response=await fetch('/api/consultas/scraping-directo',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({pais:context.pais,ciudad:context.ciudad,idioma:context.idioma,...ids,mode:'buscar',user_message:target.item.producto.trim(),attachments:[],sources:[target.marketplace],request_id:record.id}),signal:AbortSignal.timeout(200000)});
+   const data=await readJSON(response);
+   if(!response.ok||!data.success){
+    if([400,401,402,403].includes(response.status)||data.code==='persistence_not_configured')sessionStorage.removeItem(operationKey(target,target.marketplace));
+    throw new Error(data.error||tr('No se pudo confirmar el scraping. Consultá el estado.'));
+   }
+   results(target,data);if(active(target))status.textContent=tr('Consulta finalizada. Revisá los resultados.');
+  }catch(error){if(active(target))status.textContent=error.name==='TimeoutError'?tr('La ejecución sigue pendiente. Consultá el estado; no se reenviará.'):error.message;}
+  finally{target.busy=false;controls(target);window.DPIACredits?.refresh();}
  }
  function close(){if(dialog?.open)dialog.close();}
  function ensureDialog(){
@@ -55,15 +124,18 @@
   const markets=element('section',undefined,'ai-preview-markets'),fieldset=element('fieldset');fieldset.append(element('legend',tr('Elegí un marketplace')));
   const options=element('div',undefined,'ai-preview-options');
   // Reuse the existing local integrations and Mercado Libre country restriction.
-  // Live availability/permissions are checked only by the future execution step.
+  // The existing backend checks live availability and permissions before dispatch.
   for(const source of externalQuerySources){
    if(!names[source]||(source==='mercadolibre'&&!['Argentina','México'].includes(context.pais)))continue;
    const label=element('label',undefined,'ai-preview-market'),radio=element('input');radio.type='radio';radio.name='aiPreviewMarketplace';radio.value=source;
-   radio.onchange=()=>{selected.marketplace=source;};label.append(radio,element('span',names[source]));options.append(label);
+   radio.onchange=()=>{selected.marketplace=source;dialog.querySelector('#aiPreviewResults').replaceChildren();dialog.querySelector('#aiPreviewSearchStatus').textContent='';controls(selected);};label.append(radio,element('span',names[source]));options.append(label);
   }
-  fieldset.append(options);markets.append(fieldset,element('p',tr('Integraciones existentes. La disponibilidad para tu país y los permisos se verificarán al habilitar la búsqueda.'),'hint'));
-  const note=element('p',tr('Vista previa: elegir un marketplace no inicia scraping ni consume créditos.'),'ai-preview-note');
-  body.append(summary,markets);const footer=element('footer');const done=element('button',tr('Cerrar'),'action-button');done.type='button';done.onclick=close;footer.append(note,done);
+  fieldset.append(options);markets.append(fieldset,element('p',tr('DPIA verifica la disponibilidad para tu país y los permisos antes de iniciar scraping.'),'hint'));
+  const note=element('p',tr('Cada búsqueda iniciada consume 1 punto. Consultar el estado no repite el scraping.'),'ai-preview-note');
+  body.append(summary,markets);const footer=element('footer');const done=element('button',tr('Cerrar'),'action-button');done.type='button';done.onclick=close;const start=element('button',tr('Buscar productos reales'),'primary');start.id='aiPreviewSearch';start.type='button';start.disabled=true;start.onclick=search;
+  const status=element('p',undefined,'hint');status.id='aiPreviewSearchStatus';status.setAttribute('role','status');
+  const output=element('section');output.id='aiPreviewResults';output.setAttribute('aria-label',tr('Resultados de búsqueda'));
+  footer.append(note,start,status,output,done);
   dialog.append(header,body,footer);dialog.showModal();exit.focus();
  }
  function button(item,context,ids,details={}){
