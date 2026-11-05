@@ -215,6 +215,7 @@ async function generateDPIAQuery(){
  queryRequestId ||= crypto.randomUUID();
  if(direct)setScrapingStatus('running','Scrapeando…');
  if(novel)setScrapingStatus('preparing','Preparando novedades con IA…');
+ if(exploring){setScrapingStatus('preparing','Generando sugerencias con IA…');document.querySelector('#scrapingActivity').dataset.operationId='';}
  status.textContent=exploring?'Generando sugerencias con IA…':novel?'Preparando una búsqueda de novedades con OpenAI…':'Buscando en los orígenes seleccionados…';
  let polling=false;
  const operationId=queryRequestId;
@@ -233,11 +234,12 @@ async function generateDPIAQuery(){
   if(!response.ok||!data.success){const confirmedRejection=response.status<500||data.code==='persistence_not_configured'||data.not_started===true;if((direct||novel)&&confirmedRejection)setScrapingStatus('failed','No se inició la búsqueda · Consultar');const error=new Error(data.error||'No se pudo generar la consulta.');error.confirmedRejection=confirmedRejection;throw error;}
   if(!exploring)lastQueryOperationId=data.request_id||queryRequestId;window.DPIACredits?.refresh();
   if(!direct&&!novel&&(!queryPrepared||JSON.stringify(queryBody())!==queryPrepared.fingerprint)){status.textContent='El pedido cambió. Prepará nuevamente la consulta.';return;}
-  if(data.result?.needs_clarification){status.textContent='La IA necesita una aclaración: '+data.result.clarifying_question+' Agregá la respuesta al pedido y prepará nuevamente la consulta.';if(novel)setScrapingStatus('failed','La consulta necesita una aclaración · Consultar');renderQueryResult(data);return;}
+  if(data.result?.needs_clarification){status.textContent='La IA necesita una aclaración: '+data.result.clarifying_question+' Agregá la respuesta al pedido y prepará nuevamente la consulta.';if(novel||exploring)setScrapingStatus('failed','La consulta necesita una aclaración · Consultar');renderQueryResult(data);return;}
   renderQueryResult(data);if(direct||novel)updateScrapingStatus(data);
+  if(exploring)setScrapingStatus('complete',`${data.result.items.length} sugerencias disponibles · Consultar`);
   const outcomes=Object.values(data.sources||{});
   status.textContent=outcomes.some(row=>row.status==='pending')?'La ejecución sigue pendiente. No se reenviará.':outcomes.some(row=>row.status==='failed')?'La ejecución falló.':'Consulta completada. Revisá los resultados de cada origen.';
- }catch(error){if((direct||novel)&&!error.confirmedRejection)setScrapingStatus('pending','Scraping pendiente de confirmación · Consultar');status.textContent=error.name==='TimeoutError'?'La consulta sigue pendiente. No se reenviará automáticamente.':error.message;if(!exploring&&queryRequestId){lastQueryOperationId=queryRequestId;const refresh=document.createElement('button');refresh.className='action-button';refresh.textContent='Consultar estado';refresh.onclick=()=>loadQueryOperation(lastQueryOperationId);document.querySelector('#queryResults').append(refresh);}}
+ }catch(error){if(exploring)setScrapingStatus('failed','No se pudieron generar sugerencias · Consultar');if((direct||novel)&&!error.confirmedRejection)setScrapingStatus('pending','Scraping pendiente de confirmación · Consultar');status.textContent=error.name==='TimeoutError'?'La consulta sigue pendiente. No se reenviará automáticamente.':error.message;if(!exploring&&queryRequestId){lastQueryOperationId=queryRequestId;const refresh=document.createElement('button');refresh.className='action-button';refresh.textContent='Consultar estado';refresh.onclick=()=>loadQueryOperation(lastQueryOperationId);document.querySelector('#queryResults').append(refresh);}}
  finally{if(progress)clearInterval(progress);queryBusy=false;button.disabled=false;window.DPIACredits?.refresh();}
 }
 document.querySelector('#queryScope').addEventListener('change',()=>{refreshQuerySelectors();syncLocalCategory();});

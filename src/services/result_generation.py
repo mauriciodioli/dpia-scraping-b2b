@@ -42,7 +42,9 @@ def result_schema(prepared):
         'pagoOnline':{'type':'boolean','enum':[False]},'validado':{'type':'boolean','enum':[False]},
         'score_hint':{'type':'number','minimum':0,'maximum':100}})
     fields.update({key:TEXT for key in ('imagen','imagen2','imagen3','imagen4','imagen5','imagen6')})
-    props['items']={'type':'array','items':obj(fields)}
+    # Allow an empty clarification response, otherwise require the requested batch.
+    props['items']={'anyOf':[{'type':'array','items':obj(fields),'minItems':0,'maxItems':0},
+                            {'type':'array','items':obj(fields),'minItems':5,'maxItems':10}]}
     return schema
 
 
