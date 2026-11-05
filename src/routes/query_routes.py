@@ -251,6 +251,10 @@ def query_product_images(operation_id):
             public=public_stage(stage or {'status':'not_started','images':[]})
             if stage and stage.get('status') in ('pending','loading','running') and stage.get('queue_kind')!='base44_images':
                 public.update(tracking_supported=False,error='El intento anterior no tiene un resultado confirmado. Pulsá Preparar imágenes para autorizar otro envío; puede consumir puntos.')
+            from services.base44_images import valid_uuid
+            if public.get('status')!='complete' and not valid_uuid((outcome.get('base44') or {}).get('trabajo_id')):
+                from services.query_images import image_search_body
+                public.update(search_required=True,search_body=image_search_body(operation))
             return jsonify(success=True,**public)
         body=request.get_json(silent=True)
         if not isinstance(body,dict) or set(body)-{'product_index','filters','confirmed'} or type(body.get('product_index')) is not int:

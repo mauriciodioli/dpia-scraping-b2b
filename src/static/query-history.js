@@ -69,22 +69,27 @@
    const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancelar';
    const finish=value=>{dialog.close();dialog.remove();resolve(value);};
    allow.onclick=()=>finish(true);cancel.onclick=()=>finish(false);dialog.oncancel=event=>{event.preventDefault();finish(false);};
+   dialog.addEventListener('keydown',event=>{if(event.key==='Escape')event.stopPropagation();});
    dialog.append(title,text,allow,cancel);document.body.append(dialog);dialog.showModal();cancel.focus();
   });
  }
  async function createImageSearch(target,body){
-  if(!await confirmImagePreparation('Esta búsqueda anterior no tiene un trabajo compatible con imágenes. Crear una nueva búsqueda Amazon puede consumir 1 punto. Los resultados pueden cambiar y deberás elegir el producto nuevamente. ¿Querés permitirlo?'))return;
   if(currentEmail!==target.email||chosen?.operation!==target.operation||chosen?.index!==target.index)return;
   const key='dpia-image-search:'+target.email+':'+target.operation;
   let record;
   try{record=JSON.parse(sessionStorage.getItem(key)||'null');}catch(_){}
   if(record?.id){
+   if($('imagePreparationNotice'))$('imagePreparationNotice').hidden=true;
+   setQueryArtState('warning');
    await loadQueryOperation(record.id);$('productImagesOverlay').hidden=true;return;
   }
   record={id:crypto.randomUUID()};
   // Save before POST. An uncertain response can only be recovered by reading it.
   sessionStorage.setItem(key,JSON.stringify(record));
   $('productImagesStatus').textContent='Creando búsqueda Amazon compatible con imágenes…';
+  if($('imagePreparationNotice'))$('imagePreparationNotice').hidden=true;
+  setScrapingStatus('running','Buscando en Amazon… · Consultar');
+  $('scrapingActivity').dataset.operationId=record.id;
   const response=await fetch('/api/consultas/scraping-directo',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({...body,request_id:record.id}),signal:AbortSignal.timeout(200000)});
   const data=await response.json();
@@ -95,6 +100,7 @@
    throw new Error(data.error||'No se confirmó la búsqueda.');
   }
   $('productImagesOverlay').hidden=true;chosen=null;
+  if(data.sources)updateScrapingStatus(data);else setQueryArtState('success');
   await loadQueryOperation(record.id);window.DPIACredits?.refresh();
   $('queryStatus').textContent='Nueva búsqueda guardada. Elegí el producto y pulsá Preparar imágenes.';
  }
@@ -115,7 +121,15 @@
   const target={...chosen};
   if(target.stage?.status==='complete'){await refreshChosen(target);return;}
   imageBusy=true;
-  const allowed=await confirmImagePreparation();
+  let preflight;
+  try{
+   const response=await fetch('/api/consultas/operaciones/'+encodeURIComponent(target.operation)+'/imagenes?product_index='+target.index,{cache:'no-store'});
+   preflight=await response.json();
+   if(!response.ok||!preflight.success)throw new Error(preflight.error||'No se pudo verificar la preparación.');
+  }catch(error){imageBusy=false;$('productImagesStatus').textContent=error.message;return;}
+  if(chosen?.operation!==target.operation||chosen?.index!==target.index||currentEmail!==target.email){imageBusy=false;return;}
+  if(preflight.status==='complete'){gallery(preflight);imageBusy=false;$('prepareProductImages').disabled=false;return;}
+  const allowed=await confirmImagePreparation(preflight.search_required?'Esta búsqueda anterior requiere una nueva búsqueda Amazon, que puede consumir 1 punto. Los resultados pueden cambiar y deberás elegir el producto nuevamente. ¿Querés permitirlo?':undefined);
   if(!allowed||chosen?.operation!==target.operation||chosen?.index!==target.index||currentEmail!==target.email){imageBusy=false;return;}
   $('prepareProductImages').disabled=true;
   $('productImagesStatus').textContent='Consultando imágenes en DPIA…';
@@ -123,10 +137,11 @@
   $('productImagesOverlay').hidden=true;
   imageActivity({operation_id:target.operation,product_index:target.index,product:target.product,stage:{status:'pending',images:[]}});
   try{
+   if(preflight.search_required){await createImageSearch(target,preflight.search_body);return;}
    const response=await fetch('/api/consultas/operaciones/'+encodeURIComponent(target.operation)+'/imagenes',{
     method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_index:target.index,filters,confirmed:true}),signal:AbortSignal.timeout(30000)}),data=await response.json();
    if(currentEmail!==target.email)return;
-   if(response.status===409&&data.code==='image_search_required'){imageActivity({operation_id:target.operation,product_index:target.index,product:target.product,stage:{status:'filtered',error:data.error,images:[]}});await createImageSearch(target,data.search_body);return;}
+   if(response.status===409&&data.code==='image_search_required'){imageActivity({operation_id:target.operation,product_index:target.index,product:target.product,stage:{status:'filtered',error:data.error,images:[]}});if(chosen?.operation===target.operation&&chosen?.index===target.index){gallery({...data,status:'filtered',images:[]});$('productImagesOverlay').hidden=false;}return;}
    if(!response.ok||!data.success)throw new Error(data.error||'No se pudieron preparar las imágenes.');
    if(chosen?.operation===target.operation&&chosen?.index===target.index)gallery(data);
    imageActivity({operation_id:target.operation,product_index:target.index,product:target.product,stage:data});trackImages();
