@@ -1,6 +1,6 @@
 // The original user request is preserved; context and identity are verified by Flask.
 let queryMode='buscar', queryPrepared=null, queryBusy=false, queryRequestId=null, pendingSourcesGeneration=false;
-let novelAutoDraft='';
+let novelAutoDraft='', exploreAutoDraft='';
 const externalQuerySources=['amazon','ebay','aliexpress','mercadolibre'];
 const querySources=[...externalQuerySources,'local','dpia','historial'];
 function sourceAvailableForCountry(source){return source!=='mercadolibre'||['Argentina','México'].includes(country);}
@@ -22,7 +22,7 @@ function refreshQuerySelectors(category=null, scopeId=null){
  postalSelect.replaceChildren();
  for(const record of catalogPostalCodes)postalSelect.add(new Option(city,String(record.id)));
  if([...postalSelect.options].some(option=>option.value===oldPostal))postalSelect.value=oldPostal;
- invalidateQuery();if(queryMode==='novedades')updateNovelDraft();
+ invalidateQuery();if(queryMode==='novedades')updateNovelDraft();else if(queryMode==='explorar')updateExploreDraft();
 }
 function invalidateQuery(){if(queryBusy)return;queryPrepared=null;queryRequestId=null;document.querySelector('#generateQuery').hidden=true;document.querySelector('#queryResults').replaceChildren();document.querySelector('#promptResult').hidden=true;}
 function chooseQueryCategory(item, scopeId=null){queryMode='buscar';refreshQuerySelectors(item,scopeId);localCategory={id:String(item.categoria_id),name:item.nombre};}
@@ -55,10 +55,16 @@ async function openNovelQuery(){
 async function openExploreQuery(){
  if(queryBusy)return;
  await openNovelQuery();queryMode='explorar';invalidateQuery();
- const scope=document.querySelector('#queryScope').selectedOptions[0]?.textContent||'',category=document.querySelector('#queryCategory').selectedOptions[0]?.textContent||'';
- const drafts={es:`Sugerí productos útiles de ${category}, en ${scope}, para ${city}, ${country}. Explicá sus ventajas y proponé precios de venta orientativos cuando puedas fundamentarlos. Indicá sitios donde pueda comparar opciones.`,en:`Suggest useful products in ${category}, within ${scope}, for ${city}, ${country}. Explain their benefits and suggest indicative selling prices when justified. Include sites where I can compare options.`,it:`Suggerisci prodotti utili di ${category}, nell'ambito ${scope}, per ${city}, ${country}. Spiega i vantaggi e proponi prezzi indicativi quando motivati. Indica siti dove confrontare le opzioni.`,pl:`Zaproponuj przydatne produkty w kategorii ${category}, w obszarze ${scope}, dla ${city}, ${country}. Wyjaśnij zalety i zaproponuj uzasadnione ceny orientacyjne. Wskaż serwisy do porównania ofert.`};
- document.querySelector('#promptText').value=drafts[catalogLanguage()]||drafts.es;
+ updateExploreDraft(true);
  document.querySelector('#queryStatus').textContent='Revisá el pedido. Explorar genera sugerencias con IA, sin consumir ejecuciones de scraping.';
+}
+function updateExploreDraft(force=false){
+ const prompt=document.querySelector('#promptText'),scopeSelect=document.querySelector('#queryScope'),categorySelect=document.querySelector('#queryCategory');
+ if(!force&&prompt.value.trim()&&prompt.value!==exploreAutoDraft)return;
+ if(!scopeSelect.value||!categorySelect.value){exploreAutoDraft='';prompt.value='';return;}
+ const scope=scopeSelect.selectedOptions[0].textContent,category=categorySelect.selectedOptions[0].textContent;
+ const drafts={es:`Sugerí productos útiles de ${category}, en ${scope}, para ${city}, ${country}. Explicá sus ventajas y proponé precios de venta orientativos cuando puedas fundamentarlos. Indicá sitios donde pueda comparar opciones.`,en:`Suggest useful products in ${category}, within ${scope}, for ${city}, ${country}. Explain their benefits and suggest indicative selling prices when justified. Include sites where I can compare options.`,it:`Suggerisci prodotti utili di ${category}, nell'ambito ${scope}, per ${city}, ${country}. Spiega i vantaggi e proponi prezzi indicativi quando motivati. Indica siti dove confrontare le opzioni.`,pl:`Zaproponuj przydatne produkty w kategorii ${category}, w obszarze ${scope}, dla ${city}, ${country}. Wyjaśnij zalety i zaproponuj uzasadnione ceny orientacyjne. Wskaż serwisy do porównania ofert.`};
+ exploreAutoDraft=drafts[catalogLanguage()]||drafts.es;prompt.value=exploreAutoDraft;
 }
 function queryBody(){return {pais:country,ciudad:city,idioma:catalogLanguage(),ambito_id:Number(document.querySelector('#queryScope').value),categoria_id:Number(document.querySelector('#queryCategory').value),codigo_postal_id:Number(document.querySelector('#queryPostal').value),mode:queryMode,user_message:document.querySelector('#promptText').value.trim(),attachments:media};}
 function startHomeQuery(){
@@ -249,7 +255,7 @@ document.querySelector('#confirmQuerySources').onclick=()=>{
  const generate=pendingSourcesGeneration;queryRequestId=null;closeSourceModal();if(generate)generateDPIAQuery();
 };
 function syncLocalCategory(){const option=document.querySelector('#queryCategory').selectedOptions[0];localCategory=option?.value?{id:option.value,name:option.textContent}:null;}
-document.querySelector('#queryCategory').addEventListener('change',()=>{syncLocalCategory();if(queryMode==='novedades')updateNovelDraft();});
+document.querySelector('#queryCategory').addEventListener('change',()=>{syncLocalCategory();invalidateQuery();if(queryMode==='novedades')updateNovelDraft();else if(queryMode==='explorar')updateExploreDraft();});
 
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!document.querySelector('#querySourcesModal').hidden)closeSourceModal();});
 for(const box of document.querySelectorAll('[name="querySource"]'))box.addEventListener('change',()=>{if(box.checked&&externalQuerySources.includes(box.value)){for(const other of document.querySelectorAll('[name="querySource"]'))if(other!==box&&externalQuerySources.includes(other.value))other.checked=false;}document.querySelector('#allQuerySources').checked=[...document.querySelectorAll('[name="querySource"]')].filter(item=>['local','dpia','historial'].includes(item.value)).every(item=>item.checked);});
