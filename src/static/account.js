@@ -12,7 +12,7 @@
  byId('accountProfile').onclick=()=>window.DPIAPublications?.openProfile('profile');
  byId('accountPublications').onclick=()=>window.DPIAPublications?.openProfile();
  byId('accountRecharge').onclick=()=>byId('openUpgrade').click();
- byId('accountHistory').onclick=()=>{show('creditsPage');byId('creditOperations').scrollIntoView({block:'start'});};
+ byId('accountHistory').onclick=()=>{show('creditsPage');byId('creditHistoryAccordion').open=true;byId('creditHistoryAccordion').scrollIntoView({block:'center'});};
  byId('accountLogout').onclick=async()=>{
   const button=byId('accountLogout');if(button.disabled)return;button.disabled=true;
   try{await byId('profileLogout').onclick();render();if(currentEmail)byId('accountStatus').textContent=byId('profileStatus').textContent;}

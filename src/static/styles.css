@@ -423,3 +423,11 @@ html[data-theme="dark"] .search-media-menu{background:#291d46;border-color:#8064
 #changeQuerySources[hidden],.query-source-options[hidden],#queryAIOrigin[hidden]{display:none}
 .query-ai-origin{padding:16px;margin:16px 0;border:1px solid #8064aa80;border-radius:16px;text-align:left}
 .query-ai-origin p{margin-bottom:0}
+
+.credit-history-accordion{margin:24px 0;border:1px solid #c9b8e5;border-radius:18px;overflow:hidden}
+.credit-history-accordion>summary{padding:16px 18px;font-size:18px;font-weight:700;cursor:pointer;line-height:1.4}
+.credit-history-accordion>summary:focus-visible,.credit-history-scroll:focus-visible{outline:3px solid #ffbf36;outline-offset:-3px}
+.credit-history-scroll{max-height:min(360px,50dvh);overflow-y:auto;overscroll-behavior-y:contain;scrollbar-gutter:stable;padding:0 18px}
+.credit-history-scroll #creditOperations{margin:0}
+.credit-history-scroll #creditOperations li:last-child{border-bottom:0}
+html[data-theme="dark"] .credit-history-accordion{border-color:#8064aa80;background:#211735}
