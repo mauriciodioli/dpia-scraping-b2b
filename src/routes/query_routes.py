@@ -248,7 +248,10 @@ def query_product_images(operation_id):
             outcome=json.loads(operation['outcome']) if operation.get('outcome') else {}
             if not 0<=index<len(outcome.get('products') or []):raise PreparationError('Producto no encontrado.',404)
             stage=outcome.get('image_stages',{}).get(str(index))
-            return jsonify(success=True,**public_stage(stage or {'status':'not_started','images':[]}))
+            public=public_stage(stage or {'status':'not_started','images':[]})
+            if stage and stage.get('status') in ('pending','loading','running') and stage.get('queue_kind')!='base44_images':
+                public.update(tracking_supported=False,error='Esta preparación quedó pendiente en la integración anterior y no tiene seguimiento automático. Solo se puede consultar el último estado guardado; no se iniciará otro scraping.')
+            return jsonify(success=True,**public)
         body=request.get_json(silent=True)
         if not isinstance(body,dict) or set(body)-{'product_index','filters'} or type(body.get('product_index')) is not int:
             raise PreparationError('Seleccioná un producto del resultado guardado.')

@@ -40,7 +40,7 @@
  function gallery(data){
   if(chosen)chosen.stage=data;
   $('prepareProductImages').disabled=imageBusy;
-  $('prepareProductImages').textContent=['pending','running','complete','failed'].includes(data.status)?'Consultar estado':'Preparar imágenes';
+  $('prepareProductImages').textContent=data.tracking_supported===false?'Ver estado guardado':['pending','running','complete','failed'].includes(data.status)?'Consultar estado':'Preparar imágenes';
   $('productGallery').replaceChildren();
   for(const value of data.images||[]){const url=safeQueryUrl(value);if(!url)continue;const label=document.createElement('label'),check=document.createElement('input'),img=document.createElement('img');check.type='checkbox';check.name='publicationPhoto';check.value=url;let saved=null;try{saved=JSON.parse(localStorage.getItem(photoKey())||'null');}catch(_){}check.checked=!Array.isArray(saved)||saved.includes(url);check.onchange=()=>{try{localStorage.setItem(photoKey(),JSON.stringify([...document.querySelectorAll('[name="publicationPhoto"]:checked')].map(n=>n.value)));}catch(_){}};img.src=url;img.alt='Imagen del producto';img.loading='lazy';img.onerror=()=>label.remove();label.append(check,img);$('productGallery').append(label);}
   $('queryPublicationForm').hidden=!(data.status==='complete'&&data.images?.length);
@@ -50,7 +50,7 @@
   const diagnosis=d?`Precio: ${d.price??'N/D'} · Rating: ${d.rating??'N/D'} · Reseñas: ${d.rating_missing?'No exigidas sin rating':d.reviews}. `:'';
   const reasons=d?Object.entries(d.checks).filter(([,ok])=>!ok).map(([key])=>({precio:'precio',rating:'rating',resenas:'reseñas'}[key])):[];
   const text=data.status==='not_started'?'Aplicá los filtros y prepará las imágenes cuando quieras.':data.status==='running'?'Preparación en ejecución confirmada en DPIA. Podés cerrar este modal.':data.status==='pending'?'Preparación pendiente de confirmación. Podés cerrar este modal y continuar navegando.':data.status==='filtered'?`No cumple los filtros de ${reasons.join(', ')}. Podés ajustarlos antes de preparar imágenes.`:data.status==='complete'?(data.images?.length?'Imágenes preparadas.':'La API no devolvió imágenes válidas.'):data.error||'Preparación pendiente de confirmación.';
-  $('productImagesStatus').textContent=diagnosis+text+(['pending','running'].includes(data.status)&&data.error?' '+data.error:'');
+  $('productImagesStatus').textContent=diagnosis+(data.tracking_supported===false?data.error:text+(['pending','running'].includes(data.status)&&data.error?' '+data.error:''));
  }
  function openImages(operation,index,product,stage){
   if(!currentEmail){openAuth();return;}
@@ -127,11 +127,14 @@
  }
  function photoKey(){return 'dpia-gallery-selection:'+JSON.stringify([currentEmail,chosen?.operation,chosen?.index]);}
  async function refreshChosen(target){
+  if(imageBusy)return;imageBusy=true;$('prepareProductImages').disabled=true;
+  $('productImagesStatus').textContent='Consultando el estado guardado en DPIA…';
   try{
    const response=await fetch('/api/consultas/operaciones/'+encodeURIComponent(target.operation)+'/imagenes?product_index='+target.index,{cache:'no-store'}),data=await response.json();
    if(!response.ok||!data.success)throw new Error(data.error||'No se pudo consultar la preparación.');
-   if(chosen?.operation===target.operation&&chosen?.index===target.index&&currentEmail===target.email)gallery(data);
+   if(chosen?.operation===target.operation&&chosen?.index===target.index&&currentEmail===target.email){gallery(data);const stamp=document.createElement('small');stamp.textContent=' Estado consultado: '+new Date().toLocaleTimeString();$('productImagesStatus').append(stamp);}
   }catch(error){if(chosen?.operation===target.operation&&currentEmail===target.email)$('productImagesStatus').textContent=error.message;}
+  finally{imageBusy=false;$('prepareProductImages').disabled=false;}
  }
  async function trackImages(){
   if(trackingBusy||!currentEmail||document.hidden)return;
