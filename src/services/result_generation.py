@@ -1,5 +1,7 @@
 """OpenAI JSON generation. No scraping, publishing, payments or Sheets writes."""
 import json
+import logging
+import re
 import requests
 from jsonschema import Draft202012Validator, ValidationError
 from services.query_preparation import result_template, build_private_prompt, PreparationError
@@ -90,6 +92,90 @@ def validate_result(result, prepared):
     return result
 
 
+def diagnostic_message(message):
+    """Return technical summaries only; never log free-form provider text.
+
+    Error messages can echo inputs, personal data or credentials. A denylist
+    cannot reliably remove those, so unrecognized messages are omitted.
+    """
+    if not isinstance(message,str) or not message:
+        return '[message unavailable]'
+    text=message[:8000].casefold()
+    summaries=(
+        ('invalid schema', 'Invalid JSON schema'),
+        ('incorrect api key', 'Incorrect API key provided [value omitted]'),
+        ('invalid api key', 'Invalid API key [value omitted]'),
+        ('insufficient_quota', 'API quota unavailable'),
+        ('exceeded your current quota', 'API quota unavailable'),
+        ('rate limit', 'API rate limit exceeded'),
+        ('does not exist or you do not have access', 'Model unavailable or access denied'),
+        ('unsupported parameter', 'Unsupported API parameter'),
+        ('unknown parameter', 'Unknown API parameter'),
+        ('invalid value', 'Invalid API parameter value'),
+        ('server had an error', 'Provider internal error'),
+    )
+    for marker,summary in summaries:
+        if marker in text:
+            if marker=='invalid schema':
+                # Only fixed schema keywords and fixed reasons can reach logs.
+                keywords=[name for name in ('additionalProperties','required','anyOf',
+                    'minItems','maxItems','minimum','maximum','enum','type')
+                    if re.search(r'(?<![a-z])'+name.casefold()+r'(?![a-z])',text)]
+                reasons=[reason for marker,reason in (
+                    ('not permitted','not permitted'),('not supported','not supported'),
+                    ('required to be supplied','missing required keyword'),
+                    ('must be','invalid keyword value')) if marker in text]
+                summary+='; keywords='+(','.join(keywords) or 'unknown')
+                summary+='; reason='+(','.join(reasons) or 'unspecified')
+            return summary
+    return '[message omitted: unrecognized provider text]'
+
+
+def provider_error(response, secrets=()):
+    """Classify rejections without exposing provider text, prompts or credentials."""
+    code='unknown';error_type='unknown';message=None
+    try:
+        payload=response.json()
+        error=payload.get('error') if isinstance(payload,dict) else None
+        if isinstance(error,dict):
+            message=error.get('message')
+            if error.get('type') in ('invalid_request_error','authentication_error',
+                    'permission_error','rate_limit_error','insufficient_quota',
+                    'server_error','api_error','requests','tokens'):
+                error_type=error['type']
+        candidate=error.get('code') if isinstance(error,dict) else None
+        if candidate in ('invalid_api_key','insufficient_quota','rate_limit_exceeded',
+                         'model_not_found','invalid_json_schema','unsupported_parameter',
+                         'invalid_value','billing_hard_limit_reached'):
+            code=candidate
+    except (ValueError,TypeError,AttributeError):
+        pass
+    request_id=response.headers.get('x-request-id','')
+    if not isinstance(request_id,str) or not re.fullmatch(r'(?:req_[0-9a-f]{32}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})',request_id) or any(secret and secret in request_id for secret in secrets):request_id='unavailable'
+    logging.getLogger(__name__).warning(
+        'OpenAI rejection: status=%s type=%s code=%s request_id=%s message=%s',
+        response.status_code,error_type,code,request_id,diagnostic_message(message))
+    if code in ('insufficient_quota','billing_hard_limit_reached'):
+        message='La cuenta de OpenAI no tiene cuota disponible. Revisá el saldo y el límite de gasto del proyecto.'
+    elif response.status_code==401 or code=='invalid_api_key':
+        message='OpenAI rechazó la credencial del servidor. Revisá OPENAI_API_KEY en el entorno desplegado.'
+    elif response.status_code==403:
+        message='El proyecto de OpenAI no tiene permiso para realizar esta consulta.'
+    elif response.status_code==404 or code=='model_not_found':
+        message='El modelo configurado no está disponible para este proyecto de OpenAI. Revisá OPENAI_MODEL.'
+    elif response.status_code==429:
+        message='OpenAI alcanzó el límite temporal de solicitudes. Esperá un momento y reintentá.'
+    elif code=='invalid_json_schema':
+        message='OpenAI rechazó el formato de respuesta configurado. Es necesario revisar el esquema en el servidor.'
+    elif response.status_code==400:
+        message='OpenAI rechazó los parámetros de la consulta. Revisá la configuración del modelo en el servidor.'
+    elif response.status_code>=500:
+        message='OpenAI no está disponible temporalmente. Reintentá más tarde.'
+    else:
+        message='OpenAI rechazó la consulta. Revisá el registro del servidor para identificar la causa.'
+    return PreparationError(message,502)
+
+
 def generate(prepared, config):
     key=config.get('OPENAI_API_KEY','')
     if not key:raise PreparationError('La generación de consultas no está configurada todavía.',503)
@@ -101,7 +187,10 @@ def generate(prepared, config):
                       'input':model_input(prepared),'max_output_tokens':12000,
                       'text':{'format':{'type':'json_schema','name':'dpia_results_v2','strict':True,'schema':schema}}},
                 timeout=(3.05,90),allow_redirects=False) as response:
-            if response.status_code!=200:raise PreparationError('No se pudo generar la consulta. Reintentá más tarde.',502)
+            if response.status_code!=200:
+                provider_error(response,secrets=(key,config.get('SCRAPEADOR_SERVICE_KEY','')))
+                # Diagnostics must not change the public error contract.
+                raise PreparationError('No se pudo generar la consulta. Reintentá más tarde.',502)
             payload=response.json()
         if payload.get('status')!='completed':raise PreparationError('La generación no se completó.',502)
         outputs=[part['text'] for output in payload.get('output',[]) if output.get('type')=='message'
