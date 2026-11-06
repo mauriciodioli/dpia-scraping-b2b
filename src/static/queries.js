@@ -4,7 +4,7 @@ let novelAutoDraft='', exploreAutoDraft='', exploreBudgetDraft='', queryBudgetCo
 let queryPreparationTimer=null, queryPreparationQueued=false;
 const externalQuerySources=['amazon','ebay','aliexpress','mercadolibre'];
 const querySources=[...externalQuerySources,'local','dpia','historial'];
-function sourceAvailableForCountry(source){return (!externalQuerySources.includes(source)||(window.DPIA_ENABLED_MARKETPLACES||['amazon']).includes(source))&&(source!=='mercadolibre'||['Argentina','México'].includes(country));}
+function sourceAvailableForCountry(source){return (!externalQuerySources.includes(source)||(window.DPIA_ENABLED_MARKETPLACES||['amazon','mercadolibre']).includes(source))&&(source!=='mercadolibre'||['Argentina','México'].includes(country));}
 function refreshQuerySelectors(category=null, scopeId=null){
  const scopeSelect=document.querySelector('#queryScope'), categorySelect=document.querySelector('#queryCategory'), postalSelect=document.querySelector('#queryPostal');
  const oldScope=scopeSelect.value,oldCategory=categorySelect.value,oldPostal=postalSelect.value;

@@ -521,3 +521,5 @@ html[data-theme="dark"] #consultPage .query-chat-toolbar #preparePrompt{backgrou
 html[data-theme="dark"] #consultPage .consult-attachment-menu{background:#2d2438;border-color:#594966;color:#eee7f5}
 html[data-theme="dark"] #consultPage .consult-attachment-menu button:hover,html[data-theme="dark"] #consultPage .consult-attachment-menu button:focus-visible{background:#44344f}
 html[data-theme="dark"] #consultPage #attachments>div{background:#463554}
+
+#consultPage>.page-head>#apiConnection{margin-left:auto;flex-shrink:0}

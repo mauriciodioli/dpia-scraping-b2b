@@ -627,3 +627,9 @@ Object.assign(DPIA_TRANSLATIONS, {
   "Interrompi registrazione"
  ]
 });
+
+Object.assign(DPIA_I18N_BINDINGS, {'sources.novelNotice':'Primero se prepara la búsqueda con OpenAI y luego se consulta el marketplace seleccionado.'});
+Object.assign(DPIA_TRANSLATIONS, {
+ 'Primero se prepara la búsqueda con OpenAI y luego se consulta el marketplace seleccionado.':['OpenAI prepares the search first, then the selected marketplace is queried.','Najpierw OpenAI przygotowuje wyszukiwanie, a następnie przeszukiwany jest wybrany marketplace.','Prima OpenAI prepara la ricerca, poi viene consultato il marketplace selezionato.'],
+ 'El marketplace seleccionado todavía no está habilitado para scraping.':['The selected marketplace is not enabled for scraping yet.','Wybrany marketplace nie jest jeszcze dostępny do scrapingu.','Il marketplace selezionato non è ancora abilitato per lo scraping.']
+});

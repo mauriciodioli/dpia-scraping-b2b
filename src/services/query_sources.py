@@ -4,7 +4,7 @@ from services.query_preparation import PreparationError
 
 EXTERNAL=('amazon','ebay','aliexpress','mercadolibre')
 # Enable another marketplace only after its API and DB storage are ready.
-ENABLED_EXTERNAL=('amazon',)
+ENABLED_EXTERNAL=('amazon','mercadolibre')
 INTERNAL=('local','dpia','historial')
 ALL=EXTERNAL+INTERNAL
 
@@ -20,7 +20,7 @@ def normalize_sources(value):
 def require_enabled_marketplaces(value):
     sources=normalize_sources(value)
     if any(source in EXTERNAL and source not in ENABLED_EXTERNAL for source in sources):
-        raise PreparationError('Por ahora, solo Amazon está habilitado para scraping.',400)
+        raise PreparationError('El marketplace seleccionado todavía no está habilitado para scraping.',400)
 
 
 def search_terms(message):
