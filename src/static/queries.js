@@ -31,7 +31,8 @@ function syncQueryConversation(){
  document.querySelector('#promptResult').hidden=!prepared;
  document.querySelector('#preparePrompt').hidden=false;
  document.querySelector('#preparePrompt').disabled=queryBusy||sent||(!prepared&&!!currentEmail);
- document.querySelector('#preparePrompt').setAttribute('data-i18n',queryPrepared?.pending?'Consulta pendiente de confirmación':sent?'Consulta enviada':'Enviar consulta →');
+ document.querySelector('#preparePrompt').setAttribute('data-i18n-aria-label',queryPrepared?.pending?'Consulta pendiente de confirmación':sent?'Consulta enviada':'Enviar consulta →');
+ document.querySelector('#preparePrompt').setAttribute('data-i18n-title',document.querySelector('#preparePrompt').getAttribute('data-i18n-aria-label'));
  document.querySelector('#queryReadyPanel').hidden=!prepared;
  // Keep the existing send handler available without a second visible action.
  document.querySelector('#generateQuery').hidden=true;

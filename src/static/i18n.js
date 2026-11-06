@@ -597,3 +597,33 @@ Object.assign(DPIA_TRANSLATIONS, {
   "La richiesta è cambiata. DPIA sta aggiornando il riepilogo."
  ]
 });
+
+Object.assign(DPIA_I18N_BINDINGS, {
+ "chat.attach": "Adjuntar imagen o video",
+ "chat.image": "Imagen",
+ "chat.video": "Video",
+ "chat.recordAudio": "Grabar audio",
+ "chat.stopAudio": "Detener grabación"
+});
+Object.assign(DPIA_TRANSLATIONS, {
+ "Adjuntar imagen o video": [
+  "Attach image or video",
+  "Dołącz obraz lub film",
+  "Allega immagine o video"
+ ],
+ "Imagen": [
+  "Image",
+  "Obraz",
+  "Immagine"
+ ],
+ "Video": [
+  "Video",
+  "Film",
+  "Video"
+ ],
+ "Detener grabación": [
+  "Stop recording",
+  "Zatrzymaj nagrywanie",
+  "Interrompi registrazione"
+ ]
+});

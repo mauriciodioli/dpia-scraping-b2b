@@ -494,3 +494,30 @@ html[data-theme="dark"] #retryApiConnection{background:#3b2b50}
 #consultPage .query-chat-field .query-chat-summary{font-size:13px;line-height:1.55}
 html[data-theme="dark"] #consultPage .query-chat-field{background:#302345;border-color:#65527c}
 html[data-theme="dark"] #consultPage .query-chat-field>.query-chat-reply{background:transparent;border-color:#65527c;color:#f1e8ff}
+
+/* Inline chat toolbar: plus, filters, microphone and a compact send arrow. */
+#consultPage .query-chat-field{overflow:visible;position:relative}
+#consultPage .query-chat-toolbar{display:flex;align-items:center;gap:7px;padding:8px 12px 12px;color:#746b82}
+#consultPage .chat-icon-button,#consultPage .query-chat-toolbar .query-budget-toggle{display:inline-flex;align-items:center;justify-content:center;flex:0 0 36px;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer}
+#consultPage .query-chat-toolbar .query-budget-toggle[aria-expanded="true"]{background:#e4d9f2;color:#624288}
+#consultPage .chat-toolbar-spacer{flex:1}
+#consultPage .query-chat-toolbar #preparePrompt{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;min-height:0;padding:0;border-radius:50%;background:#e8e2f1;color:#292035;box-shadow:none}
+#consultPage .query-chat-toolbar #preparePrompt:disabled{opacity:.4;cursor:not-allowed}
+#consultPage .query-chat-toolbar button:focus-visible{outline:2px solid #9b78c9;outline-offset:3px}
+#consultPage .consult-add-control{position:relative;display:flex}
+#consultPage .consult-attachment-menu{position:absolute;bottom:calc(100% + 10px);left:0;z-index:8;display:grid;width:max-content;min-width:200px;max-width:calc(100vw - 64px);padding:6px;border:1px solid #ddd4e9;border-radius:15px;background:#faf8fe;box-shadow:0 12px 30px #21133222}
+#consultPage .consult-attachment-menu button{padding:12px 14px;text-align:left;white-space:normal;border-radius:10px;background:transparent;color:inherit;font-size:13px}
+#consultPage .consult-attachment-menu button:hover,#consultPage .consult-attachment-menu button:focus-visible{background:#eee5f8}
+#consultPage #attachments:empty{display:none}
+#consultPage #attachments:not(:empty){display:flex;flex-wrap:wrap;gap:8px;padding:12px 16px 0}
+#consultPage #attachments>div{max-width:100%;padding:5px 9px;border-radius:12px;background:#ede6f5}
+#consultPage #attachments>div span{overflow-wrap:anywhere;min-width:0}
+#consultPage .chat-stop-icon{display:none}
+#consultPage #consultAudio[data-recording="true"] .chat-mic-icon{display:none}
+#consultPage #consultAudio[data-recording="true"] .chat-stop-icon{display:block;color:#e65c78}
+html[data-theme="dark"] #consultPage .query-chat-toolbar{color:#c4bdcf}
+html[data-theme="dark"] #consultPage .query-chat-toolbar .query-budget-toggle[aria-expanded="true"]{background:#463554;color:#ded3ee}
+html[data-theme="dark"] #consultPage .query-chat-toolbar #preparePrompt{background:#e0dbe7;color:#292035}
+html[data-theme="dark"] #consultPage .consult-attachment-menu{background:#2d2438;border-color:#594966;color:#eee7f5}
+html[data-theme="dark"] #consultPage .consult-attachment-menu button:hover,html[data-theme="dark"] #consultPage .consult-attachment-menu button:focus-visible{background:#44344f}
+html[data-theme="dark"] #consultPage #attachments>div{background:#463554}
