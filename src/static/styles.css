@@ -645,3 +645,5 @@ html[data-theme="light"] .situation-journey{background:linear-gradient(125deg,#f
 html[data-theme="dark"] .agent-field input,html[data-theme="dark"] .agent-field select{background:#241a38;color:#f4edf9}
 #nav button{min-width:0;flex:1 1 0}#nav button small{white-space:nowrap}
 @media(max-width:520px){.agent-intro,.agent-summary,.agent-wizard{padding:16px}.agent-fields{grid-template-columns:minmax(0,1fr)}.agent-choice{font-size:13px;padding:9px}.agent-summary dl{grid-template-columns:minmax(0,1fr)}.agent-summary dt{margin-top:5px}.agent-actions .primary{width:100%}#nav button{padding-left:3px;padding-right:3px}#nav button small{font-size:10px}}
+
+.self-credit-panel{margin:16px 0;padding:16px;border:1px solid #a58ac550;border-radius:16px;background:#a58ac510;text-align:center}.self-credit-panel>p{margin:6px 0 12px}.self-credit-panel .primary{font-size:14px;padding:12px}.self-credit-panel #selfCreditAmount{font-size:24px}

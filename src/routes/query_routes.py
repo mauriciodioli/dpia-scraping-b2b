@@ -4,6 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from services.dpia_client import CatalogError
 from services.query_preparation import PreparationError, prepare_context, public_summary, build_private_prompt
 from utils.db import db
+from services.scraping_quota import self_topup_allowed
 from services.result_generation import generate, sheet_rows
 
 query_bp = Blueprint('queries', __name__, url_prefix='/api/consultas')
@@ -48,7 +49,7 @@ def scraping_credits():
     if quota is None:return persistence_unavailable()
     try:
         return jsonify(success=True,credits=quota.credits(session['user_id']),
-                       test_credits_enabled=test_credits_enabled(),payments_enabled=False)
+                       test_credits_enabled=test_credits_enabled(),self_topup_enabled=self_topup_allowed(session['user_id']),payments_enabled=False)
     except PreparationError as exc:
         return jsonify(success=False,error=str(exc)),exc.status
     except SQLAlchemyError:
@@ -77,6 +78,36 @@ def grant_test_credits():
         return jsonify(success=False,error=str(exc)),exc.status
     except SQLAlchemyError:
         return persistence_unavailable()
+
+
+@query_bp.post('/creditos/recargar')
+def self_credit_points():
+    from uuid import UUID
+    from urllib.parse import urlsplit
+    if type(session.get('user_id')) is not int:
+        return jsonify(success=False,error='Iniciá sesión.'),401
+    try:
+        origin=request.headers.get('Origin')
+        same_origin=not origin or urlsplit(origin).netloc==request.host
+    except ValueError:same_origin=False
+    if not same_origin or request.headers.get('Sec-Fetch-Site')=='cross-site' or request.headers.get('X-DPIA-Action')!='self-credit':
+        return jsonify(success=False,error='Solicitud inválida.'),403
+    if not request.is_json or (request.content_length or 0)>4096:
+        return jsonify(success=False,error='Solicitud inválida.'),400
+    body=request.get_json(silent=True)
+    if not isinstance(body,dict) or set(body)!={'amount','request_id'} or not isinstance(body.get('request_id'),str):
+        return jsonify(success=False,error='Solicitud inválida.'),400
+    try:
+        request_id=str(UUID(body['request_id']))
+    except (ValueError,AttributeError):
+        return jsonify(success=False,error='Solicitud inválida.'),400
+    quota=current_app.extensions.get('scraping_quota')
+    if quota is None:return persistence_unavailable()
+    try:
+        result=quota.grant_points(session['user_id'],body['amount'],request_id)
+        return jsonify(success=True,**result,credits=quota.credits(session['user_id']))
+    except PreparationError as exc:return jsonify(success=False,error=str(exc)),exc.status
+    except SQLAlchemyError:return persistence_unavailable()
 
 
 @query_bp.get('/operaciones/<operation_id>')

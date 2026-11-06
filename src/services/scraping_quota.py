@@ -4,6 +4,8 @@ Separate metadata deliberately prevents db.create_all() from provisioning them.
 """
 import hashlib
 import json
+from datetime import datetime, timezone
+from model.usuario import Usuario
 from sqlalchemy import Table, Column, MetaData, Integer, String, Text, DateTime, select, func, update, case
 from sqlalchemy.dialects.mysql import insert
 from sqlalchemy.exc import IntegrityError
@@ -21,7 +23,14 @@ operaciones = Table('pwa_scraping_operaciones', metadata,
     Column('proveedor_trabajo_id', String(160)), Column('creado_en', DateTime),
     Column('actualizado_en', DateTime))
 HELD = ('reserved', 'dispatching', 'pending', 'consumed')
-POINT_COST = case((operaciones.c.origen == 'promocion', 5), else_=1)
+POINT_COST = case((operaciones.c.origen == 'promocion', 5), (operaciones.c.origen == 'recarga', 0), else_=1)
+
+def self_topup_allowed(user_id):
+    user=db.session.get(Usuario,user_id)
+    return bool(user and user.activo and privileged_credit_role(user.roll))
+
+def privileged_credit_role(role):
+    return str(role or '').strip().casefold() in {'administrador','admin','avanzado','advanced'}
 
 
 def used_points(conn, user_id):
@@ -79,7 +88,7 @@ class MySQLScrapingQuota:
         with self._engine().connect() as conn:
             row = conn.execute(select(operaciones).where(operaciones.c.operacion_id == operation_id,
                 operaciones.c.usuario_id == user_id)).mappings().first()
-            if not row or row['origen']=='promocion':
+            if not row or row['origen'] in ('promocion','recarga'):
                 return None
             outcome = decode(row['resultado_json'])
             return {'operation_id': row['operacion_id'], 'source': row['origen'], 'state': row['estado'],
@@ -107,14 +116,44 @@ class MySQLScrapingQuota:
             total = self._lock(conn, user_id)
             counts = dict(conn.execute(select(operaciones.c.estado, func.sum(POINT_COST)).where(
                 operaciones.c.usuario_id == user_id).group_by(operaciones.c.estado)).all())
-            rows = conn.execute(select(operaciones.c.operacion_id, operaciones.c.origen, operaciones.c.estado
+            rows = conn.execute(select(operaciones.c.operacion_id, operaciones.c.origen, operaciones.c.estado,
+                case((operaciones.c.origen=='recarga',operaciones.c.resultado_json),else_=None)
                 ).where(operaciones.c.usuario_id == user_id).order_by(
                 operaciones.c.creado_en.desc(), operaciones.c.operacion_id).limit(30)).all()
             reserved = sum(int(counts.get(state, 0)) for state in ('reserved', 'dispatching', 'pending'))
             consumed = int(counts.get('consumed', 0))
             return {'initial': total, 'available': max(0, total-reserved-consumed),
                     'reserved': reserved, 'consumed': consumed,
-                    'operations': [{'operation_id': row[0], 'source': row[1], 'state': row[2], 'cost': 5 if row[1]=='promocion' else 1} for row in rows]}
+                    'operations': [{'operation_id': row[0], 'source': row[1], 'state': row[2], 'cost': 0 if row[1]=='recarga' else 5 if row[1]=='promocion' else 1,
+                                    **({'amount':(decode(row[3]) or {}).get('credited_points',0)} if row[1]=='recarga' else {})} for row in rows]}
+
+    def grant_points(self, user_id, amount, request_id):
+        """Role-authorized self-credit, atomic and idempotent; uses existing tables only."""
+        if type(amount) is not int or amount != 6:
+            raise PreparationError('La recarga autorizada es de 6 puntos.',400)
+        digest=hashlib.sha256(json.dumps({'user_id':user_id,'amount':amount,'action':'self_credit'},sort_keys=True).encode()).hexdigest()
+        now=datetime.now(timezone.utc).replace(tzinfo=None)
+        with self._engine().begin() as conn:
+            user=conn.execute(select(Usuario.activo,Usuario.roll).where(Usuario.id==user_id).with_for_update()).first()
+            if not user or not user.activo:
+                raise PreparationError('Iniciá sesión.',401)
+            if not privileged_credit_role(user.roll):
+                raise PreparationError('Solo administradores y usuarios avanzados pueden cargar puntos sin pago.',403)
+            total=self._lock(conn,user_id)
+            previous=conn.execute(select(operaciones).where(operaciones.c.operacion_id==request_id).with_for_update()).mappings().first()
+            if previous:
+                if previous['usuario_id']!=user_id or previous['origen']!='recarga' or previous['solicitud_hash']!=digest:
+                    raise PreparationError('El identificador de recarga ya está utilizado.',409)
+                return {'credited_points':amount,'reused':True}
+            if total>2147483647-amount:
+                raise PreparationError('La cantidad supera el límite del saldo.',400)
+            conn.execute(update(cupos).where(cupos.c.usuario_id==user_id).values(ejecuciones_habilitadas=total+amount))
+            # released means no hold or debit; source=recarga identifies the credit entry.
+            conn.execute(operaciones.insert().values(operacion_id=request_id,usuario_id=user_id,
+                origen='recarga',estado='released',solicitud_hash=digest,
+                contexto_json=json.dumps({'action':'self_credit','actor_user_id':user_id,'amount':amount}),
+                resultado_json=json.dumps({'credited_points':amount}),creado_en=now,actualizado_en=now))
+            return {'credited_points':amount,'reused':False}
 
     def grant_test(self, user_id):
         with self._engine().begin() as conn:
@@ -124,7 +163,7 @@ class MySQLScrapingQuota:
 
     def history(self, user_id, offset=0):
         with self._engine().connect() as conn:
-            rows = conn.execute(select(operaciones).where(operaciones.c.usuario_id == user_id, operaciones.c.origen != 'promocion')
+            rows = conn.execute(select(operaciones).where(operaciones.c.usuario_id == user_id, ~operaciones.c.origen.in_(('promocion','recarga')))
                 .order_by(operaciones.c.creado_en.desc(), operaciones.c.operacion_id)
                 .offset(offset).limit(25)).mappings().all()
             history = []
