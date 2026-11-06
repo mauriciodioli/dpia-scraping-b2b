@@ -69,6 +69,6 @@ def publications_for_city(country, city, offset=0, category_id=None, terms=None,
         random.Random(bucket).shuffle(rows)
     else:
         rows = ordered.offset(offset).limit(25).all()
-    return [dict(id=row.id, titulo=row.texto or row.titulo, descripcion=row.descripcion,
+    return [dict(id=row.id, titulo=row.titulo, descripcion=row.descripcion,
                  imagen=row.imagen, precio=row.precio, moneda=row.moneda,
                  ciudad=city) for row in rows[:24]], (total > 24 if rotate else len(rows) > 24)

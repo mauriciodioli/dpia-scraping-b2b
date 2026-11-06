@@ -302,7 +302,7 @@ function renderQueryResult(data){
    section.append(grid);
    if(outcome.status==='pending'&&lastQueryOperationId){const refresh=document.createElement('button');refresh.className='action-button';refresh.type='button';refresh.textContent='Consultar estado';refresh.onclick=()=>loadQueryOperation(lastQueryOperationId);section.append(refresh);}
   }else{
-   for(const row of outcome.data||[]){const article=document.createElement('article');article.className='prompt-result';const name=document.createElement('strong');name.textContent=row.titulo||row.producto||row.Producto||'';const description=document.createElement('p');description.textContent=row.descripcion||'';article.append(name,description);section.append(article);}
+   for(const row of outcome.data||[]){const article=document.createElement('article');article.className='prompt-result';const name=document.createElement('strong');name.dataset.catalogName='';name.textContent=row.titulo??row.producto??row.Producto??'';const description=document.createElement('p');description.textContent=row.descripcion||'';article.append(name,description);section.append(article);}
    if(!outcome.data?.length){const empty=document.createElement('p');empty.textContent='Sin resultados para este origen.';section.append(empty);}
   }
   container.append(section);

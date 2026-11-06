@@ -68,7 +68,9 @@ def publish_product(quota, operation_id, user_id, body):
             AmbitoCategoriaRelation.ambito_id==ids['ambito_id'],AmbitoCategoriaRelation.ambitoCategoria_id==ids['categoria_id'])).first()
         if not scope or not category or not relation:raise PreparationError('La categoría ya no corresponde al ámbito seleccionado.',409)
         slug='pwa-'+hashlib.sha256(f'{user_id}:{operation_id}:{index}'.encode()).hexdigest()
-        result=conn.execute(Publicacion.__table__.insert().values(user_id=user_id,titulo=slug,texto=payload['titulo'],
+        if conn.execute(select(Publicacion.id).where(Publicacion.titulo==payload['titulo'])).first():
+            raise PreparationError('Ya existe una publicación con ese título. Elegí un título diferente.',409)
+        result=conn.execute(Publicacion.__table__.insert().values(user_id=user_id,titulo=payload['titulo'],texto=slug,
             ambito=scope['valor'] or context['ambito'],categoria_id=ids['categoria_id'],correo_electronico=user['correo_electronico'],
             descripcion=payload['descripcion'],color_texto='black',color_titulo='black',
             fecha_creacion=datetime.now(timezone.utc).replace(tzinfo=None),estado='ACTIVO',

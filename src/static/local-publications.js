@@ -99,7 +99,9 @@ async function openHomePublication(item){
   const price=document.createElement('p');price.className='publication-detail-price';price.textContent=saved.precio==null?'Precio no informado':`${saved.precio} ${saved.moneda||''}`.trim();
   const metadata=document.createElement('dl');metadata.className='publication-detail-metadata';
   for(const [label,key] of [['Ámbito','ambito'],['Categoría','categoria'],['Ciudad','ciudad'],['Código postal','codigoPostal'],['País','pais'],['Idioma','idioma'],['Fecha','fecha']]){if(!saved[key])continue;const term=document.createElement('dt'),value=document.createElement('dd');term.textContent=label;value.textContent=saved[key];metadata.append(term,value);}
-  content.append(gallery,price,description,metadata);
+  content.append(gallery,price,description);
+  if(saved.texto&&saved.texto!==saved.descripcion&&!/^(pwa|b44)-[0-9a-f]{64}$/i.test(saved.texto)){const body=document.createElement('p');body.className='publication-detail-description';body.dataset.catalogName='';body.textContent=saved.texto;content.append(body);}
+  content.append(metadata);
   const url=safeQueryUrl(saved.afiliado_link);if(url){const link=document.createElement('a');link.href=url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Ver producto';content.append(link);}
  }catch(error){if(overlay.isConnected)content.textContent=error.message;}
 }

@@ -976,7 +976,7 @@ def my_publications():
         rows = Publicacion.query.filter_by(user_id=user.id).order_by(
             Publicacion.fecha_creacion.desc(), Publicacion.id.desc()).offset(int(offset)).limit(25).all()
         return jsonify(success=True, has_more=len(rows)>24, publicaciones=[{
-            'id': row.id, 'titulo': row.texto or row.titulo, 'descripcion': row.descripcion,
+            'id': row.id, 'titulo': row.titulo, 'descripcion': row.descripcion,
             'imagen': row.imagen, 'precio': row.precio, 'moneda': row.moneda,
             'estado': row.estado, 'can_delete': True,
         } for row in rows[:24]])
@@ -998,7 +998,7 @@ def publication_detail(publication_id):
         images=list(dict.fromkeys([url for url in [row.imagen,*[photo[0] for photo in photos]] if url]))
         postal=db.session.get(CodigoPostal,row.codigo_postal_id) if row.codigo_postal_id else None
         category=db.session.get(AmbitoCategoria,row.categoria_id) if row.categoria_id else None
-        return jsonify(success=True,publicacion={'id':row.id,'titulo':row.texto or row.titulo,'descripcion':row.descripcion,
+        return jsonify(success=True,publicacion={'id':row.id,'titulo':row.titulo,'texto':row.texto,'descripcion':row.descripcion,
             'precio':row.precio,'moneda':row.moneda,'imagenes':images,'imagen':row.imagen,'ambito':row.ambito,
             'categoria':(category.valor or category.nombre) if category else None,
             'codigoPostal':postal.codigoPostal if postal else row.codigoPostal,'ciudad':postal.ciudad if postal else None,
