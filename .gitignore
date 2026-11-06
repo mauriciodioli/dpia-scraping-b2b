@@ -34,3 +34,6 @@ htmlcov/
 # Documentación y SQL locales de promociones
 /docs/publication-promotions.md
 /docs/sql/publication-promotions.sql
+
+# Archivos SQL locales: no versionar
+*.sql

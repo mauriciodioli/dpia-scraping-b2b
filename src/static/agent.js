@@ -5,7 +5,7 @@
  const FREQUENCIES={daily:'Diario',twice:'Dos veces por semana',weekly:'Semanal'};
  const STATES={unconfigured:'No configurado',inactive:'Configurado e inactivo',active:'Activo',running:'Ejecutando',paused:'Pausado',insufficient:'Créditos insuficientes',error:'Error'};
  const STEPS=['Qué monitorear','Dónde y sobre qué','Cuándo','Límites y notificaciones','Confirmación'];
- let wizard=false,index=0,draft=null,record=null,identity=null,scopes=[],categories=[],cities=[],loading=false,loadSerial=0,controller=null,error='';
+ let wizard=false,index=0,draft=null,record=null,identity=null,scopes=[],categories=[],cities=[],loading=false,loadSerial=0,controller=null,error='',serverRevision=0,serverReady=false,serverBusy=false,readSerial=0;
  const tr=text=>window.DPIAI18N?.translate(text)||text;
  const who=()=>typeof currentEmail==='string'?currentEmail:null;
  const key=()=> 'dpia-agent-config:v1:'+ (who()||'guest');
@@ -18,12 +18,12 @@
  function validZone(value){try{new Intl.DateTimeFormat('en',{timeZone:value});return typeof value==='string';}catch(_){return false;}}
  function validLabels(value){return value===undefined||(Array.isArray(value)&&value.length<=500&&value.every(row=>row&&Number.isSafeInteger(row.id)&&row.id>0&&typeof row.name==='string'&&row.name.length<=500));}
  function valid(value){return value&&validLabels(value.scopeLabels)&&validLabels(value.categoryLabels)&&value.version===1&&Array.isArray(value.tasks)&&value.tasks.length>0&&value.tasks.every(t=>Object.hasOwn(TASKS,t))&&typeof value.country==='string'&&value.country.trim().length>0&&value.country.length<=100&&typeof value.city==='string'&&value.city.trim().length>0&&value.city.length<=100&&Array.isArray(value.scopes)&&value.scopes.length>0&&value.scopes.length<=500&&value.scopes.every(v=>Number.isSafeInteger(v)&&v>0)&&Array.isArray(value.categories)&&value.categories.length>0&&value.categories.length<=500&&value.categories.every(v=>Number.isSafeInteger(v)&&v>0)&&Object.hasOwn(FREQUENCIES,value.frequency)&&Array.isArray(value.days)&&value.days.every(v=>Number.isInteger(v)&&v>=0&&v<=6)&&new Set(value.days).size===value.days.length&&(value.frequency==='daily'||value.days.length===(value.frequency==='twice'?2:1))&&/^\d{2}:\d{2}$/.test(value.time)&&Number(value.time.slice(0,2))<24&&Number(value.time.slice(3))<60&&validZone(value.timezone)&&Number.isSafeInteger(value.points)&&value.points>=0&&value.points<=1000000&&['week','month'].includes(value.period)&&typeof value.notifications==='boolean';}
- function read(){error='';try{const stored=localStorage.getItem(key());if(!stored)return null;const result=JSON.parse(stored);if(valid(result))return result;error='La configuración guardada no es válida. Revisala antes de guardar.';}catch(_){error='No se pudo leer la configuración local.';}return null;}
+ function readLocalDraft(){try{const result=JSON.parse(localStorage.getItem(key())||'null');return valid(result)?result:null;}catch(_){return null;}}
  function defaults(){return {version:1,tasks:[],country:typeof country==='string'?country:'',city:typeof city==='string'?city:'',scopes:[...selected].map(Number),categories:[],frequency:'weekly',days:[1],time:'09:00',timezone:timeZone(),points:0,period:'month',notifications:false};}
  function weekday(day){return new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{weekday:'long',timeZone:'UTC'}).format(new Date(Date.UTC(2026,10,1+day)));}
  function feedback(parent){if(error){const el=node('p',error,'agent-feedback');el.setAttribute('role','alert');parent.append(el);}}
  function statusBadge(state){const el=node('span',STATES[state]||STATES.error,'agent-status');el.dataset.state=state;return el;}
- function storageNotice(){return node('p','Configuración guardada solo en este navegador y separada por cuenta. No se sincroniza con otros dispositivos.','agent-notice');}
+ function storageNotice(){return node('p','La configuración se guarda en tu cuenta DPIA. Guardarla no activa el agente.','agent-notice');}
  function engineNotice(){const el=node('p','La activación, las pausas y los avisos reales requieren el servicio del agente. Todavía no hay ejecuciones ni cargos.','agent-notice');el.id='agentEngineNotice';return el;}
  function summary(config){
   const dl=document.createElement('dl');
@@ -38,8 +38,17 @@
  function dashboard(){
   root.replaceChildren();wizard=false;
   const panel=node('div',undefined,record?'agent-summary':'agent-intro');
+  if(who()&&!serverReady){
+   if(serverBusy)panel.append(node('p','Cargando configuración del agente…','hint'));
+   else panel.append(button('Reintentar',open));
+   feedback(panel);root.append(panel);return;
+  }
   panel.append(statusBadge(record?'inactive':'unconfigured'));
-  if(!record){panel.append(node('h3','DPIA busca por vos'),node('p','Encontrá productos nuevos, cambios de precios, proveedores y oportunidades sin buscar todos los días'),button('Configurar mi agente',()=>start(),'primary'));}
+  if(!record){
+   panel.append(node('h3','DPIA busca por vos'),node('p','Encontrá productos nuevos, cambios de precios, proveedores y oportunidades sin buscar todos los días'),button('Configurar mi agente',()=>who()?start():openAuth(),'primary'));
+   if(who()&&readLocalDraft())panel.append(button('Recuperar borrador local',()=>start(readLocalDraft())));
+   if(!who())panel.append(node('p','Iniciá sesión para guardar tu agente.','agent-notice'));
+  }
   else{
    panel.append(summary(record));
    const dl=document.createElement('dl');for(const text of ['Próxima ejecución','Última ejecución','Resultados recientes','Puntos consumidos'])dl.append(node('dt',text),node('dd','Sin ejecuciones'));
@@ -65,8 +74,10 @@
   finally{if(serial===loadSerial&&owner===who()){loading=false;if(wizard&&index===1)renderStep();}}
  }
  function pruneCategories(){draft.categories=draft.categories.filter(id=>categories.some(row=>row.categoria_id===id&&row.ambito_ids.some(scope=>draft.scopes.includes(scope))));}
- function start(){
-  identity=who();draft=record?structuredClone(record):defaults();wizard=true;index=0;error='';
+ function start(imported=null){
+  if(!who()){openAuth();return;}
+  if(!serverReady||serverBusy)return;
+  identity=who();draft=record?structuredClone(record):imported?structuredClone(imported):defaults();wizard=true;index=0;error='';
   scopes=structuredClone(catalogAmbitos);categories=structuredClone(catalogCategorias);cities=draft.city?[draft.city]:[];
   renderStep();if(draft.country)loadLocation();
  }
@@ -109,12 +120,27 @@
   if(step===3&&(!Number.isSafeInteger(draft.points)||draft.points<0||draft.points>1000000))return 'Ingresá un límite de puntos entero y no negativo.';
   return '';
  }
- function save(){
+ async function save(){
+  if(serverBusy)return;
   if(identity!==who()){error='La cuenta cambió. Volvé a abrir la configuración.';renderStep();return;}
+  if(!who()){openAuth();return;}
   for(let step=0;step<4;step++){const issue=check(step);if(issue){index=step;error=issue;renderStep();return;}}
-  const value={...structuredClone(draft),version:1,scopeLabels:scopes.filter(row=>draft.scopes.includes(row.ambito_id)).map(row=>({id:row.ambito_id,name:row.nombre})),categoryLabels:categories.filter(row=>draft.categories.includes(row.categoria_id)).map(row=>({id:row.categoria_id,name:row.nombre})),savedAt:new Date().toISOString()};
+  const value={...structuredClone(draft),version:1,language:window.DPIAI18N?.language||'es'};
+  for(const field of ['scopeLabels','categoryLabels','savedAt'])delete value[field];
   if(!valid(value)){error='La configuración guardada no es válida. Revisala antes de guardar.';renderStep();return;}
-  try{localStorage.setItem(key(),JSON.stringify(value));record=value;error='';loadSerial++;controller?.abort();dashboard();}catch(_){error='No se pudo guardar en este navegador. La configuración no fue guardada.';renderStep();}
+  const owner=who(),serial=++readSerial;serverBusy=true;error='';renderStep();
+  try{
+   const response=await fetch('/api/agente/configuracion',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'configure-agent'},body:JSON.stringify({configuration:value,expected_revision:serverRevision}),signal:AbortSignal.timeout(60000)});
+   const data=await response.json();
+   if(owner!==who()||serial!==readSerial)return;
+   if(response.status===401)openAuth();
+   if(!response.ok||data.success!==true)throw Error(data.error||'No se confirmó el guardado del agente. Volvé a cargar su configuración.');
+   if(!data.agent||!valid(data.agent.configuration)||!Number.isSafeInteger(data.agent.revision)||data.agent.revision<1||data.agent.state!=='inactive'||data.execution_available!==false)throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
+   record=data.agent.configuration;serverRevision=data.agent.revision;serverReady=true;loadSerial++;controller?.abort();
+   serverBusy=false;dashboard();
+  }catch(e){
+   if(owner===who()&&serial===readSerial){error=e.message&&e.name==='Error'?e.message:'No se confirmó el guardado del agente. Volvé a cargar su configuración.';serverBusy=false;renderStep();}
+  }finally{if(owner===who()&&serial===readSerial)serverBusy=false;}
  }
  function renderStep(){
   root.replaceChildren();const panel=node('div',undefined,'agent-wizard'),progress=document.createElement('ol');progress.className='agent-progress';progress.setAttribute('aria-label',tr('Pasos'));
@@ -122,15 +148,40 @@
   if(index===0){const tasks=node('div',undefined,'agent-choices');for(const [id,text] of Object.entries(TASKS))choice(tasks,text,draft.tasks.includes(id),checked=>toggle(draft.tasks,id,checked));panel.append(tasks);}
   if(index===1)stepLocation(panel);if(index===2)stepWhen(panel);if(index===3)stepLimits(panel);
   if(index===4){panel.classList.add('agent-summary');panel.append(summary(draft),engineNotice(),storageNotice());}
+  if(serverBusy){const status=node('p','Guardando configuración…','hint');status.setAttribute('role','status');panel.append(status);}
   feedback(panel);const actions=node('div',undefined,'agent-actions');
   actions.append(button('Cancelar',()=>{loadSerial++;controller?.abort();dashboard();}));
   if(index>0)actions.append(button('Anterior',()=>{index--;error='';renderStep();}));
   const next=button(index===4?'Guardar sin activar':'Siguiente',()=>{if(index===4){save();return;}const issue=check(index);if(issue){error=issue;renderStep();return;}error='';index++;renderStep();root.querySelector('h3').focus();},'primary');next.disabled=index===1&&loading;actions.append(next);
   if(index===4)actions.append(executionControl('inactive'));
-  panel.append(actions);root.append(panel);window.DPIAI18N?.refresh();
+  if(error&&index===4)actions.append(button('Volver a cargar configuración',open));
+  panel.append(actions);if(serverBusy)panel.querySelectorAll('button,input,select').forEach(el=>el.disabled=true);root.append(panel);window.DPIAI18N?.refresh();
  }
- function open(){identity=who();record=read();dashboard();}
- new MutationObserver(()=>{if(identity!==who()){loadSerial++;controller?.abort();identity=who();record=read();draft=null;wizard=false;if(!document.getElementById('agentPage').hidden)dashboard();}}).observe(document.getElementById('userBtn'),{childList:true,subtree:true,characterData:true});
+ async function open(){
+  if(serverBusy&&identity===who())return;
+  identity=who();const owner=who(),serial=++readSerial;record=null;serverRevision=0;serverReady=false;error='';
+  loadSerial++;controller?.abort();loading=false;
+  if(!owner){serverBusy=false;dashboard();return;}
+  serverBusy=true;dashboard();
+  try{
+   const response=await fetch('/api/agente/configuracion',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});
+   const data=await response.json();if(owner!==who()||serial!==readSerial)return;
+   if(response.status===401)openAuth();
+   if(!response.ok||data.success!==true)throw Error(data.error||'No se pudo cargar la configuración del agente.');
+   if(data.execution_available!==false)throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
+   if(data.agent!==null){
+    if(!data.agent||!valid(data.agent.configuration)||!Number.isSafeInteger(data.agent.revision)||data.agent.revision<1||data.agent.state!=='inactive')throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
+    record=data.agent.configuration;serverRevision=data.agent.revision;
+   }
+   serverReady=true;
+  }catch(e){if(owner===who()&&serial===readSerial)error=e.name==='Error'?e.message:'No se pudo cargar la configuración del agente.';}
+  finally{if(owner===who()&&serial===readSerial){serverBusy=false;dashboard();}}
+ }
+ new MutationObserver(()=>{if(identity!==who()){
+  loadSerial++;readSerial++;controller?.abort();serverBusy=false;serverReady=false;serverRevision=0;
+  identity=who();record=null;draft=null;wizard=false;root.replaceChildren();
+  if(!document.getElementById('agentPage').hidden)open();
+ }}).observe(document.getElementById('userBtn'),{childList:true,subtree:true,characterData:true});
  document.getElementById('languageSelect').addEventListener('change',()=>setTimeout(()=>{if(wizard){renderStep();if(draft.country&&draft.city)loadLocation(false);}else if(!document.getElementById('agentPage').hidden)dashboard();},0));
  // Future service may reuse these visual state definitions. No state can activate a task here.
  window.DPIAAgent={open,presentationFor:state=>({label:tr(STATES[state]||STATES.error),canEdit:state!=='running',showPause:['active','running'].includes(state),showResume:state==='paused',executionControlsEnabled:false})};
