@@ -659,3 +659,16 @@ Object.assign(DPIA_TRANSLATIONS,{
 });
 
 Object.assign(DPIA_TRANSLATIONS,{"Tu situación": ["Your situation", "Twoja sytuacja", "La tua situazione"], "Tus intereses": ["Your interests", "Twoje zainteresowania", "I tuoi interessi"], "Todo listo": ["All set", "Wszystko gotowe", "Tutto pronto"], "Pasos": ["Steps", "Kroki", "Passaggi"], "¿Cuál es tu situación?": ["What is your situation?", "Jaka jest Twoja sytuacja?", "Qual è la tua situazione?"], "Elegí la opción que mejor te describe.": ["Choose the option that best describes you.", "Wybierz opcję, która najlepiej Cię opisuje.", "Scegli l’opzione che ti descrive meglio."], "Quiero empezar a revender": ["I want to start reselling", "Chcę zacząć odsprzedawać", "Voglio iniziare a rivendere"], "Busco mi primer producto ganador.": ["Looking for my first winning product.", "Szukam swojego pierwszego hitowego produktu.", "Cerco il mio primo prodotto vincente."], "Ya vendo por internet": ["I already sell online", "Już sprzedaję online", "Vendo già online"], "Quiero ampliar mi catálogo.": ["I want to expand my catalog.", "Chcę poszerzyć katalog.", "Voglio ampliare il mio catalogo."], "Tengo un comercio": ["I have a store", "Mam sklep", "Ho un negozio"], "Busco productos con rotación.": ["Looking for products that sell regularly.", "Szukam produktów o dużej rotacji.", "Cerco prodotti con buona rotazione."], "Busco importar": ["I want to import", "Chcę importować", "Voglio importare"], "Analizo volumen y margen.": ["I analyze volume and margin.", "Analizuję wolumen i marżę.", "Analizzo volumi e margini."], "Cambiar situación": ["Change situation", "Zmień sytuację", "Cambia situazione"], "Contanos qué buscás o elegí cómo querés descubrir productos.": ["Tell us what you are looking for or choose how to discover products.", "Powiedz, czego szukasz, lub wybierz sposób odkrywania produktów.", "Dicci cosa cerchi o scegli come scoprire i prodotti."]});
+
+Object.assign(DPIA_TRANSLATIONS,{
+ 'País':['Country','Kraj','Paese'],
+ 'Exterior':['Abroad','Zagranica','Estero'],
+ 'Publicaciones del país':['Country listings','Ogłoszenia krajowe','Annunci nazionali'],
+ 'Publicaciones del exterior':['Listings abroad','Ogłoszenia zagraniczne','Annunci dall’estero'],
+ 'Fuera de':['Outside','Poza','Fuori da'],
+ 'Cargando publicaciones…':['Loading listings…','Ładowanie ogłoszeń…','Caricamento annunci…'],
+ 'No hay publicaciones que coincidan con esta búsqueda en la región seleccionada.':['No matching listings in the selected region.','Brak pasujących ogłoszeń w wybranym regionie.','Nessun annuncio corrispondente nella regione selezionata.'],
+ 'No se pudieron cargar las publicaciones.':['Could not load listings.','Nie udało się wczytać ogłoszeń.','Impossibile caricare gli annunci.']
+});
+
+Object.assign(DPIA_TRANSLATIONS,{'Omitir':['Skip','Pomiń','Salta']});

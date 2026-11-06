@@ -18,6 +18,9 @@ def local_publications():
     from utils.db import db
     country = request.args.get('pais', '').strip()
     city = request.args.get('ciudad', '').strip()
+    scope = request.args.get('alcance', 'local')
+    if scope not in ('local','pais','exterior'):
+        return jsonify(success=False, error='Alcance inválido.'), 400
     offset = request.args.get('offset', '0')
     if (not country or not city or len(country) > 100 or len(city) > 100
             or not offset.isdecimal() or len(offset) > 6):
@@ -47,8 +50,8 @@ def local_publications():
             items,more=[],False
         else:
             items, more = publications_for_city(country, city, int(offset),
-                                            int(category) if category is not None else None, terms=search_terms(search), category_ids=category_ids, rotate=rotation=='1')
-        if include_promotions in ('1','solo'):
+                                            int(category) if category is not None else None, terms=search_terms(search), category_ids=category_ids, rotate=rotation=='1', **({'scope':scope} if scope!='local' else {}))
+        if include_promotions in ('1','solo') and scope == 'local':
             viewer_id=session.get('user_id') if type(session.get('user_id')) is int else None
             featured, featured_more=publications_for_city(country, city, rotate=True, promoted_only=True, viewer_id=viewer_id)
             for item in featured:item['destacado']=True

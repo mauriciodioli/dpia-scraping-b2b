@@ -1,23 +1,38 @@
 // Postal IDs stay on the server; the user sees the selected city.
 let localCategory = null;
+let publicationRegion = 'local';
+const regionText=text=>window.DPIAI18N?.translate(text)||text;
+function openPublicationRegion(scope){
+ publicationRegion=scope;
+ mapLocationRequest++;mapLocationController?.abort();
+ document.querySelector('#mapFrame').removeAttribute('src');
+ document.querySelector('#localMap').hidden=true;
+ const heading=document.querySelector('#mapPage .page-head h2');
+ const key=scope==='exterior'?'Publicaciones del exterior':'Publicaciones del país';
+ heading.setAttribute('data-i18n',key);heading.textContent=regionText(key);
+ document.querySelector('#mapDescription').textContent=scope==='exterior'?regionText('Fuera de')+' '+country:country;
+ show('mapPage');loadLocalPublications();
+}
+
 let localPublicationsGeneration = 0, localPublicationsOffset = 0;
 function localSearchText(){return document.querySelector('#promptText').value.trim() || document.querySelector('#searchText').value.trim();}
 async function loadLocalPublications(append = false) {
- const generation = ++localPublicationsGeneration, chosenCountry = country, chosenCity = city;
+ const generation = ++localPublicationsGeneration, chosenCountry = country, chosenCity = city, chosenRegion = publicationRegion;
  const chosenCategory = localCategory?.id || '', chosenQuery = localSearchText();
  const params = new URLSearchParams({pais:chosenCountry, ciudad:chosenCity, offset:String(append ? localPublicationsOffset : 0)});
+ if(chosenRegion!=='local')params.set('alcance',chosenRegion);
  if (chosenCategory) params.set('categoria_id', chosenCategory);
  if (chosenQuery) params.set('q', chosenQuery);
- document.querySelector('#localPublicationsHeading').textContent = ['Publicaciones locales', localCategory?.name, chosenQuery].filter(Boolean).join(' · ');
+ document.querySelector('#localPublicationsHeading').textContent = [regionText(chosenRegion==='local'?'Publicaciones locales':chosenRegion==='pais'?'Publicaciones del país':'Publicaciones del exterior'), localCategory?.name, chosenQuery].filter(Boolean).join(' · ');
  const grid = document.querySelector('#localPublications'), status = document.querySelector('#localPublicationsStatus');
  const retry = document.querySelector('#retryLocalPublications'), more = document.querySelector('#moreLocalPublications');
  if (!append) { localPublicationsOffset = 0; grid.replaceChildren(); }
- retry.hidden = true; more.hidden = true; status.textContent = 'Cargando publicaciones locales…';
+ retry.hidden = true; more.hidden = true; status.textContent = regionText(chosenRegion==='local'?'Cargando publicaciones locales…':'Cargando publicaciones…');
  try {
   const response = await fetch('/api/publicaciones/locales?' + params, {signal:AbortSignal.timeout(20000)});
   const payload = await response.json();
   if (!response.ok || !payload.success || !Array.isArray(payload.publicaciones)) throw new Error('publications');
-  if (generation !== localPublicationsGeneration || country !== chosenCountry || city !== chosenCity || (localCategory?.id || '') !== chosenCategory || localSearchText() !== chosenQuery) return;
+  if (generation !== localPublicationsGeneration || country !== chosenCountry || city !== chosenCity || publicationRegion !== chosenRegion || (localCategory?.id || '') !== chosenCategory || localSearchText() !== chosenQuery) return;
   for (const item of payload.publicaciones) {
    const card = document.createElement('article'); card.className = 'product';
    const image = document.createElement('img'); image.alt = ''; image.loading = 'lazy'; image.src = '/static/images/industry.svg';
@@ -25,7 +40,7 @@ async function loadLocalPublications(append = false) {
    image.onerror = () => { image.onerror = null; image.src = '/static/images/industry.svg'; };
    const title = document.createElement('strong'); title.textContent = item.titulo;
    const description = document.createElement('p'); description.textContent = item.descripcion || '';
-   const detail = document.createElement('small'); detail.textContent = chosenCity;
+   const detail = document.createElement('small'); detail.textContent = chosenRegion==='local'?chosenCity:(chosenRegion==='pais'?chosenCountry:'');
    card.append(image, title, description, detail);
    if (item.precio != null) {
     const price = document.createElement('small'); price.textContent = `${item.precio} ${item.moneda || ''}`.trim(); card.append(price);
@@ -33,11 +48,11 @@ async function loadLocalPublications(append = false) {
    card.dataset.catalogName = ''; grid.append(card);
   }
   localPublicationsOffset += payload.publicaciones.length;
-  status.textContent = grid.children.length ? '' : (chosenQuery ? `No hay publicaciones locales que coincidan con «${chosenQuery}» en esta ciudad y categoría.` : 'No hay publicaciones locales disponibles en esta ciudad.');
+  status.textContent = grid.children.length ? '' : chosenRegion!=='local'?regionText('No hay publicaciones que coincidan con esta búsqueda en la región seleccionada.'):(chosenQuery ? `No hay publicaciones locales que coincidan con «${chosenQuery}» en esta ciudad y categoría.` : 'No hay publicaciones locales disponibles en esta ciudad.');
   more.hidden = !payload.has_more;
  } catch (_) {
-  if (generation !== localPublicationsGeneration || country !== chosenCountry || city !== chosenCity || (localCategory?.id || '') !== chosenCategory || localSearchText() !== chosenQuery) return;
-  status.textContent = 'No se pudieron cargar las publicaciones locales.'; retry.hidden = false;
+  if (generation !== localPublicationsGeneration || country !== chosenCountry || city !== chosenCity || publicationRegion !== chosenRegion || (localCategory?.id || '') !== chosenCategory || localSearchText() !== chosenQuery) return;
+  status.textContent = regionText(chosenRegion==='local'?'No se pudieron cargar las publicaciones locales.':'No se pudieron cargar las publicaciones.'); retry.hidden = false;
   retry.onclick = () => loadLocalPublications(append);
  }
  more.onclick = () => loadLocalPublications(true);

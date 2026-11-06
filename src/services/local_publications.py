@@ -10,8 +10,15 @@ from services.locations import postal_ids_for_city
 from utils.db import db
 
 
-def publications_for_city(country, city, offset=0, category_id=None, terms=None, category_ids=None, rotate=False, promoted_only=False, viewer_id=None):
-    ids = postal_ids_for_city(country, city)
+def publications_for_city(country, city, offset=0, category_id=None, terms=None, category_ids=None, rotate=False, promoted_only=False, viewer_id=None, scope='local'):
+    normalized_country = func.lower(func.trim(CodigoPostal.pais))
+    domestic = db.session.query(CodigoPostal.id).filter(normalized_country == country.strip().lower())
+    if scope == 'local':
+        ids = postal_ids_for_city(country, city)
+    else:
+        locations = CodigoPostal.query.filter(CodigoPostal.pais.isnot(None), func.trim(CodigoPostal.pais) != '')
+        locations = locations.filter(normalized_country == country.strip().lower() if scope == 'pais' else normalized_country != country.strip().lower())
+        ids = [row.id for row in locations.all()]
     if not ids:
         return [], False
     codes = db.session.query(CodigoPostal.codigoPostal).filter(CodigoPostal.id.in_(ids))
@@ -27,6 +34,15 @@ def publications_for_city(country, city, offset=0, category_id=None, terms=None,
         Publicacion.codigo_postal_id.is_(None), ~any_relation,
         func.trim(Publicacion.codigoPostal).in_(codes),
     ))
+    if scope == 'exterior':
+        # A shared domestic association must never leak into foreign results.
+        domestic_relation = db.session.query(PublicacionCodigoPostal.id).filter(
+            PublicacionCodigoPostal.publicacion_id == Publicacion.id,
+            PublicacionCodigoPostal.codigoPostal_id.in_(domestic)).exists()
+        domestic_codes = db.session.query(CodigoPostal.codigoPostal).filter(CodigoPostal.id.in_(domestic))
+        local = and_(local, or_(Publicacion.codigo_postal_id.is_(None), ~Publicacion.codigo_postal_id.in_(domestic)),
+                     ~domestic_relation,
+                     ~and_(Publicacion.codigo_postal_id.is_(None), ~any_relation, func.coalesce(Publicacion.codigoPostal, '').in_(domestic_codes)))
     query = Publicacion.query.filter(
         func.lower(func.trim(Publicacion.estado)) == 'activo', local,
     )

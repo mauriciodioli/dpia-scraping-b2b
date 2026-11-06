@@ -2,6 +2,9 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];con
 let mapLocationRequest=0,mapLocationController;
 const normalizeMapName=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 async function openMap(){
+ publicationRegion='local';
+ $('#localMap').hidden=false;
+ const heading=$('#mapPage .page-head h2');heading.setAttribute('data-i18n','Locales cerca tuyo');heading.textContent=window.DPIAI18N?.translate('Locales cerca tuyo')||'Locales cerca tuyo';
  const request=++mapLocationRequest,selectedCity=city,selectedCountry=country;
  mapLocationController?.abort();
  const frame=$('#mapFrame');frame.hidden=true;frame.removeAttribute('src');
