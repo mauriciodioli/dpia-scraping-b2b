@@ -84,3 +84,8 @@ LIVE_PROVIDER_CALLS_ENABLED = os.environ.get('LIVE_PROVIDER_CALLS_ENABLED', 'fal
 
 # Explicit opt-in; the route also requires Flask development/debug mode.
 ENABLE_TEST_SCRAPING_CREDITS = os.environ.get('ENABLE_TEST_SCRAPING_CREDITS', 'false').lower() == 'true'
+
+# Analytics uses the existing logs table; never creates or migrates tables.
+ACTIVITY_LOGGING_ENABLED = os.getenv('ACTIVITY_LOGGING_ENABLED', 'true').lower() == 'true'
+# Configure only actual reverse-proxy IPs/subnets. X-Real-IP must be overwritten by that proxy.
+ACTIVITY_TRUSTED_PROXIES = os.getenv('ACTIVITY_TRUSTED_PROXIES', '')

@@ -26,6 +26,10 @@ def create_app():
     from controllers.publicaciones import publicaciones
     app.register_blueprint(publicaciones)
 
+    from model.logs import logs, init_request_logging
+    app.register_blueprint(logs)
+    init_request_logging(app)
+
     return app
 
 
