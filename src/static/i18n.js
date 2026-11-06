@@ -633,3 +633,29 @@ Object.assign(DPIA_TRANSLATIONS, {
  'Primero se prepara la búsqueda con OpenAI y luego se consulta el marketplace seleccionado.':['OpenAI prepares the search first, then the selected marketplace is queried.','Najpierw OpenAI przygotowuje wyszukiwanie, a następnie przeszukiwany jest wybrany marketplace.','Prima OpenAI prepara la ricerca, poi viene consultato il marketplace selezionato.'],
  'El marketplace seleccionado todavía no está habilitado para scraping.':['The selected marketplace is not enabled for scraping yet.','Wybrany marketplace nie jest jeszcze dostępny do scrapingu.','Il marketplace selezionato non è ancora abilitato per lo scraping.']
 });
+
+Object.assign(DPIA_TRANSLATIONS,{
+ 'Búsqueda guardada':['Saved search','Zapisane wyszukiwanie','Ricerca salvata'],
+ 'Fecha no disponible':['Date unavailable','Data niedostępna','Data non disponibile'],
+ 'productos':['products','produktów','prodotti'],
+ 'Finalizada':['Completed','Zakończona','Completata'],
+ 'No iniciada':['Not started','Nie rozpoczęto','Non avviata'],
+ 'Trabajo guardado':['Saved job','Zapisane zadanie','Lavoro salvato'],
+ 'Estado sin confirmar':['Unconfirmed status','Stan niepotwierdzony','Stato non confermato'],
+ 'Productos por consultar':['Products to retrieve','Produkty do pobrania','Prodotti da recuperare']
+});
+
+Object.assign(DPIA_TRANSLATIONS,{
+ 'Consultar resultados':['View results','Zobacz wyniki','Consulta risultati'],
+ 'En curso':['In progress','W toku','In corso'],
+ 'Historial de búsquedas':['Search history','Historia wyszukiwania','Cronologia ricerche'],
+ 'Origen del historial':['History source','Źródło historii','Origine della cronologia'],
+ 'Mis búsquedas de la PWA':['My PWA searches','Moje wyszukiwania PWA','Le mie ricerche PWA'],
+ 'API DPIA · Trabajos del Scrapeador':['DPIA API · Scraper jobs','API DPIA · Zadania scrapera','API DPIA · Lavori dello scraper'],
+ 'Actualizar historial':['Refresh history','Odśwież historię','Aggiorna cronologia'],
+ 'Ver más búsquedas':['More searches','Więcej wyszukiwań','Altre ricerche'],
+ 'Cargando historial…':['Loading history…','Ładowanie historii…','Caricamento cronologia…'],
+ 'Recuperá los resultados guardados sin repetir el scraping. Abrí una búsqueda para preparar sus imágenes.':['Retrieve saved results without repeating scraping. Open a search to prepare its images.','Pobierz zapisane wyniki bez ponownego scrapowania. Otwórz wyszukiwanie, aby przygotować obrazy.','Recupera i risultati salvati senza ripetere lo scraping. Apri una ricerca per prepararne le immagini.']
+});
+
+Object.assign(DPIA_TRANSLATIONS,{"Tu situación": ["Your situation", "Twoja sytuacja", "La tua situazione"], "Tus intereses": ["Your interests", "Twoje zainteresowania", "I tuoi interessi"], "Todo listo": ["All set", "Wszystko gotowe", "Tutto pronto"], "Pasos": ["Steps", "Kroki", "Passaggi"], "¿Cuál es tu situación?": ["What is your situation?", "Jaka jest Twoja sytuacja?", "Qual è la tua situazione?"], "Elegí la opción que mejor te describe.": ["Choose the option that best describes you.", "Wybierz opcję, która najlepiej Cię opisuje.", "Scegli l’opzione che ti descrive meglio."], "Quiero empezar a revender": ["I want to start reselling", "Chcę zacząć odsprzedawać", "Voglio iniziare a rivendere"], "Busco mi primer producto ganador.": ["Looking for my first winning product.", "Szukam swojego pierwszego hitowego produktu.", "Cerco il mio primo prodotto vincente."], "Ya vendo por internet": ["I already sell online", "Już sprzedaję online", "Vendo già online"], "Quiero ampliar mi catálogo.": ["I want to expand my catalog.", "Chcę poszerzyć katalog.", "Voglio ampliare il mio catalogo."], "Tengo un comercio": ["I have a store", "Mam sklep", "Ho un negozio"], "Busco productos con rotación.": ["Looking for products that sell regularly.", "Szukam produktów o dużej rotacji.", "Cerco prodotti con buona rotazione."], "Busco importar": ["I want to import", "Chcę importować", "Voglio importare"], "Analizo volumen y margen.": ["I analyze volume and margin.", "Analizuję wolumen i marżę.", "Analizzo volumi e margini."], "Cambiar situación": ["Change situation", "Zmień sytuację", "Cambia situazione"], "Contanos qué buscás o elegí cómo querés descubrir productos.": ["Tell us what you are looking for or choose how to discover products.", "Powiedz, czego szukasz, lub wybierz sposób odkrywania produktów.", "Dicci cosa cerchi o scegli come scoprire i prodotti."]});
