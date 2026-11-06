@@ -18,7 +18,9 @@
   setQueryJourney(button.dataset.situation);
   const key=button.querySelector('strong').getAttribute('data-i18n');
   title.setAttribute('data-i18n',key);title.textContent=window.DPIAI18N?.translate(key)||key;
-  const importing=button.dataset.situation==='import';
+  const importing=button.dataset.situation==='import',employment=button.dataset.situation==='jobs';
+  document.getElementById('exploreBtn').hidden=employment;
+  stage.querySelector('.quick').classList.toggle('employment-quick',employment);
   const label=document.getElementById('localQuickLabel');
   label.setAttribute('data-i18n',importing?'País':'Local');
   label.textContent=window.DPIAI18N?.translate(importing?'País':'Local')||(importing?'País':'Local');
@@ -27,7 +29,7 @@
   stage.querySelector('.quick').classList.toggle('import-quick',importing);
   journey.classList.remove('search-only');search.hidden=true;quick.hidden=false;
   choices.hidden=true;stage.hidden=false;step(2);
-  document.getElementById('exploreBtn').focus();
+  document.getElementById(employment?'novelBtn':'exploreBtn').focus();
  }));
  skip.addEventListener('click',()=>{
   setQueryJourney(null);
