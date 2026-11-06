@@ -1,3 +1,17 @@
+// Category 778: Oportunidades laborales, verified in catalog-reference.json.
+function isEmploymentQuery(ids){return Number(ids?.categoria_id??document.querySelector('#queryCategory').value)===778;}
+function employmentDraft(){
+ const template=window.DPIAI18N?.translate('Orientame sobre oportunidades laborales en {categoria}, dentro de {ambito}, para {ciudad}, {pais}. Considerá puestos, experiencia, requisitos y modalidad. No inventes vacantes, empresas, salarios ni enlaces. Diferenciá orientaciones de ofertas verificadas y usá N/D para datos no confirmados.')||'';
+ return template.replace('{categoria}',document.querySelector('#queryCategory').selectedOptions[0]?.textContent||'').replace('{ambito}',document.querySelector('#queryScope').selectedOptions[0]?.textContent||'').replace('{ciudad}',city).replace('{pais}',country);
+}
+function syncEmploymentFilters(){
+ const jobs=isEmploymentQuery(),panel=document.querySelector('#queryBudget');
+ for(const child of panel.children)child.hidden=jobs?child.id!=='querySalaryFilters':child.id==='querySalaryFilters';
+ for(const id of ['toggleQueryBudget','queryBudget']){
+  const el=document.getElementById(id),key=jobs?'Filtros laborales':'budget.filters';
+  el.setAttribute('data-i18n-aria-label',key);if(id==='toggleQueryBudget')el.setAttribute('data-i18n-title',key);
+ }
+}
 // The original user request is preserved; context and identity are verified by Flask.
 let queryMode='buscar', queryPrepared=null, queryBusy=false, queryRequestId=null, pendingSourcesGeneration=false;
 let novelAutoDraft='', exploreAutoDraft='', exploreBudgetDraft='', queryBudgetCountry='', queryBudgetOpen=false, queryBudgetEdited=false;
@@ -59,6 +73,7 @@ function queueQueryPreparation(){
  },600);
 }
 function syncQueryBudgetPanel(){
+ syncEmploymentFilters();
  document.querySelector('#toggleQueryBudget').hidden=false;
  document.querySelector('#toggleQueryBudget').setAttribute('aria-expanded',String(queryBudgetOpen));
  document.querySelector('#queryBudget').hidden=!queryBudgetOpen;
@@ -85,6 +100,7 @@ function updateNovelDraft(force=false){
   en:`Find new and relevant products in ${c}, within ${a}, for ${city}, ${country}. Prepare a focused search for useful products and avoid duplicates. Do not invent prices or present trends as verified without evidence.`,
   it:`Cerca novità e prodotti rilevanti di ${c}, nell'ambito ${a}, per ${city}, ${country}. Prepara una ricerca concreta di prodotti utili, evitando duplicati. Non inventare prezzi o presentare tendenze come verificate senza prove.`,
   pl:`Znajdź nowości i przydatne produkty w kategorii ${c}, w obszarze ${a}, dla ${city}, ${country}. Przygotuj konkretne wyszukiwanie i unikaj duplikatów. Nie wymyślaj cen ani nie przedstawiaj trendów jako potwierdzonych bez dowodów.`};
+ if(isEmploymentQuery()){queryMode='explorar';setupExploreBudget();updateExploreDraft(true);return;}
  novelAutoDraft=templates[catalogLanguage()]||templates.es;prompt.value=novelAutoDraft;
 }
 async function openNovelQuery(){
@@ -114,17 +130,25 @@ function updateExploreDraft(force=false){
  if(!scopeSelect.value||!categorySelect.value){exploreAutoDraft='';prompt.value='';return;}
  const scope=scopeSelect.selectedOptions[0].textContent,category=categorySelect.selectedOptions[0].textContent;
  const drafts={es:`Sugerí productos útiles de ${category}, en ${scope}, para ${city}, ${country}. Explicá sus ventajas y proponé precios de venta orientativos cuando puedas fundamentarlos. Indicá sitios donde pueda comparar opciones.`,en:`Suggest useful products in ${category}, within ${scope}, for ${city}, ${country}. Explain their benefits and suggest indicative selling prices when justified. Include sites where I can compare options.`,it:`Suggerisci prodotti utili di ${category}, nell'ambito ${scope}, per ${city}, ${country}. Spiega i vantaggi e proponi prezzi indicativi quando motivati. Indica siti dove confrontare le opzioni.`,pl:`Zaproponuj przydatne produkty w kategorii ${category}, w obszarze ${scope}, dla ${city}, ${country}. Wyjaśnij zalety i zaproponuj uzasadnione ceny orientacyjne. Wskaż serwisy do porównania ofert.`};
- exploreBudgetDraft=exploreBudgetText();exploreAutoDraft=(drafts[catalogLanguage()]||drafts.es)+'\n'+exploreBudgetDraft;prompt.value=exploreAutoDraft;
+ exploreBudgetDraft=exploreBudgetText();exploreAutoDraft=(isEmploymentQuery()?employmentDraft():drafts[catalogLanguage()]||drafts.es)+'\n'+exploreBudgetDraft;prompt.value=exploreAutoDraft;
 }
 function setupExploreBudget(){
+ syncEmploymentFilters();
  const currency={Argentina:'ARS',Uruguay:'UYU','España':'EUR',Italia:'EUR',Polonia:'PLN','México':'MXN'}[country]||'USD';
  if(queryBudgetCountry!==country){
   const range={ARS:[10000,100000],UYU:[500,5000],EUR:[10,100],PLN:[50,500],MXN:[200,2000],USD:[10,100]}[currency];
   document.querySelector('#queryBudgetMin').value=range[0];document.querySelector('#queryBudgetMax').value=range[1];queryBudgetCountry=country;queryBudgetEdited=false;
-  document.querySelector('#queryBudgetCurrency').value=currency;
+  document.querySelector('#queryBudgetCurrency').value=currency;document.querySelector('#querySalaryCurrency').value=currency;
  }
 }
 function exploreBudgetText(){
+ if(isEmploymentQuery()){
+  const min=document.getElementById('querySalaryMin').value,max=document.getElementById('querySalaryMax').value;
+  if(!min&&!max)return '';
+  const tr=text=>window.DPIAI18N?.translate(text)||text;
+  return tr('Remuneración pretendida:')+' '+(min||'N/D')+' – '+(max||'N/D')+' '+document.getElementById('querySalaryCurrency').value+' '+tr(document.getElementById('querySalaryPeriod').selectedOptions[0].getAttribute('data-i18n'))+'. '+tr('Es una expectativa del usuario, no un salario verificado.');
+ }
+
  const min=document.querySelector('#queryBudgetMin').value,max=document.querySelector('#queryBudgetMax').value,currency=document.querySelector('#queryBudgetCurrency').value;
  const total=document.querySelector('#queryBudgetType').value==='total';
  const units={es:total?'en total':'por producto',en:total?'in total':'per product',it:total?'in totale':'per prodotto',pl:total?'łącznie':'za produkt'};
@@ -146,7 +170,7 @@ document.querySelector('#queryBudgetCurrency').addEventListener('change',()=>{
  document.querySelector('#queryBudgetMin').value=range[0];document.querySelector('#queryBudgetMax').value=range[1];syncExploreBudget();
 });
 for(const id of ['queryBudgetType','queryBudgetMin','queryBudgetMax'])document.querySelector('#'+id).addEventListener(id==='queryBudgetType'?'change':'input',syncExploreBudget);
-function queryBody(){return {pais:country,ciudad:city,idioma:catalogLanguage(),ambito_id:Number(document.querySelector('#queryScope').value),categoria_id:Number(document.querySelector('#queryCategory').value),codigo_postal_id:Number(document.querySelector('#queryPostal').value),mode:queryMode,...(queryMode==='explorar'?{budget_currency:document.querySelector('#queryBudgetCurrency').value}:{}),user_message:document.querySelector('#promptText').value.trim(),attachments:media};}
+function queryBody(){return {pais:country,ciudad:city,idioma:catalogLanguage(),ambito_id:Number(document.querySelector('#queryScope').value),categoria_id:Number(document.querySelector('#queryCategory').value),codigo_postal_id:Number(document.querySelector('#queryPostal').value),mode:queryMode,...(queryMode==='explorar'?{budget_currency:document.querySelector(isEmploymentQuery()?'#querySalaryCurrency':'#queryBudgetCurrency').value}:{}),user_message:document.querySelector('#promptText').value.trim(),attachments:media};}
 function startHomeQuery(){
  document.querySelector('#promptText').value=document.querySelector('#searchText').value.trim();queryMode='buscar';queryBudgetEdited=false;setupExploreBudget();invalidateQuery();show('consultPage');prepareDPIAQuery();
 }
@@ -155,7 +179,12 @@ async function prepareDPIAQuery({automatic=false}={}){
  if(queryBusy)return;show('consultPage');
  if(!currentEmail){openAuth();return;}
  await queryMediaPending;if(queryBusy)return;
- if(queryMode==='explorar'||queryBudgetEdited){
+ if(isEmploymentQuery()){
+  const min=document.getElementById('querySalaryMin'),max=document.getElementById('querySalaryMax');
+  max.setCustomValidity('');
+  if(min.value&&max.value&&Number(max.value)<Number(min.value))max.setCustomValidity(window.DPIAI18N.translate('Ingresá un rango de remuneración válido.'));
+  if(!min.checkValidity()||!max.checkValidity()){setQueryBudgetOpen(true);min.reportValidity();max.reportValidity();return;}
+ }else if(queryMode==='explorar'||queryBudgetEdited){
   const min=document.querySelector('#queryBudgetMin'),max=document.querySelector('#queryBudgetMax');
   max.setCustomValidity('');
   if(!min.value||!max.value||Number(max.value)<Number(min.value))max.setCustomValidity(({es:'Ingresá un rango válido: el máximo debe ser mayor o igual al mínimo.',en:'Enter a valid range: maximum must be at least the minimum.',it:'Inserisci un intervallo valido: il massimo deve essere almeno il minimo.',pl:'Podaj poprawny zakres: maksimum nie może być mniejsze od minimum.'})[catalogLanguage()]||'Invalid range');
@@ -252,26 +281,27 @@ function renderQueryResult(data){
   container.append(section);
  }
  if(data.flow==='explorar'&&!data.result?.needs_clarification){
+  const employment=isEmploymentQuery(data.context_ids);
   const heading=document.createElement('h3');heading.textContent='Sugerencias de IA';container.append(heading);
-  const note=document.createElement('p');note.className='hint';note.textContent='Precios estimados, sin verificar disponibilidad. Los enlaces permiten comparar opciones; no son fuentes consultadas.';container.append(note);
+  const note=document.createElement('p');note.className='hint';note.textContent=employment?(window.DPIAI18N?.translate('Orientaciones laborales de IA, no vacantes verificadas. No se consultaron portales de empleo.')||''):'Precios estimados, sin verificar disponibilidad. Los enlaces permiten comparar opciones; no son fuentes consultadas.';container.append(note);
   const grid=document.createElement('div');grid.className='scraped-products';
   for(const item of data.result?.items||[]){
    const card=document.createElement('article');card.className='scraped-product';card.dataset.aiSuggestion='';
    const title=document.createElement('strong');title.textContent=item.producto;
    const description=document.createElement('p');description.textContent=item.descripcion;
    const price=document.createElement('p');price.textContent=typeof item.precio_venta_sugerido==='number'?`Precio sugerido: ${item.precio_venta_sugerido} ${data.result.constraints.price.currency}`:'Precio sugerido: N/D';
-   const source=document.createElement('small');source.textContent='Sin fuente verificada';card.append(title,description,price,source);
+   const source=document.createElement('small');source.textContent='Sin fuente verificada';card.append(title,description);if(!employment)card.append(price);card.append(source);
    const context=data.result.context,metadata=document.createElement('dl');metadata.className='ai-suggestion-context';
    for(const [label,value] of [['Ámbito',context.ambito],['Categoría',context.categoria],['Ciudad',context.ciudad],['Código postal',context.codigoPostal],['País',context.pais],['Usuario',context.usuario],['Fecha',context.fecha],['Idioma',context.idioma]]){
     const term=document.createElement('dt'),detail=document.createElement('dd');term.textContent=label;detail.textContent=String(value??'');metadata.append(term,detail);
    }
    card.append(metadata);
    const searches={amazon:'https://www.amazon.com/s?k=',ebay:'https://www.ebay.com/sch/i.html?_nkw=',aliexpress:'https://www.aliexpress.com/w/wholesale-'};
-   for(const [site,base] of Object.entries(searches)){
+   for(const [site,base] of Object.entries(employment?{}:searches)){
     const terms=item.busquedas?.[site]||item.producto;
     const link=document.createElement('a');link.href=base+encodeURIComponent(terms);link.target='_blank';link.rel='noopener noreferrer';link.textContent='Comparar en '+site;card.append(link);
    }
-   if(window.DPIAExplorePreview){window.DPIAExplorePreview.addImage(card,item.imagen,item.producto);card.append(window.DPIAExplorePreview.button(item,context,data.context_ids,{constraints:data.result.constraints,query:data.result.query}));}
+   if(!employment&&window.DPIAExplorePreview){window.DPIAExplorePreview.addImage(card,item.imagen,item.producto);card.append(window.DPIAExplorePreview.button(item,context,data.context_ids,{constraints:data.result.constraints,query:data.result.query}));}
    grid.append(card);
   }
   container.append(grid);
@@ -388,3 +418,5 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!document.q
 for(const box of document.querySelectorAll('[name="querySource"]'))box.addEventListener('change',()=>{if(box.checked&&externalQuerySources.includes(box.value)){for(const other of document.querySelectorAll('[name="querySource"]'))if(other!==box&&externalQuerySources.includes(other.value))other.checked=false;}document.querySelector('#allQuerySources').checked=[...document.querySelectorAll('[name="querySource"]')].filter(item=>['local','dpia','historial'].includes(item.value)).every(item=>item.checked);});
 
 new MutationObserver(()=>{if(currentEmail)queueQueryPreparation();}).observe(document.querySelector('#userBtn'),{childList:true,subtree:true,characterData:true});
+
+for(const id of ['querySalaryMin','querySalaryMax','querySalaryPeriod','querySalaryCurrency'])document.getElementById(id).addEventListener(id.endsWith('Min')||id.endsWith('Max')?'input':'change',syncExploreBudget);
