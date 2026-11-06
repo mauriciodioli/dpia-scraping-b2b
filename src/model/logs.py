@@ -68,7 +68,7 @@ class Logs(db.Model):
         self.duracion_ms = duracion_ms
     
 
-VIEWS = {'onboard', 'home', 'mapPage', 'consultPage', 'creditsPage', 'accountPage'}
+VIEWS = {'onboard', 'home', 'mapPage', 'consultPage', 'creditsPage', 'accountPage', 'agentPage'}
 EVENTS = {'session_start', 'page_view', 'heartbeat', 'visibility', 'page_exit'}
 
 
