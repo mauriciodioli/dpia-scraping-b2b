@@ -7,6 +7,7 @@
  const search=stage.querySelector('.search');
  const quick=stage.querySelector('.quick');
  const skip=document.getElementById('skipSituation');
+ const restoreActions=document.getElementById('restoreSituationActions');
  function step(number){journey.querySelectorAll('[data-journey-step]').forEach(item=>{
   const current=Number(item.dataset.journeyStep)===number;
   if(current)item.setAttribute('aria-current','step');else item.removeAttribute('aria-current');
@@ -29,15 +30,20 @@
  }));
  skip.addEventListener('click',()=>{
   choices.hidden=true;stage.hidden=false;search.hidden=false;quick.hidden=true;
-  journey.classList.add('search-only');
+  journey.classList.add('search-only');restoreActions.hidden=false;
   document.getElementById('searchText').focus();
  });
  document.getElementById('exteriorBtn').onclick=()=>openPublicationRegion('exterior');
- document.getElementById('changeSituation').addEventListener('click',()=>{
+ function restoreSituation(){
+  restoreActions.hidden=true;
+  document.getElementById('searchMediaMenu').hidden=true;
+  document.getElementById('cameraBtn').setAttribute('aria-expanded','false');
   journey.classList.remove('search-only');search.hidden=true;quick.hidden=true;
   choices.hidden=false;stage.hidden=true;step(1);
   (journey.querySelector('[aria-pressed="true"]')||journey.querySelector('[data-situation]')).focus();
- });
+ }
+ document.getElementById('changeSituation').addEventListener('click',restoreSituation);
+ document.getElementById('restoreSituation').addEventListener('click',restoreSituation);
  // Navigation may be asynchronous (catalog preparation or authentication).
  const home=document.getElementById('home');
  new MutationObserver(()=>{

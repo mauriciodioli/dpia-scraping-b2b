@@ -672,3 +672,5 @@ Object.assign(DPIA_TRANSLATIONS,{
 });
 
 Object.assign(DPIA_TRANSLATIONS,{'Omitir':['Skip','Pomiń','Salta']});
+
+Object.assign(DPIA_TRANSLATIONS,{'Ver opciones ↗':['View options ↗','Pokaż opcje ↗','Vedi opzioni ↗']});

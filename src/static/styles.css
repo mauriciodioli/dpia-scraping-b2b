@@ -628,3 +628,7 @@ html[data-theme="light"] .situation-journey{background:linear-gradient(125deg,#f
 .situation-journey.search-only{padding:0;border:0;background:none;margin:24px 0;box-shadow:none}
 .situation-journey.search-only>.situation-steps,.situation-journey.search-only>#skipSituation,.situation-journey.search-only .situation-stage-heading,.situation-journey.search-only #situationSearchStage>p{display:none}
 .situation-journey.search-only #situationSearchStage .search{margin:0}
+
+.situation-restore.section-head{justify-content:flex-end;margin:0 0 8px;min-height:24px}
+.situation-restore button{padding:4px 0;line-height:1.4}
+.situation-restore button:focus-visible{outline:2px solid #a77aff;outline-offset:4px;border-radius:4px}
