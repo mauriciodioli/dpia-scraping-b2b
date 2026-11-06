@@ -63,3 +63,18 @@ def local_publications():
         db.session.rollback()
         current_app.logger.warning('Local publications query failed')
         return jsonify(success=False, error='No se pudieron cargar las publicaciones locales.'), 503
+
+
+@main_bp.get('/api/conexion')
+def api_connection():
+    """Sanitized same-origin API check, independent of scraping and user points."""
+    from flask import current_app, jsonify
+    from services.dpia_client import DPIAClient, ConnectionCheckError
+    try:
+        result = DPIAClient(current_app.config.get('SCRAPEADOR_SERVICE_KEY', ''), timeout=(2, 5)).check_connection()
+        response = jsonify(result)
+    except ConnectionCheckError as exc:
+        response = jsonify(success=False, code=exc.code)
+        response.status_code = exc.status
+    response.headers['Cache-Control'] = 'no-store'
+    return response

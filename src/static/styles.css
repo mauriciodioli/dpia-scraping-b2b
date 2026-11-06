@@ -433,7 +433,7 @@ html[data-theme="dark"] .search-media-menu{background:#291d46;border-color:#8064
 html[data-theme="dark"] .credit-history-accordion{border-color:#8064aa80;background:#211735}
 
 /* Consultar: a single editable request followed by an inline DPIA reply. */
-#queryConversation #promptResult{display:none!important}
+#queryConversation #promptResult{margin:0;padding:0;background:transparent;color:inherit;white-space:pre-wrap;overflow-wrap:anywhere}
 #consultPage .query-chat-reply{margin-top:16px;padding:16px 18px;border:1px solid #9874c547;border-radius:18px 18px 18px 5px;background:#ece5fa;color:#2c2144;text-align:left}
 #consultPage .query-chat-reply p{margin:0 0 12px;line-height:1.5;font-size:14px}
 #consultPage .query-chat-options{display:flex;flex-wrap:wrap;gap:10px}
@@ -461,3 +461,36 @@ html[data-theme="dark"] #consultPage #queryBudget:not([hidden]){background:#251b
 @media(max-width:650px){#consultPage #queryBudget .query-context{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:350px){#consultPage #queryBudget .query-context{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){#consultPage #queryBudget:not([hidden]){animation:none}#consultPage .query-budget-toggle{transition:none}}
+
+/* The connection indicator belongs to the existing application header only. */
+.app-header{flex-wrap:wrap;height:auto;min-height:78px;row-gap:8px}
+.api-connection{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:230px;padding:5px 7px;border-radius:20px;border:1px solid #ddd5e9;background:#f4f0fa;color:#6a5a7d;font-size:11px;line-height:1.3}
+.api-connection-state{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:135px}
+.api-connection-icon{display:grid;place-items:center;flex:0 0 13px;width:13px;height:13px;border:2px solid currentColor;border-radius:50%}
+.api-connection-check{display:none}
+.api-connection[data-state="checking"] .api-connection-icon{border-color:#9a8baa55;border-top-color:currentColor;animation:query-symbol-spin .8s linear infinite}
+.api-connection[data-state="connected"]{color:#167249}
+.api-connection[data-state="connected"] .api-connection-icon{border:0;background:#d3f1df}
+.api-connection[data-state="connected"] .api-connection-check{display:block}
+.api-connection[data-state="disconnected"]{color:#b3314b}
+.api-connection[data-state="disconnected"] .api-connection-icon{background:currentColor;border:0}
+#retryApiConnection{flex-shrink:0;padding:5px 7px;min-height:28px;border-radius:12px;background:#e7def1;color:inherit;font-size:10px;font-weight:700}
+#retryApiConnection:disabled{opacity:.5;cursor:wait}
+#retryApiConnection:focus-visible{outline:3px solid #ffbf36;outline-offset:2px}
+html[data-theme="dark"] .api-connection{background:#271d3b;border-color:#65527c;color:#c4b4d4}
+html[data-theme="dark"] .api-connection[data-state="connected"]{color:#5cdda2}
+html[data-theme="dark"] .api-connection[data-state="connected"] .api-connection-icon{background:#254b40}
+html[data-theme="dark"] .api-connection[data-state="disconnected"]{color:#ff9aad}
+html[data-theme="dark"] #retryApiConnection{background:#3b2b50}
+@media(max-width:759px){.api-connection{gap:5px;max-width:170px;padding:4px 6px;font-size:10px}.api-connection-state{max-width:100px}#retryApiConnection{padding:5px}}
+@media(prefers-reduced-motion:reduce){.api-connection[data-state="checking"] .api-connection-icon{animation-duration:2s}}
+
+
+/* One visual chat field: editable request and read-only DPIA reply share its border. */
+#consultPage .query-chat-field{border:1px solid #ddd9eb;border-radius:19px;background:#fff;overflow:hidden}
+#consultPage .query-chat-field:focus-within{outline:2px solid #9a73dc;outline-offset:1px}
+#consultPage .query-chat-field>#promptText{display:block;border:0;border-radius:0;background:transparent;box-shadow:none;outline:none;margin:0;color:inherit}
+#consultPage .query-chat-field>.query-chat-reply{margin:0;padding:16px;border:0;border-top:1px solid #ddd9eb;border-radius:0;background:transparent;color:inherit}
+#consultPage .query-chat-field .query-chat-summary{font-size:13px;line-height:1.55}
+html[data-theme="dark"] #consultPage .query-chat-field{background:#302345;border-color:#65527c}
+html[data-theme="dark"] #consultPage .query-chat-field>.query-chat-reply{background:transparent;border-color:#65527c;color:#f1e8ff}

@@ -487,3 +487,113 @@ Object.assign(DPIA_TRANSLATIONS, {
 
 Object.assign(DPIA_I18N_BINDINGS, {'budget.filters':'Filtros de presupuesto'});
 Object.assign(DPIA_TRANSLATIONS, {'Filtros de presupuesto':['Budget filters','Filtry budżetu','Filtri del budget']});
+
+Object.assign(DPIA_I18N_BINDINGS, {
+ "api.checking": "Comprobando API…",
+ "api.connected": "DPIA conectada",
+ "api.retry": "Probar",
+ "api.retryHelp": "Probar conexión con la API DPIA",
+ "api.disconnected": "Sin conexión",
+ "api.timeout": "La API no respondió a tiempo",
+ "api.unauthorized": "Credencial de API inválida",
+ "api.forbidden": "Sin permiso scraper:read",
+ "api.notConfigured": "Conexión API sin configurar",
+ "api.invalidResponse": "Respuesta de API inválida",
+ "api.serviceError": "API DPIA no disponible",
+ "api.scope": "Comprueba la ruta, la credencial y la respuesta de la API DPIA. No verifica Google Sheets, Apify, OpenAI ni MySQL."
+});
+Object.assign(DPIA_TRANSLATIONS, {
+ "Comprobando API…": [
+  "Checking API…",
+  "Sprawdzanie API…",
+  "Verifica API…"
+ ],
+ "DPIA conectada": [
+  "DPIA connected",
+  "Połączono z DPIA",
+  "DPIA connessa"
+ ],
+ "Probar": [
+  "Test",
+  "Sprawdź",
+  "Prova"
+ ],
+ "Probar conexión con la API DPIA": [
+  "Test connection to the DPIA API",
+  "Sprawdź połączenie z API DPIA",
+  "Verifica la connessione all’API DPIA"
+ ],
+ "Sin conexión": [
+  "Disconnected",
+  "Brak połączenia",
+  "Nessuna connessione"
+ ],
+ "La API no respondió a tiempo": [
+  "API request timed out",
+  "Przekroczono czas oczekiwania na API",
+  "L’API non ha risposto in tempo"
+ ],
+ "Credencial de API inválida": [
+  "Invalid API credential",
+  "Nieprawidłowe dane uwierzytelniające API",
+  "Credenziale API non valida"
+ ],
+ "Sin permiso scraper:read": [
+  "Missing scraper:read permission",
+  "Brak uprawnienia scraper:read",
+  "Permesso scraper:read mancante"
+ ],
+ "Conexión API sin configurar": [
+  "API connection not configured",
+  "Połączenie API nie jest skonfigurowane",
+  "Connessione API non configurata"
+ ],
+ "Respuesta de API inválida": [
+  "Invalid API response",
+  "Nieprawidłowa odpowiedź API",
+  "Risposta API non valida"
+ ],
+ "API DPIA no disponible": [
+  "DPIA API unavailable",
+  "API DPIA jest niedostępne",
+  "API DPIA non disponibile"
+ ],
+ "Comprueba la ruta, la credencial y la respuesta de la API DPIA. No verifica Google Sheets, Apify, OpenAI ni MySQL.": [
+  "Checks the DPIA API route, credential and response. Does not check Google Sheets, Apify, OpenAI or MySQL.",
+  "Sprawdza trasę, dane uwierzytelniające i odpowiedź API DPIA. Nie sprawdza Google Sheets, Apify, OpenAI ani MySQL.",
+  "Verifica il percorso, la credenziale e la risposta dell’API DPIA. Non verifica Google Sheets, Apify, OpenAI o MySQL."
+ ]
+});
+
+Object.assign(DPIA_TRANSLATIONS, {
+ "Enviar consulta →": [
+  "Send request →",
+  "Wyślij zapytanie →",
+  "Invia richiesta →"
+ ],
+ "Consulta pendiente de confirmación": [
+  "Request awaiting confirmation",
+  "Zapytanie oczekuje na potwierdzenie",
+  "Richiesta in attesa di conferma"
+ ],
+ "Consulta enviada": [
+  "Request sent",
+  "Zapytanie wysłane",
+  "Richiesta inviata"
+ ],
+ "Esto es lo que se enviará. Podés modificar el pedido o los filtros antes de enviar.": [
+  "This is what will be sent. You can edit your request or filters before sending.",
+  "To zostanie wysłane. Przed wysłaniem możesz zmienić zapytanie lub filtry.",
+  "Questo è ciò che verrà inviato. Puoi modificare la richiesta o i filtri prima dell’invio."
+ ],
+ "Revisá la respuesta de DPIA y enviá cuando esté lista. Los cambios se actualizan automáticamente.": [
+  "Review DPIA’s reply and send when ready. Changes are updated automatically.",
+  "Sprawdź odpowiedź DPIA i wyślij, gdy będzie gotowa. Zmiany aktualizują się automatycznie.",
+  "Controlla la risposta di DPIA e invia quando è pronta. Le modifiche si aggiornano automaticamente."
+ ],
+ "El pedido cambió. DPIA está actualizando el resumen.": [
+  "Your request changed. DPIA is updating the summary.",
+  "Zapytanie zostało zmienione. DPIA aktualizuje podsumowanie.",
+  "La richiesta è cambiata. DPIA sta aggiornando il riepilogo."
+ ]
+});

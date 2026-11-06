@@ -10,6 +10,13 @@ class CatalogError(Exception):
         self.status = status
 
 
+class ConnectionCheckError(Exception):
+    def __init__(self, code, status=502):
+        super().__init__(code)
+        self.code = code
+        self.status = status
+
+
 class CatalogFiltersError(ValueError):
     pass
 
@@ -41,6 +48,32 @@ class DPIAClient:
     def __init__(self, service_key, timeout=(3.05, 10)):
         self._service_key = service_key
         self.timeout = timeout
+
+    def check_connection(self):
+        """Read /estado only; its scraper:read authorization is enforced upstream."""
+        if not self._service_key:
+            raise ConnectionCheckError('not_configured', 503)
+        try:
+            with requests.get(
+                f"{self.BASE_URL}/estado",
+                headers={"Authorization": f"Bearer {self._service_key}"},
+                timeout=self.timeout, allow_redirects=False,
+            ) as response:
+                if response.status_code in (401, 403):
+                    raise ConnectionCheckError('unauthorized' if response.status_code == 401 else 'forbidden', response.status_code)
+                if response.status_code != 200:
+                    raise ConnectionCheckError('service_error')
+                payload = response.json()
+        except requests.Timeout:
+            raise ConnectionCheckError('timeout', 504) from None
+        except requests.RequestException:
+            raise ConnectionCheckError('unavailable') from None
+        except ValueError:
+            raise ConnectionCheckError('invalid_response') from None
+        if not isinstance(payload, dict) or payload.get('success') is not True:
+            raise ConnectionCheckError('invalid_response')
+        # Never expose upstream fields, diagnostics, or credentials to the browser.
+        return {'success': True}
 
     def catalog(self, name, params):
         if name not in {"ambitos", "categorias"}:
