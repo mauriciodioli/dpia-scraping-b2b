@@ -632,3 +632,5 @@ html[data-theme="light"] .situation-journey{background:linear-gradient(125deg,#f
 .situation-restore.section-head{justify-content:flex-end;margin:0 0 8px;min-height:24px}
 .situation-restore button{padding:4px 0;line-height:1.4}
 .situation-restore button:focus-visible{outline:2px solid #a77aff;outline-offset:4px;border-radius:4px}
+
+@media(min-width:1000px){.situation-options{grid-template-columns:repeat(5,minmax(0,1fr))}}

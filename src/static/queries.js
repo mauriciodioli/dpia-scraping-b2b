@@ -1,5 +1,29 @@
-// Category 778: Oportunidades laborales, verified in catalog-reference.json.
-function isEmploymentQuery(ids){return Number(ids?.categoria_id??document.querySelector('#queryCategory').value)===778;}
+// Explicit journeys use only IDs verified in the checked-in real catalogue.
+let queryJourney=null;
+const employmentCategoryIds=new Set([41,778]); // Trabajo Remoto; Oportunidades laborales.
+const commercialScopeIds=new Set([6,10,108,109]); // Distribuidores, Supermercado, Mayorista, Minorista.
+function journeyCategories(){
+ if(!queryJourney)return catalogCategorias;
+ if(queryJourney==='jobs')return catalogCategorias.filter(item=>employmentCategoryIds.has(Number(item.categoria_id)));
+ const allowed=queryJourney==='import'?new Set([6,108]):commercialScopeIds;
+ return catalogCategorias.filter(item=>!employmentCategoryIds.has(Number(item.categoria_id))&&item.ambito_ids.some(id=>allowed.has(Number(id))));
+}
+function journeyScopes(){
+ if(!queryJourney)return catalogAmbitos;
+ const categories=journeyCategories();
+ const allowed=queryJourney==='jobs'?null:queryJourney==='import'?new Set([6,108]):commercialScopeIds;
+ return catalogAmbitos.filter(scope=>(!allowed||allowed.has(Number(scope.ambito_id)))&&categories.some(item=>item.ambito_ids.includes(scope.ambito_id)));
+}
+function setQueryJourney(value){
+ queryJourney=value;
+ document.querySelector('#queryScope').value='';document.querySelector('#queryCategory').value='';
+ const prompt=document.querySelector('#promptText');
+ if(prompt.value===exploreAutoDraft||prompt.value===novelAutoDraft)prompt.value='';
+ exploreAutoDraft='';novelAutoDraft='';exploreBudgetDraft='';
+ localCategory=null;refreshQuerySelectors();
+}
+// Employment categories 41 and 778, verified in catalog-reference.json.
+function isEmploymentQuery(ids){return employmentCategoryIds.has(Number(ids?.categoria_id??document.querySelector('#queryCategory').value));}
 function employmentDraft(){
  const template=window.DPIAI18N?.translate('Orientame sobre oportunidades laborales en {categoria}, dentro de {ambito}, para {ciudad}, {pais}. Considerá puestos, experiencia, requisitos y modalidad. No inventes vacantes, empresas, salarios ni enlaces. Diferenciá orientaciones de ofertas verificadas y usá N/D para datos no confirmados.')||'';
  return template.replace('{categoria}',document.querySelector('#queryCategory').selectedOptions[0]?.textContent||'').replace('{ambito}',document.querySelector('#queryScope').selectedOptions[0]?.textContent||'').replace('{ciudad}',city).replace('{pais}',country);
@@ -23,11 +47,11 @@ function refreshQuerySelectors(category=null, scopeId=null){
  const scopeSelect=document.querySelector('#queryScope'), categorySelect=document.querySelector('#queryCategory'), postalSelect=document.querySelector('#queryPostal');
  const oldScope=scopeSelect.value,oldCategory=categorySelect.value,oldPostal=postalSelect.value;
  scopeSelect.replaceChildren(new Option('Elegí un ámbito',''));
- for(const scope of catalogAmbitos){const option=new Option(scope.nombre,String(scope.ambito_id));option.dataset.catalogName='';scopeSelect.add(option);}
- const desired=scopeId||category?.ambito_ids.find(id=>catalogAmbitos.some(scope=>scope.ambito_id===id))||oldScope;
+ for(const scope of journeyScopes()){const option=new Option(scope.nombre,String(scope.ambito_id));option.dataset.catalogName='';scopeSelect.add(option);}
+ const desired=scopeId||category?.ambito_ids.find(id=>journeyScopes().some(scope=>scope.ambito_id===id))||oldScope;
  if([...scopeSelect.options].some(option=>option.value===String(desired)))scopeSelect.value=String(desired);
  categorySelect.replaceChildren(new Option('Elegí una categoría',''));
- for(const item of catalogCategorias.filter(item=>item.ambito_ids.includes(Number(scopeSelect.value)))){
+ for(const item of journeyCategories().filter(item=>item.ambito_ids.includes(Number(scopeSelect.value)))){
   const option=new Option(item.nombre,String(item.categoria_id));option.dataset.catalogName='';categorySelect.add(option);
  }
  const categoryId=category?.categoria_id||(oldScope===scopeSelect.value?oldCategory:'');
@@ -108,12 +132,14 @@ async function openNovelQuery(){
  queryMode='novedades';show('consultPage');invalidateQuery();
  const status=document.querySelector('#queryStatus');status.textContent='Cargando tus intereses para preparar novedades…';
  if(catalogState.ambitos==='loading'||catalogState.categorias==='loading')await loadCatalogs();
- const scopes=catalogAmbitos.filter(scope=>selected.has(String(scope.ambito_id))&&catalogCategorias.some(category=>category.ambito_ids.includes(scope.ambito_id)));
+ const available=journeyScopes();
+ const interests=available.filter(scope=>selected.has(String(scope.ambito_id)));
+ const scopes=(queryJourney?available:(interests.length?interests:available)).filter(scope=>journeyCategories().some(category=>category.ambito_ids.includes(scope.ambito_id)));
  const current=document.querySelector('#queryScope').value;
  const scope=scopes.find(item=>String(item.ambito_id)===current)||scopes.find(item=>String(item.ambito_id)===activeCatalogScope)||scopes[0];
- if(!scope){refreshQuerySelectors();status.textContent='Elegí un ámbito y una categoría disponibles para tu ciudad.';return;}
+ if(!scope){refreshQuerySelectors();status.textContent=window.DPIAI18N.translate('No hay ámbitos y categorías compatibles con esta opción en la ubicación seleccionada.');return;}
  const oldCategory=Number(document.querySelector('#queryCategory').value);
- const category=catalogCategorias.find(item=>item.categoria_id===oldCategory&&item.ambito_ids.includes(scope.ambito_id))||catalogCategorias.find(item=>item.ambito_ids.includes(scope.ambito_id));
+ const category=journeyCategories().find(item=>item.categoria_id===oldCategory&&item.ambito_ids.includes(scope.ambito_id))||journeyCategories().find(item=>item.ambito_ids.includes(scope.ambito_id));
  refreshQuerySelectors(category,scope.ambito_id);syncLocalCategory();updateNovelDraft(true);
  status.textContent='Revisá los datos y el pedido. Prepará la consulta y confirmá cuando esté lista para enviar.';
 }
@@ -122,6 +148,7 @@ async function openExploreQuery(){
  if(queryBusy)return;
  await openNovelQuery();queryMode='explorar';invalidateQuery();
  setupExploreBudget();updateExploreDraft(true);
+ if(queryJourney&&(!document.querySelector('#queryScope').value||!document.querySelector('#queryCategory').value)){document.querySelector('#queryStatus').textContent=window.DPIAI18N.translate('No hay ámbitos y categorías compatibles con esta opción en la ubicación seleccionada.');return;}
  document.querySelector('#queryStatus').textContent='Revisá el pedido. Explorar genera sugerencias con IA, sin consumir ejecuciones de scraping.';
 }
 function updateExploreDraft(force=false){

@@ -15,6 +15,7 @@
  });}
  journey.querySelectorAll('[data-situation]').forEach(button=>button.addEventListener('click',()=>{
   journey.querySelectorAll('[data-situation]').forEach(other=>other.setAttribute('aria-pressed',String(other===button)));
+  setQueryJourney(button.dataset.situation);
   const key=button.querySelector('strong').getAttribute('data-i18n');
   title.setAttribute('data-i18n',key);title.textContent=window.DPIAI18N?.translate(key)||key;
   const importing=button.dataset.situation==='import';
@@ -29,12 +30,14 @@
   document.getElementById('exploreBtn').focus();
  }));
  skip.addEventListener('click',()=>{
+  setQueryJourney(null);
   choices.hidden=true;stage.hidden=false;search.hidden=false;quick.hidden=true;
   journey.classList.add('search-only');restoreActions.hidden=false;
   document.getElementById('searchText').focus();
  });
  document.getElementById('exteriorBtn').onclick=()=>openPublicationRegion('exterior');
  function restoreSituation(){
+  setQueryJourney(null);
   restoreActions.hidden=true;
   document.getElementById('searchMediaMenu').hidden=true;
   document.getElementById('cameraBtn').setAttribute('aria-expanded','false');

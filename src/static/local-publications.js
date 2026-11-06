@@ -22,6 +22,11 @@ async function loadLocalPublications(append = false) {
  const params = new URLSearchParams({pais:chosenCountry, ciudad:chosenCity, offset:String(append ? localPublicationsOffset : 0)});
  if(chosenRegion!=='local')params.set('alcance',chosenRegion);
  if (chosenCategory) params.set('categoria_id', chosenCategory);
+ else if(typeof queryJourney!=='undefined'&&queryJourney){
+  const ids=journeyCategories().map(item=>item.categoria_id);
+  if(ids.length)params.set('categoria_ids',ids.join(','));
+  else{document.querySelector('#localPublications').replaceChildren();document.querySelector('#localPublicationsStatus').textContent=regionText('No hay ámbitos y categorías compatibles con esta opción en la ubicación seleccionada.');document.querySelector('#moreLocalPublications').hidden=true;document.querySelector('#retryLocalPublications').hidden=true;return;}
+ }
  if (chosenQuery) params.set('q', chosenQuery);
  document.querySelector('#localPublicationsHeading').textContent = [regionText(chosenRegion==='local'?'Publicaciones locales':chosenRegion==='pais'?'Publicaciones del país':'Publicaciones del exterior'), localCategory?.name, chosenQuery].filter(Boolean).join(' · ');
  const grid = document.querySelector('#localPublications'), status = document.querySelector('#localPublicationsStatus');
