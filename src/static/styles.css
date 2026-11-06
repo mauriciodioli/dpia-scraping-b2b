@@ -431,3 +431,33 @@ html[data-theme="dark"] .search-media-menu{background:#291d46;border-color:#8064
 .credit-history-scroll #creditOperations{margin:0}
 .credit-history-scroll #creditOperations li:last-child{border-bottom:0}
 html[data-theme="dark"] .credit-history-accordion{border-color:#8064aa80;background:#211735}
+
+/* Consultar: a single editable request followed by an inline DPIA reply. */
+#queryConversation #promptResult{display:none!important}
+#consultPage .query-chat-reply{margin-top:16px;padding:16px 18px;border:1px solid #9874c547;border-radius:18px 18px 18px 5px;background:#ece5fa;color:#2c2144;text-align:left}
+#consultPage .query-chat-reply p{margin:0 0 12px;line-height:1.5;font-size:14px}
+#consultPage .query-chat-options{display:flex;flex-wrap:wrap;gap:10px}
+#consultPage .query-chat-options .action-button{flex:1;min-width:155px}
+html[data-theme="dark"] #consultPage .query-chat-reply{background:#2c2144;color:#f1e8ff;border-color:#8064aa80}
+@media(max-width:520px){#consultPage .query-chat-options{flex-direction:column}}
+
+/* Consultar budget: no closed panel wrapper, border, or layout space. */
+#consultPage .consult-compose-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+#consultPage .consult-compose-head h2{min-width:0}
+#consultPage .query-budget-toggle{display:inline-flex;align-items:center;justify-content:center;flex:0 0 44px;width:44px;height:44px;border-radius:13px;border:1px solid #c9b8e5;background:#eee7fa;color:#513375;transition:background .15s,border-color .15s}
+#consultPage .query-budget-toggle[aria-expanded="true"]{background:#ded0f7;border-color:#9672c7}
+#consultPage .query-budget-toggle:focus-visible{outline:3px solid #ffbf36;outline-offset:3px}
+#consultPage #queryBudget[hidden]{display:none!important}
+#consultPage #queryBudget:not([hidden]){margin:0 0 16px;padding:18px;border:1px solid #c9b8e5;border-radius:18px;background:#f4effc;animation:query-budget-reveal .16s ease-out}
+#consultPage #queryBudget>.hint:first-child{margin-top:0}
+#consultPage #queryBudget>.hint:last-child{margin-bottom:0}
+#consultPage #queryBudget .query-context{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+#consultPage #queryBudget .query-context>*{min-width:0}
+#consultPage #queryBudget input,#consultPage #queryBudget select{width:100%;min-width:0}
+html[data-theme="dark"] #consultPage .query-budget-toggle{background:#302345;color:#e9dcff;border-color:#8064aa80}
+html[data-theme="dark"] #consultPage .query-budget-toggle[aria-expanded="true"]{background:#48315f;border-color:#a586ca}
+html[data-theme="dark"] #consultPage #queryBudget:not([hidden]){background:#251b38;border-color:#8064aa80}
+@keyframes query-budget-reveal{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:650px){#consultPage #queryBudget .query-context{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:350px){#consultPage #queryBudget .query-context{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){#consultPage #queryBudget:not([hidden]){animation:none}#consultPage .query-budget-toggle{transition:none}}

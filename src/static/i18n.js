@@ -423,3 +423,67 @@ Object.assign(DPIA_TRANSLATIONS,{
  'Confirmar y consultar con IA':['Confirm and ask AI','Potwierdź i zapytaj AI','Conferma e chiedi all’IA'],
  'Confirmar e iniciar búsqueda':['Confirm and start search','Potwierdź i rozpocznij wyszukiwanie','Conferma e avvia la ricerca']
 });
+
+Object.assign(DPIA_TRANSLATIONS, {
+ "Conversación con DPIA": [
+  "Conversation with DPIA",
+  "Rozmowa z DPIA",
+  "Conversazione con DPIA"
+ ],
+ "¿La consulta está lista para enviar o querés seguir editándola?": [
+  "Is your request ready to send, or would you like to keep editing it?",
+  "Czy zapytanie jest gotowe do wysłania, czy chcesz je dalej edytować?",
+  "La richiesta è pronta per essere inviata o vuoi continuare a modificarla?"
+ ],
+ "1. Lista para enviar": [
+  "1. Ready to send",
+  "1. Gotowe do wysłania",
+  "1. Pronta per l’invio"
+ ],
+ "2. Seguir editando": [
+  "2. Keep editing",
+  "2. Kontynuuj edycję",
+  "2. Continua a modificare"
+ ],
+ "Consulta preparada. Elegí cómo continuar.": [
+  "Request prepared. Choose how to continue.",
+  "Zapytanie przygotowane. Wybierz, co dalej.",
+  "Richiesta preparata. Scegli come continuare."
+ ],
+ "Podés seguir editando el pedido y volver a prepararlo.": [
+  "You can keep editing your request and prepare it again.",
+  "Możesz dalej edytować zapytanie i przygotować je ponownie.",
+  "Puoi continuare a modificare la richiesta e prepararla di nuovo."
+ ],
+ "El pedido cambió mientras se preparaba. Volvé a prepararlo para enviar la versión actual.": [
+  "Your request changed during preparation. Prepare it again to send the current version.",
+  "Zapytanie zmieniło się podczas przygotowywania. Przygotuj je ponownie, aby wysłać aktualną wersję.",
+  "La richiesta è cambiata durante la preparazione. Preparala di nuovo per inviare la versione attuale."
+ ],
+ "Consulta enviada. Podés editar el pedido para preparar otra consulta.": [
+  "Request sent. You can edit your message to prepare another request.",
+  "Zapytanie wysłane. Możesz edytować wiadomość, aby przygotować kolejne zapytanie.",
+  "Richiesta inviata. Puoi modificare il messaggio per preparare un’altra richiesta."
+ ],
+ "Revisá los datos y el pedido. Prepará la consulta y confirmá cuando esté lista para enviar.": [
+  "Review the details and your request. Prepare it and confirm when it is ready to send.",
+  "Sprawdź dane i zapytanie. Przygotuj je i potwierdź, gdy będzie gotowe do wysłania.",
+  "Controlla i dati e la richiesta. Preparala e conferma quando è pronta per l’invio."
+ ]
+});
+
+Object.assign(DPIA_TRANSLATIONS, {
+ "La consulta está pendiente de confirmación. Consultá su estado antes de volver a enviarla.": [
+  "Your request is awaiting confirmation. Check its status before sending it again.",
+  "Zapytanie oczekuje na potwierdzenie. Sprawdź jego stan przed ponownym wysłaniem.",
+  "La richiesta è in attesa di conferma. Controlla lo stato prima di inviarla di nuovo."
+ ],
+ "La preparación tardó demasiado. Reintentá.": [
+  "Preparation took too long. Try again.",
+  "Przygotowanie trwało zbyt długo. Spróbuj ponownie.",
+  "La preparazione ha richiesto troppo tempo. Riprova."
+ ]
+});
+
+Object.assign(DPIA_I18N_BINDINGS, {'budget.filters':'Filtros de presupuesto'});
+Object.assign(DPIA_TRANSLATIONS, {'Filtros de presupuesto':['Budget filters','Filtry budżetu','Filtri del budget']});
