@@ -1,8 +1,5 @@
 """Translate only compatible saved configurations and confirm remote provisioning."""
-import hashlib
-import hmac
 import json
-import time
 from urllib.parse import urlsplit
 import requests
 from flask import current_app
@@ -38,17 +35,17 @@ def translate(agent, user_id):
 
 def provision(payload):
     base = current_app.config.get('AGENTS_INTERNAL_URL', '').rstrip('/')
-    secret = current_app.config.get('PWA_ACTIVATION_SECRET', '')
+    token = current_app.config.get('SCRAPEADOR_SERVICE_KEY', '')
     parsed = urlsplit(base)
-    if (not secret or parsed.scheme not in ('http', 'https') or not parsed.hostname
+    if (not token or parsed.scheme not in ('http', 'https') or not parsed.hostname
             or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment):
         bad('La conexión interna del agente no está configurada.', 503)
     raw = json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()
-    stamp = str(int(time.time()))
-    signature = hmac.new(secret.encode(), stamp.encode()+b'\n'+PATH.encode()+b'\n'+raw, hashlib.sha256).hexdigest()
     try:
         response = requests.post(base+PATH, data=raw, headers={'Content-Type': 'application/json',
-            'X-DPIA-Timestamp': stamp, 'X-DPIA-Signature': signature}, timeout=(3.05, 15), allow_redirects=False)
+            'Authorization': 'Bearer '+token}, timeout=(3.05, 15), allow_redirects=False)
+        if response.status_code in (401,403):
+            bad('La credencial del motor no autoriza activar agentes para este propietario.', response.status_code)
         if response.status_code != 200:
             bad('El servicio no confirmó la activación. Revisá la configuración o reintentá.', 502)
         result = response.json()

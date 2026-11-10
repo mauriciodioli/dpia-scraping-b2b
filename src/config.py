@@ -90,6 +90,4 @@ ACTIVITY_LOGGING_ENABLED = os.getenv('ACTIVITY_LOGGING_ENABLED', 'true').lower()
 # Configure only actual reverse-proxy IPs/subnets. X-Real-IP must be overwritten by that proxy.
 ACTIVITY_TRUSTED_PROXIES = os.getenv('ACTIVITY_TRUSTED_PROXIES', '')
 
-# Dedicated server-to-server PWA provisioning credential; never exposed to the browser.
-PWA_ACTIVATION_SECRET = os.environ.get('PWA_ACTIVATION_SECRET', '')
 AGENTS_INTERNAL_URL = os.environ.get('AGENTS_INTERNAL_URL', '')
