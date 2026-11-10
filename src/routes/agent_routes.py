@@ -48,3 +48,30 @@ def configuration():
     except SQLAlchemyError:
         current_app.logger.warning('Agent configuration database unavailable')
         return jsonify(success=False,error='No se confirmó el guardado del agente. Revisá las tablas y volvé a cargar su configuración.'),503
+
+
+@agent_bp.post('/activar')
+def activate():
+    user_id=session.get('user_id')
+    if type(user_id) is not int:
+        return jsonify(success=False,error='Iniciá sesión para guardar tu agente.'),401
+    try:
+        origin=request.headers.get('Origin')
+        same_origin=not origin or urlsplit(origin).netloc==request.host
+    except ValueError:same_origin=False
+    if request.headers.get('X-DPIA-Action')!='activate-agent' or request.headers.get('Sec-Fetch-Site')=='cross-site' or not same_origin:
+        return jsonify(success=False,error='Solicitud de activación no autorizada.'),403
+    if not request.is_json:return jsonify(success=False,error='Revisá la configuración del agente.'),415
+    if (request.content_length or 0)>1024 or len(request.get_data(cache=True))>1024:
+        return jsonify(success=False,error='Revisá la configuración del agente.'),413
+    body=request.get_json(silent=True)
+    if (not isinstance(body,dict) or set(body)!={'expected_revision'}
+            or type(body['expected_revision']) is not int or not 1<=body['expected_revision']<=2147483646):
+        return jsonify(success=False,error='Revisá la configuración del agente.'),400
+    store=current_app.extensions.get('agent_configuration_store') or AgentConfigurationStore()
+    try:
+        return jsonify(success=True,agent=store.activate(user_id,body['expected_revision']),execution_available=False)
+    except PreparationError as exc:return jsonify(success=False,error=str(exc)),exc.status
+    except SQLAlchemyError:
+        current_app.logger.warning('Agent activation database unavailable')
+        return jsonify(success=False,error='No se confirmó la activación. Reintentá; no se creará un duplicado.'),503

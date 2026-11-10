@@ -132,7 +132,7 @@ class AgentConfigurationStore:
         return rows[0] if rows else None
 
     @staticmethod
-    def _serialize(conn,row):
+    def _serialize(conn,row,allow_active=False):
         config=row['configuracion']
         if not isinstance(config,dict) or config.get('version')!=1:
             bad('La configuración guardada no es compatible. Revisala antes de guardar.',409)
@@ -140,12 +140,15 @@ class AgentConfigurationStore:
             validate_config({key:config[key] for key in FIELDS})
         except (KeyError,PreparationError):
             bad('La configuración guardada no es compatible. Revisala antes de guardar.',409)
-        enabled=conn.execute(select(tareas.c.tipo).where(tareas.c.agente_id==row['id'],tareas.c.habilitada.is_(True))).scalars().all()
+        task_rows=conn.execute(select(tareas).where(tareas.c.agente_id==row['id'],tareas.c.habilitada.is_(True))).mappings().all()
+        enabled=[task['tipo'] for task in task_rows]
+        if any(task['parametros']!={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']} for task in task_rows):
+            bad('Los parámetros de las tareas no coinciden con la configuración guardada.',409)
         schedules=conn.execute(select(programaciones).where(programaciones.c.agente_id==row['id'])).mappings().all()
         if len(schedules)!=1 or len(enabled)!=len(set(enabled)) or set(enabled)!={TASKS[t] for t in config.get('tasks',[]) if t in TASKS}:
             bad('La configuración guardada no es compatible. Revisala antes de guardar.',409)
         # Refuse inconsistent/live configurations instead of presenting them as inactive.
-        if row['estado'] not in ('BORRADOR','INACTIVO') or schedules[0]['activa']:
+        if (row['estado'] not in (('BORRADOR','INACTIVO','ACTIVO') if allow_active else ('BORRADOR','INACTIVO')) or schedules[0]['activa']):
             bad('Este agente tiene actividad habilitada. No se modificó su configuración.',409)
         schedule=schedules[0]
         iso_days=list(range(1,8)) if config['frequency']=='daily' else sorted(day or 7 for day in config['days'])
@@ -157,14 +160,17 @@ class AgentConfigurationStore:
                 or schedule['hora_local']!=time.fromisoformat(config['time']) or schedule['zona_horaria']!=config['timezone']
                 or schedule['proxima_ejecucion_en'] is not None or type(row['version_config']) is not int or row['version_config']<1):
             bad('La configuración guardada no es compatible. Revisala antes de guardar.',409)
-        return {'id':row['id'],'revision':row['version_config'],'state':'inactive','configuration':config}
+        binding=config.get('engine_binding')
+        if row['estado']=='ACTIVO' and (not isinstance(binding,dict) or not binding.get('id')):
+            bad('El vínculo del agente no es válido.',409)
+        return {'id':row['id'],'revision':row['version_config'],'state':'active' if row['estado']=='ACTIVO' else 'inactive','configuration':config}
 
     def get(self,user_id):
         with self._engine().begin() as conn:
             # A common user lock serializes reads and writes, including first creation.
             self._user(conn,user_id,lock=True)
             row=self._existing(conn,user_id)
-            return self._serialize(conn,row) if row else None
+            return self._serialize(conn,row,allow_active=True) if row else None
 
     def save(self,user_id,config,expected_revision):
         now=datetime.now(timezone.utc).replace(tzinfo=None)
@@ -208,3 +214,21 @@ class AgentConfigurationStore:
             if schedule:conn.execute(update(programaciones).where(programaciones.c.id==schedule.id).values(**fields))
             else:conn.execute(insert(programaciones).values(agente_id=agent_id,creado_en=now,**fields))
             return {'id':agent_id,'revision':revision,'state':'inactive','configuration':config}
+
+    def activate(self,user_id,expected_revision):
+        from services.agent_activation import translate, provision
+        with self._engine().begin() as conn:
+            self._user(conn,user_id,lock=True)
+            row=self._existing(conn,user_id)
+            if row is None:bad('Guardá la configuración antes de activar el agente.',409)
+            agent=self._serialize(conn,row,allow_active=True)
+            if agent['revision']!=expected_revision:
+                bad('La configuración cambió en otra pestaña. Volvé a cargarla antes de activar.',409)
+            if agent['state']=='active':return agent
+            # Hold the owner lock through confirmation: edits and concurrent clicks cannot race.
+            binding=provision(translate(agent,user_id))
+            now=datetime.now(timezone.utc).replace(tzinfo=None)
+            config={**row['configuracion'],'engine_binding':binding}
+            conn.execute(update(agentes).where(agentes.c.id==row['id'],agentes.c.usuario_id==user_id).values(
+                estado='ACTIVO',configuracion=config,activado_en=now,actualizado_en=now))
+            return {**agent,'state':'active','configuration':config}

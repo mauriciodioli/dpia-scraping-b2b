@@ -5,7 +5,7 @@
  const FREQUENCIES={daily:'Diario',twice:'Dos veces por semana',weekly:'Semanal'};
  const STATES={unconfigured:'No configurado',inactive:'Configurado e inactivo',active:'Activo',running:'Ejecutando',paused:'Pausado',insufficient:'Créditos insuficientes',error:'Error'};
  const STEPS=['Qué monitorear','Dónde y sobre qué','Cuándo','Límites y notificaciones','Confirmación'];
- let wizard=false,index=0,draft=null,record=null,identity=null,scopes=[],categories=[],cities=[],loading=false,loadSerial=0,controller=null,error='',serverRevision=0,serverReady=false,serverBusy=false,readSerial=0;
+ let wizard=false,index=0,draft=null,record=null,identity=null,scopes=[],categories=[],cities=[],loading=false,loadSerial=0,controller=null,error='',serverState='inactive',serverRevision=0,serverReady=false,serverBusy=false,readSerial=0;
  const tr=text=>window.DPIAI18N?.translate(text)||text;
  const who=()=>typeof currentEmail==='string'?currentEmail:null;
  const key=()=> 'dpia-agent-config:v1:'+ (who()||'guest');
@@ -24,7 +24,7 @@
  function feedback(parent){if(error){const el=node('p',error,'agent-feedback');el.setAttribute('role','alert');parent.append(el);}}
  function statusBadge(state){const el=node('span',STATES[state]||STATES.error,'agent-status');el.dataset.state=state;return el;}
  function storageNotice(){return node('p','La configuración se guarda en tu cuenta DPIA. Guardarla no activa el agente.','agent-notice');}
- function engineNotice(){const el=node('p','La activación, las pausas y los avisos reales requieren el servicio del agente. Todavía no hay ejecuciones ni cargos.','agent-notice');el.id='agentEngineNotice';return el;}
+ function engineNotice(){const el=node('p','La activación vincula tu agente con el servicio. Las búsquedas automáticas y los cargos siguen deshabilitados.','agent-notice');el.id='agentEngineNotice';return el;}
  function summary(config){
   const dl=document.createElement('dl');
   const names=(ids,list,field,saved)=>ids.map(id=>list.find(row=>row[field]===id)?.nombre||(saved||[]).find(row=>row.id===id)?.name||String(id)).join(', ');
@@ -33,7 +33,7 @@
  }
  function executionControl(state){
   const text=state==='paused'?'Reanudar agente':['active','running'].includes(state)?'Pausar agente':'Activar agente';
-  const control=button(text,null,'primary');control.disabled=true;control.setAttribute('aria-describedby','agentEngineNotice');return control;
+  const control=button(text,activate,'primary');control.disabled=wizard||!record||!serverReady||serverBusy||state!=='inactive';control.setAttribute('aria-describedby','agentEngineNotice');return control;
  }
  function dashboard(){
   root.replaceChildren();wizard=false;
@@ -43,7 +43,7 @@
    else panel.append(button('Reintentar',open));
    feedback(panel);root.append(panel);return;
   }
-  panel.append(statusBadge(record?'inactive':'unconfigured'));
+  panel.append(statusBadge(record?serverState:'unconfigured'));
   if(!record){
    panel.append(node('h3','DPIA busca por vos'),node('p','Encontrá productos nuevos, cambios de precios, proveedores y oportunidades sin buscar todos los días'),button('Configurar mi agente',()=>who()?start():openAuth(),'primary'));
    if(who()&&readLocalDraft())panel.append(button('Recuperar borrador local',()=>start(readLocalDraft())));
@@ -53,10 +53,24 @@
    panel.append(summary(record));
    const dl=document.createElement('dl');for(const text of ['Próxima ejecución','Última ejecución','Resultados recientes','Puntos consumidos'])dl.append(node('dt',text),node('dd','Sin ejecuciones'));
    panel.append(dl);
-   const actions=node('div',undefined,'agent-actions');actions.append(button('Editar configuración',()=>start()));
-   actions.append(executionControl('inactive'));panel.append(actions);
+   const actions=node('div',undefined,'agent-actions');if(serverState==='inactive')actions.append(button('Editar configuración',()=>start()));
+   actions.append(executionControl(serverState));panel.append(actions);
   }
   panel.append(engineNotice(),storageNotice());feedback(panel);root.append(panel);window.DPIAI18N?.refresh();
+ }
+ async function activate(){
+  if(serverBusy||!record||serverState!=='inactive'||wizard)return;
+  const owner=who(),serial=++readSerial;if(!owner){openAuth();return;}
+  serverBusy=true;error='';dashboard();
+  try{
+   const response=await fetch('/api/agente/activar',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'activate-agent'},body:JSON.stringify({expected_revision:serverRevision}),signal:AbortSignal.timeout(60000)});
+   const data=await response.json();if(owner!==who()||serial!==readSerial)return;
+   if(response.status===401)openAuth();
+   if(!response.ok||data.success!==true)throw Error(data.error||'No se confirmó la activación del agente. Reintentá.');
+   if(!data.agent||data.agent.state!=='active'||data.agent.revision!==serverRevision||!valid(data.agent.configuration)||!data.agent.configuration.engine_binding?.id||data.execution_available!==false)throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
+   record=data.agent.configuration;serverState='active';
+  }catch(e){if(owner===who()&&serial===readSerial)error=e.name==='Error'?e.message:'No se confirmó la activación del agente. Reintentá.';}
+  finally{if(owner===who()&&serial===readSerial){serverBusy=false;dashboard();}}
  }
  async function json(url){const r=await fetch(url,{cache:'no-store',signal:controller.signal});if(!r.ok)throw Error('catalog');const data=await r.json();if(data.success!==true)throw Error('catalog');return data;}
  async function loadLocation(reloadCities=true){
@@ -136,7 +150,7 @@
    if(response.status===401)openAuth();
    if(!response.ok||data.success!==true)throw Error(data.error||'No se confirmó el guardado del agente. Volvé a cargar su configuración.');
    if(!data.agent||!valid(data.agent.configuration)||!Number.isSafeInteger(data.agent.revision)||data.agent.revision<1||data.agent.state!=='inactive'||data.execution_available!==false)throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
-   record=data.agent.configuration;serverRevision=data.agent.revision;serverReady=true;loadSerial++;controller?.abort();
+   serverState=data.agent.state;record=data.agent.configuration;serverRevision=data.agent.revision;serverReady=true;loadSerial++;controller?.abort();
    serverBusy=false;dashboard();
   }catch(e){
    if(owner===who()&&serial===readSerial){error=e.message&&e.name==='Error'?e.message:'No se confirmó el guardado del agente. Volvé a cargar su configuración.';serverBusy=false;renderStep();}
@@ -159,7 +173,7 @@
  }
  async function open(){
   if(serverBusy&&identity===who())return;
-  identity=who();const owner=who(),serial=++readSerial;record=null;serverRevision=0;serverReady=false;error='';
+  identity=who();const owner=who(),serial=++readSerial;serverState='inactive';record=null;serverRevision=0;serverReady=false;error='';
   loadSerial++;controller?.abort();loading=false;
   if(!owner){serverBusy=false;dashboard();return;}
   serverBusy=true;dashboard();
@@ -170,8 +184,8 @@
    if(!response.ok||data.success!==true)throw Error(data.error||'No se pudo cargar la configuración del agente.');
    if(data.execution_available!==false)throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
    if(data.agent!==null){
-    if(!data.agent||!valid(data.agent.configuration)||!Number.isSafeInteger(data.agent.revision)||data.agent.revision<1||data.agent.state!=='inactive')throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
-    record=data.agent.configuration;serverRevision=data.agent.revision;
+    if(!data.agent||!valid(data.agent.configuration)||!Number.isSafeInteger(data.agent.revision)||data.agent.revision<1||!['inactive','active'].includes(data.agent.state))throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
+    serverState=data.agent.state;record=data.agent.configuration;serverRevision=data.agent.revision;
    }
    serverReady=true;
   }catch(e){if(owner===who()&&serial===readSerial)error=e.name==='Error'?e.message:'No se pudo cargar la configuración del agente.';}
