@@ -23,11 +23,28 @@ def translate(agent, user_id):
         bad('Volvé a guardar la categoría del agente antes de activarlo.', 422)
     parameters = dict(query=query, country=config['country'], city=config['city'],
         scope_id=config['scopes'][0], category_id=config['categories'][0], language=config['language'])
+    capabilities = ['dpia.amazon.search']
+    instructions = 'Buscar productos de la categoría configurada.'
+    tool_parameters = {'dpia.amazon.search': parameters}
+    context = config.get('query_context')
+    if context:
+        # Monetary purchase limits belong to analysis, never to the scraper request.
+        instructions = json.dumps({'country': config['country'], 'city': config['city'],
+            'scope_id': config['scopes'][0], 'category_id': config['categories'][0],
+            'language': config['language'], **context}, ensure_ascii=False)
+        if len(instructions) > 8000:
+            bad('El pedido completo supera el límite de instrucciones de Agents.', 422)
+        if context['postal_id']:
+            parameters['postal_id'] = context['postal_id']
+        capabilities.append('openai.analysis')
+        tool_parameters['openai.analysis'] = {'instructions':
+            'Aplicá el pedido y el presupuesto de compra de las instrucciones del agente al analizar los resultados. '
+            'Diferenciá precios de compra y venta. No inventes precios ni fuentes.'}
     return dict(owner_id=user_id, source_agent_id=agent['id'], source_revision=agent['revision'],
-        agent=dict(name='Mi agente', instructions='Buscar productos de la categoría configurada.',
-            capabilities=['dpia.amazon.search'], timezone=config['timezone'],
-            tool_parameters={'dpia.amazon.search': parameters},
-            limits=dict(max_tool_calls=1, max_output_tokens=2000, max_duration_seconds=300, max_corrections=0)),
+        agent=dict(name='Mi agente', instructions=instructions,
+            capabilities=capabilities, timezone=config['timezone'],
+            tool_parameters=tool_parameters,
+            limits=dict(max_tool_calls=len(capabilities), max_output_tokens=2000, max_duration_seconds=300, max_corrections=0)),
         schedule=dict(timezone=config['timezone'], frequency='DAILY' if config['frequency']=='daily' else 'WEEKLY',
             weekdays=list(range(1,8)) if config['frequency']=='daily' else sorted(d or 7 for d in config['days']),
             execution_time=config['time'], delivery_time=config['time'], dst_policy='REJECT_AMBIGUOUS_OR_NONEXISTENT'),

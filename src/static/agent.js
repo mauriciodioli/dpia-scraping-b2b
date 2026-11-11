@@ -161,7 +161,7 @@
  }
  function startQueryContext(context){
   queryContext=context;identity=who();wizard=true;index=2;error='';
-  draft={...defaults(),...(record||{}),version:1,tasks:['products'],country:context.country,city:context.city,scopes:[context.scope.id],categories:[context.category.id],language:context.language,scopeLabels:[context.scope],categoryLabels:[context.category]};
+  draft={...defaults(),...(record||{}),version:1,tasks:['products'],query_context:structuredClone(context.query_context),country:context.country,city:context.city,scopes:[context.scope.id],categories:[context.category.id],language:context.language,scopeLabels:[context.scope],categoryLabels:[context.category]};
   scopes=structuredClone(catalogAmbitos);categories=structuredClone(catalogCategorias);cities=[context.city];
   if(record?.engine_binding)queryContext.issue='Ya tenés un agente vinculado. Esta consulta no reemplazará su configuración activa.';
   refreshBudgetLimit();renderStep();root.querySelector('h3')?.focus();

@@ -55,7 +55,7 @@ def positive_ids(value):
 
 def validate_config(data):
     """Validate before network calls or opening the write transaction. Client labels are not trusted."""
-    if not isinstance(data,dict) or set(data) != FIELDS or type(data['version']) is not int or data['version'] != 1:
+    if not isinstance(data,dict) or set(data) not in (FIELDS, FIELDS | {'query_context'}) or type(data['version']) is not int or data['version'] != 1:
         bad()
     if not isinstance(data['tasks'],list) or not 1<=len(data['tasks'])<=len(TASKS) or any(not isinstance(t,str) or t not in TASKS for t in data['tasks']) or len(set(data['tasks']))!=len(data['tasks']):
         bad('Seleccioná al menos una tarea.')
@@ -82,6 +82,14 @@ def validate_config(data):
         bad('Ingresá un límite de puntos entero y no negativo.')
     if type(data['notifications']) is not bool or not isinstance(data['language'],str) or data['language'] not in ('es','en','pl','it'):
         bad()
+    if 'query_context' in data:
+        context = data['query_context']
+        if (not isinstance(context, dict) or set(context) != {'prompt', 'summary', 'mode', 'postal_id', 'currency'}
+                or any(not isinstance(context[k], str) or not context[k].strip() or len(context[k]) > 3500 for k in ('prompt', 'summary'))
+                or context['mode'] not in ('buscar', 'novedades', 'explorar')
+                or type(context['postal_id']) is not int or not 0 <= context['postal_id'] <= 2147483647
+                or not isinstance(context['currency'], str) or len(context['currency']) > 10):
+            bad('La consulta del agente no es válida.', 422)
     return {**data,'city':data['city'].strip(),'tasks':sorted(data['tasks']),
             'scopes':sorted(data['scopes']),'categories':sorted(data['categories']),
             'days':[] if frequency=='daily' else sorted(days)}
@@ -91,6 +99,8 @@ def verify_catalog(config):
     """Use the existing read-only catalog contract and postal associations, never paid providers."""
     ids=postal_ids_for_city(config['country'],config['city'])
     if not ids:bad('Elegí ubicación, ámbitos y categorías disponibles.')
+    if config.get('query_context', {}).get('postal_id', 0) not in (0, *ids):
+        bad('El código postal de la consulta no corresponde a la ubicación.', 422)
     postal=db.session.get(CodigoPostal,ids[0])
     params=catalog_filters(MultiDict({'idioma':config['language']}),'ambitos')
     client=DPIAClient(current_app.config.get('SCRAPEADOR_SERVICE_KEY',''),timeout=(3.05,10))
@@ -137,7 +147,7 @@ class AgentConfigurationStore:
         if not isinstance(config,dict) or config.get('version')!=1:
             bad('La configuración guardada no es compatible. Revisala antes de guardar.',409)
         try:
-            validate_config({key:config[key] for key in FIELDS})
+            validate_config({key:config[key] for key in FIELDS | ({'query_context'} if 'query_context' in config else set())})
         except (KeyError,PreparationError):
             bad('La configuración guardada no es compatible. Revisala antes de guardar.',409)
         task_rows=conn.execute(select(tareas).where(tareas.c.agente_id==row['id'],tareas.c.habilitada.is_(True))).mappings().all()
