@@ -187,6 +187,11 @@ class AgentConfigurationStore:
                     bad('La configuración cambió en otra pestaña. Volvé a cargarla antes de editar.',409)
             elif expected_revision!=0:
                 bad('La configuración cambió en otra pestaña. Volvé a cargarla antes de editar.',409)
+            from services.scraping_quota import MySQLScrapingQuota
+            quota=current_app.extensions.get('scraping_quota') or MySQLScrapingQuota()
+            available=quota.credits(user_id)['available']
+            if config['points']>available:
+                bad(f'El presupuesto no puede superar tus {available} puntos disponibles.',402)
             owner_email=conn.execute(select(Usuario.correo_electronico).where(Usuario.id==user_id)).scalar_one()
             values=dict(nombre=owner_email,estado='INACTIVO',idioma=config['language'],pais_codigo=COUNTRIES[config['country']][0],
                         ciudad=config['city'],zona_horaria=config['timezone'],
@@ -230,10 +235,13 @@ class AgentConfigurationStore:
             if agent['state']=='active':return agent
             from services.scraping_quota import MySQLScrapingQuota
             quota=current_app.extensions.get('scraping_quota') or MySQLScrapingQuota()
-            if quota.credits(user_id)['available']<1:
+            available=quota.credits(user_id)['available']
+            if available<1:
                 bad('Puntos insuficientes: necesitás al menos 1 punto disponible para activar el agente.',402)
             if agent['configuration']['points']<1:
                 bad('El presupuesto del agente es 0. Editá la configuración y asigná al menos 1 punto por período para activarlo.',402)
+            if agent['configuration']['points']>available:
+                bad(f'El presupuesto no puede superar tus {available} puntos disponibles.',402)
             # Hold the owner lock through confirmation: edits and concurrent clicks cannot race.
             binding=provision(translate(agent,user_id))
             now=datetime.now(timezone.utc).replace(tzinfo=None)

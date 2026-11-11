@@ -5,7 +5,7 @@
  const FREQUENCIES={daily:'Diario',twice:'Dos veces por semana',weekly:'Semanal'};
  const STATES={unconfigured:'No configurado',inactive:'Configurado e inactivo',active:'Activo',running:'Ejecutando',paused:'Pausado',admin_paused:'Pausado por administrador',disabled:'Deshabilitado',insufficient:'Créditos insuficientes',error:'Error'};
  const STEPS=['Qué monitorear','Dónde y sobre qué','Cuándo','Límites y notificaciones','Confirmación'];
- let wizard=false,index=0,draft=null,record=null,identity=null,scopes=[],categories=[],cities=[],loading=false,loadSerial=0,controller=null,error='',engineRevision=0,pauseReady=false,pendingPause=null,pendingDelete=null,agentPoints=null,serverState='inactive',serverRevision=0,serverReady=false,serverBusy=false,readSerial=0;
+ let wizard=false,index=0,draft=null,record=null,identity=null,scopes=[],categories=[],cities=[],loading=false,loadSerial=0,controller=null,error='',engineRevision=0,pauseReady=false,pendingPause=null,pendingDelete=null,agentPoints=null,availablePoints=null,budgetReadSerial=0,serverState='inactive',serverRevision=0,serverReady=false,serverBusy=false,readSerial=0;
  function pauseOperationId(){
   if(typeof crypto.randomUUID==='function')return crypto.randomUUID();
   const bytes=crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
@@ -152,7 +152,7 @@
   if(!serverReady||serverBusy)return;
   identity=who();draft=record?structuredClone(record):imported?structuredClone(imported):defaults();wizard=true;index=0;error='';
   scopes=structuredClone(catalogAmbitos);categories=structuredClone(catalogCategorias);cities=draft.city?[draft.city]:[];
-  renderStep();if(draft.country)loadLocation();
+  refreshBudgetLimit();renderStep();if(draft.country)loadLocation();
  }
  function choice(parent,text,checked,change,translated=true){const label=node('label',undefined,'agent-choice'),check=document.createElement('input');check.type='checkbox';check.checked=checked;check.onchange=()=>change(check.checked);label.append(check,translated?node('span',text):raw('span',text));parent.append(label);}
  function listHeading(parent,text){parent.append(node('h4',text,'agent-label'));const choices=node('div',undefined,'agent-choices agent-catalog');parent.append(choices);return choices;}
@@ -180,8 +180,24 @@
   }
   panel.append(node('p','El horario es una preferencia. No hay tareas programadas todavía.','agent-notice'));
  }
+ async function refreshBudgetLimit(){
+  const owner=who(),serial=++budgetReadSerial;availablePoints=null;
+  if(wizard&&index===3)renderStep();
+  try{
+   const response=await fetch('/api/consultas/creditos',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});
+   const data=await response.json();if(owner!==who()||serial!==budgetReadSerial)return;
+   if(!response.ok||data.success!==true||!Number.isSafeInteger(data.credits?.available)||data.credits.available<0)throw Error('credits');
+   availablePoints=data.credits.available;
+  }catch(e){if(owner===who()&&serial===budgetReadSerial)availablePoints=null;}
+  finally{if(owner===who()&&serial===budgetReadSerial&&wizard&&index===3)renderStep();}
+ }
  function stepLimits(panel){
-  const fields=node('div',undefined,'agent-fields'),points=document.createElement('input');points.type='number';points.min='0';points.max='1000000';points.step='1';points.value=draft.points;points.oninput=()=>draft.points=points.value===''?null:Number(points.value);
+  const maximum=availablePoints===null?0:Math.min(1000000,availablePoints);
+  if(availablePoints!==null&&draft.points>maximum)draft.points=maximum;
+  const fields=node('div',undefined,'agent-fields'),points=document.createElement('input');points.type='number';points.min='0';points.max=String(maximum);points.step='1';points.disabled=availablePoints===null;points.value=draft.points;
+  points.oninput=()=>{draft.points=points.value===''?null:Number(points.value);if(draft.points>maximum){draft.points=maximum;points.value=String(maximum);}};
+  if(availablePoints===null)panel.append(node('p','Consultá el saldo para configurar el presupuesto.','hint'),button('Consultar saldo',refreshBudgetLimit));
+  else panel.append(raw('p',tr('Puntos disponibles')+': '+availablePoints,'hint'));
   fields.append(inputLabel('Presupuesto máximo de puntos',points),inputLabel('Período',select([['week','Por semana'],['month','Por mes']],draft.period,value=>draft.period=value)));panel.append(fields);
   choice(panel,'Recibir avisos de novedades',draft.notifications,value=>draft.notifications=value);
   panel.append(node('p','Las búsquedas externas pueden consumir puntos. Guardar esta configuración no descuenta puntos ni reserva saldo.','agent-notice'),node('p','Los avisos se guardan como preferencia; no se solicitará permiso ni se enviarán notificaciones en esta etapa.','agent-notice'));
@@ -190,6 +206,8 @@
   if(step===0&&!draft.tasks.length)return 'Seleccioná al menos una tarea.';
   if(step===1&&(loading||error||!draft.country||!draft.city||!draft.scopes.length||!draft.categories.length))return 'Elegí ubicación, ámbitos y categorías disponibles.';
   if(step===2&&(!/^\d{2}:\d{2}$/.test(draft.time)||!validZone(draft.timezone)||(draft.frequency!=='daily'&&draft.days.length!==(draft.frequency==='twice'?2:1))))return 'Revisá el horario y los días seleccionados.';
+  if(step===3&&availablePoints===null)return 'No se pudo consultar tu saldo. Reintentá antes de guardar.';
+  if(step===3&&draft.points>availablePoints)return 'El presupuesto supera tus puntos disponibles.';
   if(step===3&&(!Number.isSafeInteger(draft.points)||draft.points<0||draft.points>1000000))return 'Ingresá un límite de puntos entero y no negativo.';
   return '';
  }
@@ -232,7 +250,7 @@
  }
  async function open(){
   if(serverBusy&&identity===who())return;
-  identity=who();const owner=who(),serial=++readSerial;agentPoints=null;engineRevision=0;pauseReady=false;pendingPause=null;pendingDelete=null;serverState='inactive';record=null;serverRevision=0;serverReady=false;error='';
+  identity=who();const owner=who(),serial=++readSerial;agentPoints=null;availablePoints=null;budgetReadSerial++;engineRevision=0;pauseReady=false;pendingPause=null;pendingDelete=null;serverState='inactive';record=null;serverRevision=0;serverReady=false;error='';
   loadSerial++;controller?.abort();loading=false;
   if(!owner){serverBusy=false;dashboard();return;}
   serverBusy=true;dashboard();
@@ -253,10 +271,10 @@
  setInterval(()=>{if(!document.hidden&&!document.getElementById('agentPage').hidden)refreshPause();},15000);
  new MutationObserver(()=>{if(identity!==who()){
   loadSerial++;readSerial++;controller?.abort();serverBusy=false;serverReady=false;serverRevision=0;
-  identity=who();agentPoints=null;engineRevision=0;pauseReady=false;pendingPause=null;pendingDelete=null;record=null;draft=null;wizard=false;root.replaceChildren();
+  identity=who();agentPoints=null;availablePoints=null;budgetReadSerial++;engineRevision=0;pauseReady=false;pendingPause=null;pendingDelete=null;record=null;draft=null;wizard=false;root.replaceChildren();
   if(!document.getElementById('agentPage').hidden)open();
  }}).observe(document.getElementById('userBtn'),{childList:true,subtree:true,characterData:true});
- window.addEventListener('dpia:credits-updated',()=>{if(!document.getElementById('agentPage').hidden)refreshPause();else agentPoints=null;});
+ window.addEventListener('dpia:credits-updated',()=>{if(wizard)refreshBudgetLimit();else if(!document.getElementById('agentPage').hidden)refreshPause();else agentPoints=null;});
  document.getElementById('languageSelect').addEventListener('change',()=>setTimeout(()=>{if(wizard){renderStep();if(draft.country&&draft.city)loadLocation(false);}else if(!document.getElementById('agentPage').hidden)dashboard();},0));
  // Future service may reuse these visual state definitions. No state can activate a task here.
  window.DPIAAgent={open,presentationFor:state=>({label:tr(STATES[state]||STATES.error),canEdit:state!=='running',showPause:['active','running'].includes(state),showResume:state==='paused',executionControlsEnabled:false})};
