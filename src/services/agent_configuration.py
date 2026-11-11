@@ -170,14 +170,16 @@ class AgentConfigurationStore:
             # A common user lock serializes reads and writes, including first creation.
             self._user(conn,user_id,lock=True)
             row=self._existing(conn,user_id)
-            return self._serialize(conn,row,allow_active=True) if row else None
+            return self._serialize(conn,row,allow_active=True) if row and not (row['configuracion'] or {}).get('_deleted_at') else None
 
     def save(self,user_id,config,expected_revision):
         now=datetime.now(timezone.utc).replace(tzinfo=None)
         with self._engine().begin() as conn:
             self._user(conn,user_id,lock=True)
             previous=self._existing(conn,user_id)
-            if previous:
+            if previous and (previous['configuracion'] or {}).get('_deleted_at'):
+                if expected_revision!=0:bad('La configuración cambió. Volvé a cargarla.',409)
+            elif previous:
                 stored=self._serialize(conn,previous)
                 # A retry after an uncertain response returns the confirmed same configuration.
                 if previous['configuracion']==config:return stored
@@ -220,7 +222,7 @@ class AgentConfigurationStore:
         with self._engine().begin() as conn:
             self._user(conn,user_id,lock=True)
             row=self._existing(conn,user_id)
-            if row is None:bad('Guardá la configuración antes de activar el agente.',409)
+            if row is None or (row['configuracion'] or {}).get('_deleted_at'):bad('Guardá la configuración antes de activar el agente.',409)
             agent=self._serialize(conn,row,allow_active=True)
             if agent['revision']!=expected_revision:
                 bad('La configuración cambió en otra pestaña. Volvé a cargarla antes de activar.',409)

@@ -18,6 +18,7 @@ PATH='/api/agents/v1/internal/pwa-pause'
 def read_pause(user_id,command=None):
     store=current_app.extensions.get('agent_configuration_store') or AgentConfigurationStore()
     agent=store.get(user_id)
+    if agent is None and command is None:return None
     if not agent or agent['state']!='active':bad('Activá tu agente antes de pausarlo.',409)
     binding=agent['configuration'].get('engine_binding')
     if not isinstance(binding,dict) or not binding.get('id'):bad('El vínculo del agente no es válido.',409)

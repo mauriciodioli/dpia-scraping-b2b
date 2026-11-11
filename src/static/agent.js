@@ -5,7 +5,7 @@
  const FREQUENCIES={daily:'Diario',twice:'Dos veces por semana',weekly:'Semanal'};
  const STATES={unconfigured:'No configurado',inactive:'Configurado e inactivo',active:'Activo',running:'Ejecutando',paused:'Pausado',admin_paused:'Pausado por administrador',disabled:'Deshabilitado',insufficient:'Créditos insuficientes',error:'Error'};
  const STEPS=['Qué monitorear','Dónde y sobre qué','Cuándo','Límites y notificaciones','Confirmación'];
- let wizard=false,index=0,draft=null,record=null,identity=null,scopes=[],categories=[],cities=[],loading=false,loadSerial=0,controller=null,error='',engineRevision=0,pauseReady=false,pendingPause=null,serverState='inactive',serverRevision=0,serverReady=false,serverBusy=false,readSerial=0;
+ let wizard=false,index=0,draft=null,record=null,identity=null,scopes=[],categories=[],cities=[],loading=false,loadSerial=0,controller=null,error='',engineRevision=0,pauseReady=false,pendingPause=null,pendingDelete=null,serverState='inactive',serverRevision=0,serverReady=false,serverBusy=false,readSerial=0;
  function pauseOperationId(){
   if(typeof crypto.randomUUID==='function')return crypto.randomUUID();
   const bytes=crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
@@ -60,7 +60,7 @@
    const dl=document.createElement('dl');for(const text of ['Próxima ejecución','Última ejecución','Resultados recientes','Puntos consumidos'])dl.append(node('dt',text),node('dd','Sin ejecuciones'));
    panel.append(dl);
    const actions=node('div',undefined,'agent-actions');if(serverState==='inactive')actions.append(button('Editar configuración',()=>start()));
-   actions.append(executionControl(serverState));if(record.engine_binding)actions.append(button('Actualizar estado',()=>refreshPause()));panel.append(actions);
+   actions.append(executionControl(serverState));const remove=button('Eliminar agente',deleteAgent,'agent-delete');remove.disabled=serverBusy||!!record.engine_binding&&!pauseReady;actions.append(remove);if(record.engine_binding)actions.append(button('Actualizar estado',()=>refreshPause()));panel.append(actions);
   }
   panel.append(engineNotice(),storageNotice());feedback(panel);root.append(panel);window.DPIAI18N?.refresh();
  }
@@ -78,8 +78,24 @@
   }catch(e){if(owner===who()&&serial===readSerial)error=e.name==='Error'?e.message:'No se confirmó la activación del agente. Reintentá.';}
   finally{if(owner===who()&&serial===readSerial){serverBusy=false;dashboard();if(serverState==='active')refreshPause();}}
  }
+ async function deleteAgent(){
+  if(serverBusy||!record||record.engine_binding&&!pauseReady)return;
+  if(!pendingDelete&&!window.confirm('¿Eliminar tu agente? Se conservará el historial y se cancelarán los trabajos no iniciados.'))return;
+  const owner=who(),serial=readSerial;
+  pendingDelete=pendingDelete||{confirm:true,expected_revision:serverRevision,engine_revision:record.engine_binding?engineRevision:null,operation_id:pauseOperationId()};
+  serverBusy=true;error='';dashboard();
+  try{
+   const response=await fetch('/api/agente/eliminar',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'delete-agent'},body:JSON.stringify(pendingDelete),signal:AbortSignal.timeout(20000)});
+   const data=await response.json();if(owner!==who()||serial!==readSerial)return;
+   if(!response.ok||data.success!==true){if([400,401,403,404,409].includes(response.status))pendingDelete=null;throw Error(data.error||'No se confirmó la eliminación. Reintentá.');}
+   if(data.execution_available!==false||data.agent!==null)throw Error('Volvé a cargar la configuración antes de continuar.');
+   record=null;serverRevision=0;engineRevision=0;pauseReady=false;pendingPause=null;pendingDelete=null;serverState='inactive';
+  }catch(e){if(owner===who()&&serial===readSerial)error=e.name==='Error'?e.message:'No se confirmó la eliminación. Reintentá.';}
+  finally{if(owner===who()&&serial===readSerial){serverBusy=false;dashboard();}}
+ }
  function acceptPause(data){
   const agent=data.agent;
+  if(data.success===true&&data.execution_available===false&&agent===null){record=null;serverRevision=0;engineRevision=0;pauseReady=false;pendingPause=null;pendingDelete=null;serverState='inactive';return;}
   if(data.success!==true||data.execution_available!==false||!agent||!['active','paused','admin_paused','disabled'].includes(agent.state)||agent.revision!==serverRevision||agent.configuration?.engine_binding?.id!==record?.engine_binding?.id||!Number.isSafeInteger(agent.engine_revision)||agent.engine_revision<1)throw Error('No se confirmó el estado del agente.');
   serverState=agent.state;engineRevision=agent.engine_revision;pauseReady=true;
  }
@@ -208,7 +224,7 @@
  }
  async function open(){
   if(serverBusy&&identity===who())return;
-  identity=who();const owner=who(),serial=++readSerial;engineRevision=0;pauseReady=false;pendingPause=null;serverState='inactive';record=null;serverRevision=0;serverReady=false;error='';
+  identity=who();const owner=who(),serial=++readSerial;engineRevision=0;pauseReady=false;pendingPause=null;pendingDelete=null;serverState='inactive';record=null;serverRevision=0;serverReady=false;error='';
   loadSerial++;controller?.abort();loading=false;
   if(!owner){serverBusy=false;dashboard();return;}
   serverBusy=true;dashboard();
@@ -229,7 +245,7 @@
  setInterval(()=>{if(!document.hidden&&!document.getElementById('agentPage').hidden)refreshPause();},15000);
  new MutationObserver(()=>{if(identity!==who()){
   loadSerial++;readSerial++;controller?.abort();serverBusy=false;serverReady=false;serverRevision=0;
-  identity=who();engineRevision=0;pauseReady=false;pendingPause=null;record=null;draft=null;wizard=false;root.replaceChildren();
+  identity=who();engineRevision=0;pauseReady=false;pendingPause=null;pendingDelete=null;record=null;draft=null;wizard=false;root.replaceChildren();
   if(!document.getElementById('agentPage').hidden)open();
  }}).observe(document.getElementById('userBtn'),{childList:true,subtree:true,characterData:true});
  document.getElementById('languageSelect').addEventListener('change',()=>setTimeout(()=>{if(wizard){renderStep();if(draft.country&&draft.city)loadLocation(false);}else if(!document.getElementById('agentPage').hidden)dashboard();},0));
