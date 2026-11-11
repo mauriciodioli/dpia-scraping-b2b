@@ -15,8 +15,6 @@ def translate(agent, user_id):
     config = agent['configuration']
     if config['tasks'] != ['products']:
         bad('La activación solo admite Productos nuevos. Las demás tareas todavía no son compatibles.', 422)
-    if config['notifications']:
-        bad('Los avisos todavía no son compatibles con la activación. Desactivalos antes de continuar.', 422)
     if len(config['scopes']) != 1 or len(config['categories']) != 1:
         bad('La activación requiere un único ámbito y una única categoría.', 422)
     labels = {x['id']: x['name'] for x in config.get('categoryLabels', [])}

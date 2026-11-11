@@ -227,6 +227,10 @@ class AgentConfigurationStore:
             if agent['revision']!=expected_revision:
                 bad('La configuración cambió en otra pestaña. Volvé a cargarla antes de activar.',409)
             if agent['state']=='active':return agent
+            from services.scraping_quota import MySQLScrapingQuota
+            quota=current_app.extensions.get('scraping_quota') or MySQLScrapingQuota()
+            if quota.credits(user_id)['available']<1 or agent['configuration']['points']<1:
+                bad('Puntos insuficientes: necesitás al menos 1 punto disponible y un presupuesto de al menos 1 punto para activar el agente.',402)
             # Hold the owner lock through confirmation: edits and concurrent clicks cannot race.
             binding=provision(translate(agent,user_id))
             now=datetime.now(timezone.utc).replace(tzinfo=None)
