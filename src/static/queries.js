@@ -75,13 +75,23 @@ function preparedAgentContext(){
  else if(body.user_message.length>3500||queryPrepared.summary.length>3500)issue='El pedido o resumen supera el límite de 3500 caracteres para configurar el agente.';
  return {owner:currentEmail,country:body.pais,city:body.ciudad,language:body.idioma,scope:{id:scope.ambito_id,name:scope.nombre},category:{id:category.categoria_id,name:category.nombre},prompt:body.user_message,summary:queryPrepared.summary,query_context:{prompt:body.user_message,summary:queryPrepared.summary,mode:body.mode,postal_id:body.codigo_postal_id,currency:body.budget_currency||''},issue};
 }
+function consultAgentVisible(){
+ if(currentEmail)return !!preparedAgentContext();
+ const body=queryBody(),scope=catalogAmbitos.find(row=>row.ambito_id===body.ambito_id),category=catalogCategorias.find(row=>row.categoria_id===body.categoria_id);
+ if(queryBusy||!body.pais||!body.ciudad||!body.user_message.trim()||!scope||!category||!category.ambito_ids.includes(scope.ambito_id))return false;
+ if(!isEmploymentQuery(body)&&(queryMode==='explorar'||queryBudgetEdited)){
+  const min=document.querySelector('#queryBudgetMin'),max=document.querySelector('#queryBudgetMax');
+  if((min.value||max.value)&&(!min.value||!max.value||!min.checkValidity()||!max.checkValidity()||Number(max.value)<Number(min.value)))return false;
+ }
+ return true;
+}
 const consultAgentButton=document.getElementById('consultAgent');
-consultAgentButton.onclick=()=>{const context=preparedAgentContext();if(context)window.DPIAAgent?.fromQuery(context);};
-new MutationObserver(()=>{consultAgentButton.hidden=!preparedAgentContext();}).observe(document.getElementById('userBtn'),{childList:true,subtree:true,characterData:true});
+consultAgentButton.onclick=()=>{if(!currentEmail){if(consultAgentVisible())openAuth();return;}const context=preparedAgentContext();if(context)window.DPIAAgent?.fromQuery(context);};
+new MutationObserver(()=>{consultAgentButton.hidden=!consultAgentVisible();if(currentEmail&&!preparedAgentContext())queueQueryPreparation();}).observe(document.getElementById('userBtn'),{childList:true,subtree:true,characterData:true});
 function syncQueryConversation(){
  const prepared=!!queryPrepared&&JSON.stringify(queryBody())===queryPrepared.fingerprint;
  const sent=prepared&&!!(queryPrepared.sent||queryPrepared.pending);
- consultAgentButton.hidden=!preparedAgentContext();
+ consultAgentButton.hidden=!consultAgentVisible();
  document.querySelector('#promptResult').hidden=!prepared;
  document.querySelector('#preparePrompt').hidden=false;
  document.querySelector('#preparePrompt').disabled=queryBusy||sent||(!prepared&&!!currentEmail);
@@ -141,7 +151,7 @@ function updateNovelDraft(force=false){
   it:`Cerca novità e prodotti rilevanti di ${c}, nell'ambito ${a}, per ${city}, ${country}. Prepara una ricerca concreta di prodotti utili, evitando duplicati. Non inventare prezzi o presentare tendenze come verificate senza prove.`,
   pl:`Znajdź nowości i przydatne produkty w kategorii ${c}, w obszarze ${a}, dla ${city}, ${country}. Przygotuj konkretne wyszukiwanie i unikaj duplikatów. Nie wymyślaj cen ani nie przedstawiaj trendów jako potwierdzonych bez dowodów.`};
  if(isEmploymentQuery()){queryMode='explorar';setupExploreBudget();updateExploreDraft(true);return;}
- novelAutoDraft=templates[catalogLanguage()]||templates.es;prompt.value=novelAutoDraft;
+ novelAutoDraft=templates[catalogLanguage()]||templates.es;prompt.value=novelAutoDraft;syncQueryConversation();
 }
 async function openNovelQuery(){
  if(queryBusy)return;
@@ -173,7 +183,7 @@ function updateExploreDraft(force=false){
  if(!scopeSelect.value||!categorySelect.value){exploreAutoDraft='';prompt.value='';return;}
  const scope=scopeSelect.selectedOptions[0].textContent,category=categorySelect.selectedOptions[0].textContent;
  const drafts={es:`Sugerí productos útiles de ${category}, en ${scope}, para ${city}, ${country}. Explicá sus ventajas y proponé precios de venta orientativos cuando puedas fundamentarlos. Indicá sitios donde pueda comparar opciones.`,en:`Suggest useful products in ${category}, within ${scope}, for ${city}, ${country}. Explain their benefits and suggest indicative selling prices when justified. Include sites where I can compare options.`,it:`Suggerisci prodotti utili di ${category}, nell'ambito ${scope}, per ${city}, ${country}. Spiega i vantaggi e proponi prezzi indicativi quando motivati. Indica siti dove confrontare le opzioni.`,pl:`Zaproponuj przydatne produkty w kategorii ${category}, w obszarze ${scope}, dla ${city}, ${country}. Wyjaśnij zalety i zaproponuj uzasadnione ceny orientacyjne. Wskaż serwisy do porównania ofert.`};
- exploreBudgetDraft=exploreBudgetText();exploreAutoDraft=(isEmploymentQuery()?employmentDraft():drafts[catalogLanguage()]||drafts.es)+'\n'+exploreBudgetDraft;prompt.value=exploreAutoDraft;
+ exploreBudgetDraft=exploreBudgetText();exploreAutoDraft=(isEmploymentQuery()?employmentDraft():drafts[catalogLanguage()]||drafts.es)+'\n'+exploreBudgetDraft;prompt.value=exploreAutoDraft;syncQueryConversation();
 }
 function setupExploreBudget(){
  syncEmploymentFilters();
