@@ -649,3 +649,5 @@ html[data-theme="dark"] .agent-field input,html[data-theme="dark"] .agent-field 
 .self-credit-panel{margin:16px 0;padding:16px;border:1px solid #a58ac550;border-radius:16px;background:#a58ac510;text-align:center}.self-credit-panel>p{margin:6px 0 12px}.self-credit-panel .primary{font-size:14px;padding:12px}.self-credit-panel #selfCreditAmount{font-size:24px}
 
 .agent-point-summary{display:flex;gap:6px;flex-direction:column;margin:12px 0;font-size:13px}.agent-point-status{display:inline-flex;align-items:center;gap:7px}.agent-point-dot{width:9px;height:9px;border-radius:50%;background:#87909c}.agent-point-dot[data-color="green"]{background:#159b61}.agent-point-dot[data-color="yellow"]{background:#d69a00}.agent-point-dot[data-color="red"]{background:#d14444}.agent-point-summary small{opacity:.75}
+
+#consultAgent.consult-agent-button{color:#159b61}#consultAgent.consult-agent-button:hover{background:#159b611a}.agent-query-context{margin:12px 0;font-size:13px}.agent-query-context pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-height:220px;overflow:auto}.agent-query-context .agent-feedback{margin-top:8px}

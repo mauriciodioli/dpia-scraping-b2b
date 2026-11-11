@@ -63,9 +63,25 @@ function refreshQuerySelectors(category=null, scopeId=null){
  if([...postalSelect.options].some(option=>option.value===oldPostal))postalSelect.value=oldPostal;
  invalidateQuery();if(queryMode==='novedades')updateNovelDraft();else if(queryMode==='explorar')updateExploreDraft();
 }
+function preparedAgentContext(){
+ if(queryBusy||!currentEmail||!queryPrepared||queryPrepared.owner!==currentEmail||JSON.stringify(queryBody())!==queryPrepared.fingerprint||typeof queryPrepared.summary!=='string'||!queryPrepared.summary.trim()||queryPrepared.summary.length>65536)return null;
+ const body=queryPrepared.body;
+ if(!body||!body.pais||!body.ciudad||!Number.isSafeInteger(body.ambito_id)||body.ambito_id<1||!Number.isSafeInteger(body.categoria_id)||body.categoria_id<1)return null;
+ const scope=catalogAmbitos.find(row=>row.ambito_id===body.ambito_id),category=catalogCategorias.find(row=>row.categoria_id===body.categoria_id);
+ if(!scope||!category||!category.ambito_ids.includes(scope.ambito_id))return null;
+ let issue='';
+ if(isEmploymentQuery(body)||!['buscar','novedades'].includes(body.mode))issue='Esta consulta no corresponde al monitoreo de productos compatible con Agents.';
+ else if(body.attachments?.length)issue='Agents todavía no admite los adjuntos de esta consulta.';
+ else if(body.user_message.trim()!==category.nombre.trim()||category.nombre.length>500)issue='Agents solo admite monitorear la categoría completa. Este prompt contiene instrucciones o filtros que el agente actual no puede conservar.';
+ return {owner:currentEmail,country:body.pais,city:body.ciudad,language:body.idioma,scope:{id:scope.ambito_id,name:scope.nombre},category:{id:category.categoria_id,name:category.nombre},prompt:body.user_message,summary:queryPrepared.summary,issue};
+}
+const consultAgentButton=document.getElementById('consultAgent');
+consultAgentButton.onclick=()=>{const context=preparedAgentContext();if(context)window.DPIAAgent?.fromQuery(context);};
+new MutationObserver(()=>{consultAgentButton.hidden=!preparedAgentContext();}).observe(document.getElementById('userBtn'),{childList:true,subtree:true,characterData:true});
 function syncQueryConversation(){
  const prepared=!!queryPrepared&&JSON.stringify(queryBody())===queryPrepared.fingerprint;
  const sent=prepared&&!!(queryPrepared.sent||queryPrepared.pending);
+ consultAgentButton.hidden=!preparedAgentContext();
  document.querySelector('#promptResult').hidden=!prepared;
  document.querySelector('#preparePrompt').hidden=false;
  document.querySelector('#preparePrompt').disabled=queryBusy||sent||(!prepared&&!!currentEmail);
@@ -218,17 +234,17 @@ async function prepareDPIAQuery({automatic=false}={}){
   if(!min.checkValidity()||!max.checkValidity())setQueryBudgetOpen(true);
   if(!min.reportValidity()||!max.reportValidity()){setQueryArtState('warning');return;}
  }
- const status=document.querySelector('#queryStatus'),body=structuredClone(queryBody());
+ const owner=currentEmail,status=document.querySelector('#queryStatus'),body=structuredClone(queryBody());
  if(!body.ambito_id||!body.categoria_id){setQueryArtState('warning');status.textContent='Elegí un ámbito y una categoría para continuar.';document.querySelector(body.ambito_id?'#queryCategory':'#queryScope').focus();return;}
  if(!body.user_message&&!body.attachments.length){setQueryArtState('warning');status.textContent='Escribí tu pedido o adjuntá una imagen o video.';return;}
  invalidateQuery(false);queryBusy=true;syncQueryConversation();status.textContent='Preparando tu consulta…';
  try{
   const response=await fetch('/api/consultas/preparar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(45000)});
   const data=await response.json();if(response.status===401)openAuth();if(!response.ok||!data.success)throw new Error(data.error||'No se pudo preparar la consulta.');
-  if(JSON.stringify(queryBody())!==JSON.stringify(body)){
+  if(currentEmail!==owner||JSON.stringify(queryBody())!==JSON.stringify(body)){
    status.textContent='El pedido cambió. DPIA está actualizando el resumen.';return;
   }
-  queryPrepared={body:structuredClone(body),fingerprint:JSON.stringify(body),summary:data.summary};
+  queryPrepared={owner,body:structuredClone(body),fingerprint:JSON.stringify(body),summary:data.summary};
   document.querySelector('#promptResult').textContent=data.summary;
   status.textContent='Revisá la respuesta de DPIA y enviá cuando esté lista. Los cambios se actualizan automáticamente.';
  }catch(error){status.textContent=error.name==='TimeoutError'?'La preparación tardó demasiado. Reintentá.':error.message;}
