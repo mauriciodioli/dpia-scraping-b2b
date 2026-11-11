@@ -111,7 +111,7 @@
    if(response.status===401){openAuth();return;}
    if(!response.ok||!data.success||!Array.isArray(data.operations))throw new Error(data.error||'No se pudo consultar el historial.');
    historyRows.push(...data.operations.map(row=>({row,place})));renderHistory();
-   offset+=data.operations.length;$('moreQueryHistory').hidden=!data.has_more;
+   offset=Number.isSafeInteger(data.next_offset)?data.next_offset:offset+data.operations.length;$('moreQueryHistory').hidden=!data.has_more;
    $('queryHistoryStatus').textContent=$('queryHistoryList').children.length?'':'Todavía no tenés búsquedas guardadas en esta PWA.';
   }catch(error){if(serial===generation&&email===currentEmail)$('queryHistoryStatus').textContent=error.message;}
  }

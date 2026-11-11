@@ -170,8 +170,7 @@ class MySQLScrapingQuota:
             context_json=case((func.json_valid(operaciones.c.contexto_json)==1,operaciones.c.contexto_json),else_='{}')
             result_json=case((func.json_valid(operaciones.c.resultado_json)==1,operaciones.c.resultado_json),else_='{}')
             ids = conn.execute(select(operaciones.c.operacion_id).where(
-                operaciones.c.usuario_id == user_id, ~operaciones.c.origen.in_(('promocion','recarga')),
-                func.json_extract(context_json, '$.agent_id').is_(None))
+                operaciones.c.usuario_id == user_id, ~operaciones.c.origen.in_(('promocion','recarga')))
                 .order_by(operaciones.c.creado_en.desc(), operaciones.c.operacion_id)
                 .offset(offset).limit(25)).scalars().all()
             def summary_text(path):
@@ -193,7 +192,8 @@ class MySQLScrapingQuota:
                     summary_text('$.context.categoria').label('category'),
                     func.coalesce(product_count, 0).label('product_count')
                 ).where(operaciones.c.usuario_id == user_id,
-                        operaciones.c.operacion_id.in_(ids[:24]))).mappings()}
+                        operaciones.c.operacion_id.in_(ids[:24]),
+                        func.json_extract(context_json, '$.agent_id').is_(None))).mappings()}
             history = []
             for key in ids[:24]:
                 row = rows_by_id.get(key)
@@ -204,7 +204,7 @@ class MySQLScrapingQuota:
                     'city': row['city'] or '', 'category': row['category'] or '',
                     'created_at': row['creado_en'].isoformat() if row['creado_en'] else None,
                     'product_count': row['product_count']})
-            return {'operations': history, 'has_more': len(ids)>24}
+            return {'operations': history, 'has_more': len(ids)>24, 'next_offset': offset+min(24,len(ids))}
 
     def image_stage(self, operation_id, user_id, index, *, token=None, stage=None):
         """Claim once or save a gallery without changing the scraping allowance."""
