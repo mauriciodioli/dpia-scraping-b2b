@@ -165,19 +165,23 @@ class MySQLScrapingQuota:
         with self._engine().connect() as conn:
             # Sort only lightweight IDs. Large JSON results can exhaust MySQL's
             # sort buffer when included in the ordered SELECT (error 1038).
+            # Legacy text rows may contain empty/non-JSON payloads. Never let
+            # one such row break the entire history listing.
+            context_json=case((func.json_valid(operaciones.c.contexto_json)==1,operaciones.c.contexto_json),else_='{}')
+            result_json=case((func.json_valid(operaciones.c.resultado_json)==1,operaciones.c.resultado_json),else_='{}')
             ids = conn.execute(select(operaciones.c.operacion_id).where(
                 operaciones.c.usuario_id == user_id, ~operaciones.c.origen.in_(('promocion','recarga')),
-                func.json_extract(operaciones.c.contexto_json, '$.agent_id').is_(None))
+                func.json_extract(context_json, '$.agent_id').is_(None))
                 .order_by(operaciones.c.creado_en.desc(), operaciones.c.operacion_id)
                 .offset(offset).limit(25)).scalars().all()
             def summary_text(path):
-                value = func.json_extract(operaciones.c.contexto_json, path)
+                value = func.json_extract(context_json, path)
                 if conn.dialect.name == 'mysql':
                     value = func.json_unquote(value)
                 return value
-            product_count = (func.json_length(operaciones.c.resultado_json, '$.products')
+            product_count = (func.json_length(result_json, '$.products')
                              if conn.dialect.name == 'mysql' else
-                             func.json_array_length(operaciones.c.resultado_json, '$.products'))
+                             func.json_array_length(result_json, '$.products'))
             rows_by_id = {}
             if ids:
                 # Return scalar summaries only; never transfer/decode saved media or results.

@@ -26,18 +26,32 @@
   }catch(error){if(serial===generation&&email===currentEmail){agentHistoryStatus.textContent=error.message;moreAgentHistory.textContent='Reintentar respuestas de Agentes';moreAgentHistory.hidden=false;}}
   finally{if(agentHistorySerial===serial){agentHistoryBusy=false;moreAgentHistory.disabled=false;}}
  }
+ function agentPresentation(result){
+  const sources={},text=[];
+  for(const finding of result.findings||[]){
+   let product=null;try{product=JSON.parse(finding.text);}catch(_){}
+   if(product&&typeof product==='object'&&!Array.isArray(product)&&typeof product.title==='string'&&externalQuerySources.includes(product.marketplace)){
+    const group=sources[product.marketplace]||(sources[product.marketplace]={status:'complete',products:[]});
+    group.products.push({title:product.title,price:product.precio??product.price??null,currency:product.moneda||product.currency||'',image:product.image_url||product.image||'',url:product.url||'',marketplace:product.marketplace});
+   }else text.push(finding.text);
+  }
+  return {sources,text};
+ }
  async function loadAgentResult(jobId){
   const email=currentEmail,serial=++generation;$('queryHistoryStatus').textContent='Consultando respuesta de Agente…';
   try{
    const response=await fetch('/api/consultas/historial/agentes/'+encodeURIComponent(jobId),{cache:'no-store'}),data=await response.json();
    if(serial!==generation||email!==currentEmail)return;
    if(!response.ok||!data.success)throw Error(data.error||'No se pudo recuperar la respuesta del agente.');
-   const out=$('queryResults');out.replaceChildren();
+   const presentation=agentPresentation(data.result);
+   // Use the established product-card renderer; agent results have no PWA charge ID.
+   renderQueryResult({origin:'agents',sources:presentation.sources});
+   const out=$('queryResults'),productCards=[...out.childNodes];out.replaceChildren();
    function text(tag,value){const el=document.createElement(tag);el.textContent=value;el.setAttribute('data-catalog-name','');out.append(el);return el;}
    text('h3','Respuesta de Agente · '+data.agent_name);
    if(data.evidence_status==='UNVERIFIED')text('p','Información no verificada.');
-   text('p',data.result.summary);
-   for(const finding of data.result.findings||[])text('p',finding.text);
+   text('p',data.result.summary);out.append(...productCards);
+   for(const finding of presentation.text){const card=document.createElement('article');card.className='prompt-result';const paragraph=document.createElement('p');paragraph.textContent=finding;card.append(paragraph);out.append(card);}
    for(const warning of data.result.warnings||[])text('p',warning).className='hint';
    for(const source of data.result.sources||[]){const url=safeQueryUrl(source.url);if(!url)continue;const link=text('a',source.title||url);link.href=url;link.target='_blank';link.rel='noopener noreferrer';}
    showQuery();$('queryStatus').textContent='Respuesta guardada de Agente · '+data.agent_name;
@@ -45,10 +59,21 @@
  }
 
  const tr=text=>window.DPIAI18N?.translate(text)||text;
+ const agentFilterLabel=document.createElement('label');agentFilterLabel.textContent='Agente';
+ const agentFilter=document.createElement('select');agentFilter.id='queryHistoryAgent';agentFilter.setAttribute('aria-label','Agente');
+ agentFilterLabel.append(agentFilter);$('queryHistoryOrigin').closest('.query-history-controls').append(agentFilterLabel);
+ agentFilter.onchange=renderHistory;
  function renderHistory(){
+  const selected=agentFilter.value;
+  agentFilter.replaceChildren(new Option('Todos los agentes',''));
+  const names=new Map(agentHistoryRows.map(({row})=>[row.agent_id||row.agent_name,row.agent_name]));
+  for(const [id,name] of names)agentFilter.add(new Option(name,id));
+  if(names.has(selected))agentFilter.value=selected;
+  agentFilterLabel.hidden=!['all','agents'].includes($('queryHistoryOrigin').value)||!names.size;
   $('queryHistoryList').replaceChildren();
   const states={reserved:'Reservada',dispatching:'En curso',pending:'Pendiente de confirmación',consumed:'Finalizada',released:'No iniciada',stored:'Trabajo guardado'};
   for(const {row,place} of [...historyRows,...agentHistoryRows].sort((a,b)=>(Date.parse(b.row.created_at)||0)-(Date.parse(a.row.created_at)||0))){
+   if(agentFilter.value&&(row.source!=='agents'||(row.agent_id||row.agent_name)!==agentFilter.value))continue;
    const raw=String(row.query||'').replace(/\s+/g,' ').trim();
    const shorten=(text,max)=>text.length>max?text.slice(0,max-1).trimEnd()+'…':text;
    const card=document.createElement('button');card.type='button';card.className='query-history-card';if(row.source==='agents')card.classList.add('query-history-agent');
@@ -75,9 +100,10 @@
  $('languageSelect').addEventListener('change',()=>setTimeout(renderHistory,0));
  async function history(append=false){
   if(!currentEmail){openAuth();return;}
-  const email=currentEmail,serial=++generation,remote=$('queryHistoryOrigin').value==='scraper',place=country;
-  if(!append){offset=0;agentOffset=0;historyRows.length=0;agentHistoryRows.length=0;agentHistoryStatus.textContent='';moreAgentHistory.hidden=true;renderHistory();if(!remote)loadAgentHistory(serial);}
-  $('queryHistoryStatus').textContent='Cargando historial…';$('moreQueryHistory').hidden=true;
+  const email=currentEmail,serial=++generation,origin=$('queryHistoryOrigin').value,remote=origin==='scraper',place=country;
+  if(!append){offset=0;agentOffset=0;historyRows.length=0;agentHistoryRows.length=0;agentHistoryStatus.textContent='';moreAgentHistory.hidden=true;renderHistory();if(origin==='all'||origin==='agents')loadAgentHistory(serial);}
+  $('queryHistoryStatus').textContent=origin==='agents'?'':'Cargando historial…';$('moreQueryHistory').hidden=true;
+  if(origin==='agents')return;
   try{
    const response=await fetch(remote?'/api/consultas/historial/scrapeador?pais='+encodeURIComponent(place):'/api/consultas/historial?offset='+offset,{cache:'no-store'}),data=await response.json();
    if(remote&&Array.isArray(data.trabajos))data.operations=data.trabajos.map(row=>({operation_id:row.archivo,query:row.nombre,source:'Scrapeador API',city:place,state:'stored',product_count:null,remote:true}));

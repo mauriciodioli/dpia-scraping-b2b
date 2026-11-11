@@ -327,7 +327,7 @@ function renderQueryResult(data){
     card.append(visual,name,price,currency,marketplace);
     const productUrl=safeQueryUrl(product.url);
     if(productUrl){const link=document.createElement('a');link.href=productUrl;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Ver producto';card.append(link);}
-    if(data.origin!=='scraper_api'&&source==='amazon'&&(data.request_id||lastQueryOperationId)&&window.DPIAHistory)card.append(window.DPIAHistory.imageButton(data.request_id||lastQueryOperationId,productIndex,product,outcome.image_stages?.[String(productIndex)]));
+    if(!['scraper_api','agents'].includes(data.origin)&&source==='amazon'&&(data.request_id||lastQueryOperationId)&&window.DPIAHistory)card.append(window.DPIAHistory.imageButton(data.request_id||lastQueryOperationId,productIndex,product,outcome.image_stages?.[String(productIndex)]));
     grid.append(card);
    }
    section.append(grid);
