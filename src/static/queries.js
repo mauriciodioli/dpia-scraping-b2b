@@ -193,12 +193,14 @@ function exploreBudgetText(){
  }
 
  const min=document.querySelector('#queryBudgetMin').value,max=document.querySelector('#queryBudgetMax').value,currency=document.querySelector('#queryBudgetCurrency').value;
+ if(!min||!max)return '';
  const total=document.querySelector('#queryBudgetType').value==='total';
  const units={es:total?'en total':'por producto',en:total?'in total':'per product',it:total?'in totale':'per prodotto',pl:total?'łącznie':'za produkt'};
  const lang=catalogLanguage(),unit=units[lang]||units.es;
  return ({es:`Presupuesto de compra: de ${min} a ${max} ${currency} ${unit}. Respetá este máximo; no lo confundas con el precio de venta sugerido.`,en:`Purchase budget: ${min} to ${max} ${currency} ${unit}. Respect this maximum; do not confuse it with the suggested selling price.`,it:`Budget di acquisto: da ${min} a ${max} ${currency} ${unit}. Rispetta questo massimo; non confonderlo con il prezzo di vendita suggerito.`,pl:`Budżet zakupu: od ${min} do ${max} ${currency} ${unit}. Przestrzegaj tego limitu; nie myl go z sugerowaną ceną sprzedaży.`})[lang]||`Presupuesto de compra: de ${min} a ${max} ${currency} ${unit}.`;
 }
 function syncExploreBudget(){
+ document.querySelector('#queryBudgetMax').setCustomValidity('');
  queryBudgetEdited=true;
  const prompt=document.querySelector('#promptText'),automatic=queryMode==='explorar'&&prompt.value===exploreAutoDraft,next=exploreBudgetText();
  if(automatic){updateExploreDraft(true);}else{
@@ -212,7 +214,10 @@ document.querySelector('#queryBudgetCurrency').addEventListener('change',()=>{
  const range={ARS:[10000,100000],UYU:[500,5000],EUR:[10,100],PLN:[50,500],MXN:[200,2000],USD:[10,100],GBP:[10,100],BRL:[50,500],CAD:[15,150],AUD:[15,150],COP:[50000,500000]}[currency];
  document.querySelector('#queryBudgetMin').value=range[0];document.querySelector('#queryBudgetMax').value=range[1];syncExploreBudget();
 });
-for(const id of ['queryBudgetType','queryBudgetMin','queryBudgetMax'])document.querySelector('#'+id).addEventListener(id==='queryBudgetType'?'change':'input',syncExploreBudget);
+for(const id of ['queryBudgetType','queryBudgetMin','queryBudgetMax']){
+ const control=document.querySelector('#'+id);control.addEventListener('change',syncExploreBudget);
+ if(id!=='queryBudgetType')control.addEventListener('input',syncExploreBudget);
+}
 function queryBody(){return {pais:country,ciudad:city,idioma:catalogLanguage(),ambito_id:Number(document.querySelector('#queryScope').value),categoria_id:Number(document.querySelector('#queryCategory').value),codigo_postal_id:Number(document.querySelector('#queryPostal').value),mode:queryMode,...(queryMode==='explorar'?{budget_currency:document.querySelector(isEmploymentQuery()?'#querySalaryCurrency':'#queryBudgetCurrency').value}:{}),user_message:document.querySelector('#promptText').value.trim(),attachments:media};}
 function startHomeQuery(){
  document.querySelector('#promptText').value=document.querySelector('#searchText').value.trim();queryMode='buscar';queryBudgetEdited=false;setupExploreBudget();invalidateQuery();show('consultPage');prepareDPIAQuery();
@@ -230,7 +235,7 @@ async function prepareDPIAQuery({automatic=false}={}){
  }else if(queryMode==='explorar'||queryBudgetEdited){
   const min=document.querySelector('#queryBudgetMin'),max=document.querySelector('#queryBudgetMax');
   max.setCustomValidity('');
-  if(!min.value||!max.value||Number(max.value)<Number(min.value))max.setCustomValidity(({es:'Ingresá un rango válido: el máximo debe ser mayor o igual al mínimo.',en:'Enter a valid range: maximum must be at least the minimum.',it:'Inserisci un intervallo valido: il massimo deve essere almeno il minimo.',pl:'Podaj poprawny zakres: maksimum nie może być mniejsze od minimum.'})[catalogLanguage()]||'Invalid range');
+  if((min.value||max.value)&&(!min.value||!max.value||Number(max.value)<Number(min.value)))max.setCustomValidity(({es:'Ingresá un rango válido: el máximo debe ser mayor o igual al mínimo.',en:'Enter a valid range: maximum must be at least the minimum.',it:'Inserisci un intervallo valido: il massimo deve essere almeno il minimo.',pl:'Podaj poprawny zakres: maksimum nie może być mniejsze od minimum.'})[catalogLanguage()]||'Invalid range');
   if(!min.checkValidity()||!max.checkValidity())setQueryBudgetOpen(true);
   if(!min.reportValidity()||!max.reportValidity()){setQueryArtState('warning');return;}
  }
