@@ -7,15 +7,51 @@
   $('currentQueryPanel').hidden=false;$('queryHistoryPanel').hidden=true;
   $('queryCurrentTab').setAttribute('aria-selected','true');$('queryHistoryTab').setAttribute('aria-selected','false');
  }
- const historyRows=[];
+ const historyRows=[],agentHistoryRows=[];
+ let agentOffset=0,agentHistoryBusy=false,agentHistorySerial=0;
+ const agentHistoryStatus=document.createElement('p');agentHistoryStatus.className='hint';agentHistoryStatus.setAttribute('role','status');
+ const moreAgentHistory=document.createElement('button');moreAgentHistory.type='button';moreAgentHistory.className='action-button';moreAgentHistory.textContent='Cargar más respuestas de Agentes';moreAgentHistory.hidden=true;
+ $('queryHistoryPanel').append(agentHistoryStatus,moreAgentHistory);
+ moreAgentHistory.onclick=()=>loadAgentHistory(generation,true);
+ async function loadAgentHistory(serial,append=false){
+  const email=currentEmail;if(!email||(agentHistoryBusy&&agentHistorySerial===serial))return;agentHistorySerial=serial;agentHistoryBusy=true;moreAgentHistory.disabled=true;
+  agentHistoryStatus.textContent='Consultando respuestas de Agentes…';
+  try{
+   const response=await fetch('/api/consultas/historial/agentes?offset='+agentOffset,{cache:'no-store'}),data=await response.json();
+   if(serial!==generation||email!==currentEmail)return;
+   if(!response.ok||!data.success||!Array.isArray(data.operations))throw Error(data.error||'No se pudieron consultar las respuestas de Agentes.');
+   agentHistoryRows.push(...data.operations.map(row=>({row,place:country})));agentOffset=data.next_offset;
+   moreAgentHistory.textContent='Cargar más respuestas de Agentes';moreAgentHistory.hidden=!data.has_more;agentHistoryStatus.textContent='';renderHistory();
+   if(agentHistoryRows.length&&$('queryHistoryStatus').textContent==='Todavía no tenés búsquedas guardadas en esta PWA.')$('queryHistoryStatus').textContent='';
+  }catch(error){if(serial===generation&&email===currentEmail){agentHistoryStatus.textContent=error.message;moreAgentHistory.textContent='Reintentar respuestas de Agentes';moreAgentHistory.hidden=false;}}
+  finally{if(agentHistorySerial===serial){agentHistoryBusy=false;moreAgentHistory.disabled=false;}}
+ }
+ async function loadAgentResult(jobId){
+  const email=currentEmail,serial=++generation;$('queryHistoryStatus').textContent='Consultando respuesta de Agente…';
+  try{
+   const response=await fetch('/api/consultas/historial/agentes/'+encodeURIComponent(jobId),{cache:'no-store'}),data=await response.json();
+   if(serial!==generation||email!==currentEmail)return;
+   if(!response.ok||!data.success)throw Error(data.error||'No se pudo recuperar la respuesta del agente.');
+   const out=$('queryResults');out.replaceChildren();
+   function text(tag,value){const el=document.createElement(tag);el.textContent=value;el.setAttribute('data-catalog-name','');out.append(el);return el;}
+   text('h3','Respuesta de Agente · '+data.agent_name);
+   if(data.evidence_status==='UNVERIFIED')text('p','Información no verificada.');
+   text('p',data.result.summary);
+   for(const finding of data.result.findings||[])text('p',finding.text);
+   for(const warning of data.result.warnings||[])text('p',warning).className='hint';
+   for(const source of data.result.sources||[]){const url=safeQueryUrl(source.url);if(!url)continue;const link=text('a',source.title||url);link.href=url;link.target='_blank';link.rel='noopener noreferrer';}
+   showQuery();$('queryStatus').textContent='Respuesta guardada de Agente · '+data.agent_name;
+  }catch(error){if(serial===generation&&email===currentEmail)$('queryHistoryStatus').textContent=error.message;}
+ }
+
  const tr=text=>window.DPIAI18N?.translate(text)||text;
  function renderHistory(){
   $('queryHistoryList').replaceChildren();
   const states={reserved:'Reservada',dispatching:'En curso',pending:'Pendiente de confirmación',consumed:'Finalizada',released:'No iniciada',stored:'Trabajo guardado'};
-  for(const {row,place} of historyRows){
+  for(const {row,place} of [...historyRows,...agentHistoryRows].sort((a,b)=>(Date.parse(b.row.created_at)||0)-(Date.parse(a.row.created_at)||0))){
    const raw=String(row.query||'').replace(/\s+/g,' ').trim();
    const shorten=(text,max)=>text.length>max?text.slice(0,max-1).trimEnd()+'…':text;
-   const card=document.createElement('button');card.type='button';card.className='query-history-card';
+   const card=document.createElement('button');card.type='button';card.className='query-history-card';if(row.source==='agents')card.classList.add('query-history-agent');
    const title=document.createElement('strong');title.className='query-history-title';
    // Long saved prompts belong in the summary, not in the title.
    title.textContent=raw.length>100?(row.category||tr('Búsqueda guardada')):raw||row.category||tr('Búsqueda guardada');
@@ -26,12 +62,13 @@
    const summary=document.createElement('span');summary.className='query-history-summary';summary.setAttribute('data-catalog-name','');summary.textContent=shorten(raw||row.category||'',180);
    const meta=document.createElement('span');meta.className='query-history-meta';
    const state=document.createElement('span');state.className='query-history-state';state.dataset.state=row.state;state.textContent=tr(states[row.state]||'Estado sin confirmar');
-   const count=document.createElement('span');count.textContent=row.product_count==null?tr('Productos por consultar'):String(row.product_count)+' '+tr('productos');
+   const count=document.createElement('span');count.textContent=row.source==='agents'?'Respuesta entregada':row.product_count==null?tr('Productos por consultar'):String(row.product_count)+' '+tr('productos');
    const context=document.createElement('span');context.setAttribute('data-catalog-name','');context.textContent=[row.source,row.city,row.category].filter(Boolean).join(' · ');
    meta.append(state,count,context);
    const action=document.createElement('span');action.className='query-history-open';action.textContent=tr('Consultar resultados')+' →';
+   if(row.source==='agents'){const label=document.createElement('span');label.className='query-history-agent-label';label.textContent='Respuesta de Agente · '+row.agent_name;card.append(label);}
    card.append(title,date);if(summary.textContent&&raw!==title.textContent)card.append(summary);card.append(meta,action);
-   card.onclick=()=>row.remote?loadRemote(row.operation_id,place):loadQueryOperation(row.operation_id);
+   card.onclick=()=>row.source==='agents'?loadAgentResult(row.operation_id):row.remote?loadRemote(row.operation_id,place):loadQueryOperation(row.operation_id);
    $('queryHistoryList').append(card);
   }
  }
@@ -39,7 +76,7 @@
  async function history(append=false){
   if(!currentEmail){openAuth();return;}
   const email=currentEmail,serial=++generation,remote=$('queryHistoryOrigin').value==='scraper',place=country;
-  if(!append){offset=0;historyRows.length=0;renderHistory();}
+  if(!append){offset=0;agentOffset=0;historyRows.length=0;agentHistoryRows.length=0;agentHistoryStatus.textContent='';moreAgentHistory.hidden=true;renderHistory();if(!remote)loadAgentHistory(serial);}
   $('queryHistoryStatus').textContent='Cargando historial…';$('moreQueryHistory').hidden=true;
   try{
    const response=await fetch(remote?'/api/consultas/historial/scrapeador?pais='+encodeURIComponent(place):'/api/consultas/historial?offset='+offset,{cache:'no-store'}),data=await response.json();
@@ -280,6 +317,6 @@
  $('closeProductImages').onclick=closeImages;
  $('productImagesOverlay').onclick=e=>{if(e.target===$('productImagesOverlay'))closeImages();};
  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeImages();});
- new MutationObserver(()=>{if(identity!==currentEmail){identity=currentEmail;generation++;trackingGeneration++;imageActivityKey='';if($('imagePreparationNotice'))$('imagePreparationNotice').hidden=true;setTimeout(trackImages,0);$('queryHistoryList').replaceChildren();historyRows.length=0;$('productImagesOverlay').hidden=true;chosen=null;}}).observe($('userBtn'),{childList:true,subtree:true,characterData:true});
+ new MutationObserver(()=>{if(identity!==currentEmail){identity=currentEmail;generation++;trackingGeneration++;imageActivityKey='';if($('imagePreparationNotice'))$('imagePreparationNotice').hidden=true;setTimeout(trackImages,0);$('queryHistoryList').replaceChildren();historyRows.length=0;agentHistoryRows.length=0;agentHistoryStatus.textContent='';moreAgentHistory.hidden=true;$('queryResults').replaceChildren();$('productImagesOverlay').hidden=true;chosen=null;}}).observe($('userBtn'),{childList:true,subtree:true,characterData:true});
  window.DPIAHistory={showQuery,showHistory,imageButton,remoteImageButton};
 })();

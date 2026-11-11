@@ -374,3 +374,31 @@ def shared_scraper_history():
         return jsonify(success=False,error=str(exc)),exc.status
     except SQLAlchemyError:
         return jsonify(success=False,error='No se pudo verificar el acceso al historial.'),503
+
+
+@query_bp.get('/historial/agentes')
+@query_bp.get('/historial/agentes/<job_id>')
+def agent_response_history(job_id=None):
+    user_id=session.get('user_id')
+    if type(user_id) is not int:return jsonify(success=False,error='Iniciá sesión.'),401
+    from services.agent_history import read_agent_history
+    from model.usuario import Usuario
+    try:
+        user=db.session.get(Usuario,user_id)
+        if not user or not user.activo:return jsonify(success=False,error='Iniciá sesión.'),401
+        if set(request.args)-({'offset'} if job_id is None else set()):
+            raise PreparationError('Parámetros inválidos.')
+        offset=request.args.get('offset','0')
+        if not offset.isdecimal() or len(offset)>6:raise PreparationError('Página inválida.')
+        if job_id is not None:
+            from uuid import UUID
+            try:
+                if str(UUID(job_id))!=job_id:raise ValueError()
+            except ValueError:raise PreparationError('Trabajo inválido.')
+        data=read_agent_history(user_id,offset=int(offset),job_id=job_id)
+        # Owner identity always comes from the authenticated session, never the browser.
+        return jsonify(success=True,**{k:v for k,v in data.items() if k not in ('owner_id','api_version')})
+    except PreparationError as exc:return jsonify(success=False,error=str(exc)),exc.status
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify(success=False,error='No se pudo verificar el acceso al historial.'),503

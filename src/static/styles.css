@@ -651,3 +651,5 @@ html[data-theme="dark"] .agent-field input,html[data-theme="dark"] .agent-field 
 .agent-point-summary{display:flex;gap:6px;flex-direction:column;margin:12px 0;font-size:13px}.agent-point-status{display:inline-flex;align-items:center;gap:7px}.agent-point-dot{width:9px;height:9px;border-radius:50%;background:#87909c}.agent-point-dot[data-color="green"]{background:#159b61}.agent-point-dot[data-color="yellow"]{background:#d69a00}.agent-point-dot[data-color="red"]{background:#d14444}.agent-point-summary small{opacity:.75}
 
 #consultAgent.consult-agent-button{color:#159b61}#consultAgent.consult-agent-button:hover{background:#159b611a}.agent-query-context{margin:12px 0;font-size:13px}.agent-query-context pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-height:220px;overflow:auto}.agent-query-context .agent-feedback{margin-top:8px}
+
+.query-history-card.query-history-agent{border-color:#159b61;border-inline-start:4px solid #159b61;background:color-mix(in srgb,#159b61 10%,var(--panel,#fff))}.query-history-agent-label{grid-column:1/-1;color:#128052;font-weight:700;font-size:12px}

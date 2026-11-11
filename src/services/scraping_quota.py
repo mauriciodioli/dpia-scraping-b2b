@@ -166,7 +166,8 @@ class MySQLScrapingQuota:
             # Sort only lightweight IDs. Large JSON results can exhaust MySQL's
             # sort buffer when included in the ordered SELECT (error 1038).
             ids = conn.execute(select(operaciones.c.operacion_id).where(
-                operaciones.c.usuario_id == user_id, ~operaciones.c.origen.in_(('promocion','recarga')))
+                operaciones.c.usuario_id == user_id, ~operaciones.c.origen.in_(('promocion','recarga')),
+                func.json_extract(operaciones.c.contexto_json, '$.agent_id').is_(None))
                 .order_by(operaciones.c.creado_en.desc(), operaciones.c.operacion_id)
                 .offset(offset).limit(25)).scalars().all()
             def summary_text(path):
