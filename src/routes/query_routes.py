@@ -258,8 +258,15 @@ def query_history():
         return jsonify(success=True,**quota.history(session['user_id'],int(offset)))
     except PreparationError as exc:
         return jsonify(success=False,error=str(exc)),exc.status
-    except SQLAlchemyError:
-        return persistence_unavailable()
+    except SQLAlchemyError as exc:
+        db.session.rollback()
+        # Driver messages/SQL parameters may contain private data. Log only type and numeric code.
+        args=getattr(getattr(exc,'orig',None),'args',())
+        sql_code=args[0] if args and type(args[0]) is int else None
+        current_app.logger.error('Query history storage failed: type=%s sql_code=%s',
+                                 type(exc).__name__,sql_code)
+        return jsonify(success=False,code='history_storage_unavailable',
+                       error='No se pudo consultar el historial guardado. Reintentá más tarde.'),503
 
 
 @query_bp.route('/operaciones/<operation_id>/imagenes',methods=['GET','POST'])
