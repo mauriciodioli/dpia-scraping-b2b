@@ -163,20 +163,43 @@ class MySQLScrapingQuota:
 
     def history(self, user_id, offset=0):
         with self._engine().connect() as conn:
-            rows = conn.execute(select(operaciones).where(operaciones.c.usuario_id == user_id, ~operaciones.c.origen.in_(('promocion','recarga')))
+            # Sort only lightweight IDs. Large JSON results can exhaust MySQL's
+            # sort buffer when included in the ordered SELECT (error 1038).
+            ids = conn.execute(select(operaciones.c.operacion_id).where(
+                operaciones.c.usuario_id == user_id, ~operaciones.c.origen.in_(('promocion','recarga')))
                 .order_by(operaciones.c.creado_en.desc(), operaciones.c.operacion_id)
-                .offset(offset).limit(25)).mappings().all()
+                .offset(offset).limit(25)).scalars().all()
+            def summary_text(path):
+                value = func.json_extract(operaciones.c.contexto_json, path)
+                if conn.dialect.name == 'mysql':
+                    value = func.json_unquote(value)
+                return value
+            product_count = (func.json_length(operaciones.c.resultado_json, '$.products')
+                             if conn.dialect.name == 'mysql' else
+                             func.json_array_length(operaciones.c.resultado_json, '$.products'))
+            rows_by_id = {}
+            if ids:
+                # Return scalar summaries only; never transfer/decode saved media or results.
+                rows_by_id = {row['operacion_id']: row for row in conn.execute(select(
+                    operaciones.c.operacion_id, operaciones.c.origen, operaciones.c.estado,
+                    operaciones.c.creado_en,
+                    func.substr(summary_text('$.user_message'), 1, 500).label('query'),
+                    summary_text('$.context.ciudad').label('city'),
+                    summary_text('$.context.categoria').label('category'),
+                    func.coalesce(product_count, 0).label('product_count')
+                ).where(operaciones.c.usuario_id == user_id,
+                        operaciones.c.operacion_id.in_(ids[:24]))).mappings()}
             history = []
-            for row in rows[:24]:
-                prepared = decode(row['contexto_json']) or {}
-                outcome = decode(row['resultado_json']) or {}
-                context = prepared.get('context', {})
+            for key in ids[:24]:
+                row = rows_by_id.get(key)
+                if row is None:
+                    continue
                 history.append({'operation_id': row['operacion_id'], 'source': row['origen'],
-                    'state': row['estado'], 'query': prepared.get('user_message', ''),
-                    'city': context.get('ciudad', ''), 'category': context.get('categoria', ''),
+                    'state': row['estado'], 'query': row['query'] or '',
+                    'city': row['city'] or '', 'category': row['category'] or '',
                     'created_at': row['creado_en'].isoformat() if row['creado_en'] else None,
-                    'product_count': len(outcome.get('products') or [])})
-            return {'operations': history, 'has_more': len(rows)>24}
+                    'product_count': row['product_count']})
+            return {'operations': history, 'has_more': len(ids)>24}
 
     def image_stage(self, operation_id, user_id, index, *, token=None, stage=None):
         """Claim once or save a gallery without changing the scraping allowance."""
