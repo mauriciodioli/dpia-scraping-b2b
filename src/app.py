@@ -25,6 +25,8 @@ def create_app():
     app.register_blueprint(query_bp)
     from routes.agent_routes import agent_bp
     app.register_blueprint(agent_bp)
+    from routes.agent_pause_routes import pause_bp
+    app.register_blueprint(pause_bp)
     from controllers.publicaciones import publicaciones
     app.register_blueprint(publicaciones)
 

@@ -3,9 +3,15 @@
  const root=document.getElementById('agentContent');
  const TASKS={products:'Productos nuevos',prices:'Cambios de precios',suppliers:'Proveedores',local:'Oportunidades locales',jobs:'Oportunidades laborales',trends:'Tendencias'};
  const FREQUENCIES={daily:'Diario',twice:'Dos veces por semana',weekly:'Semanal'};
- const STATES={unconfigured:'No configurado',inactive:'Configurado e inactivo',active:'Activo',running:'Ejecutando',paused:'Pausado',insufficient:'Créditos insuficientes',error:'Error'};
+ const STATES={unconfigured:'No configurado',inactive:'Configurado e inactivo',active:'Activo',running:'Ejecutando',paused:'Pausado',admin_paused:'Pausado por administrador',disabled:'Deshabilitado',insufficient:'Créditos insuficientes',error:'Error'};
  const STEPS=['Qué monitorear','Dónde y sobre qué','Cuándo','Límites y notificaciones','Confirmación'];
- let wizard=false,index=0,draft=null,record=null,identity=null,scopes=[],categories=[],cities=[],loading=false,loadSerial=0,controller=null,error='',serverState='inactive',serverRevision=0,serverReady=false,serverBusy=false,readSerial=0;
+ let wizard=false,index=0,draft=null,record=null,identity=null,scopes=[],categories=[],cities=[],loading=false,loadSerial=0,controller=null,error='',engineRevision=0,pauseReady=false,pendingPause=null,serverState='inactive',serverRevision=0,serverReady=false,serverBusy=false,readSerial=0;
+ function pauseOperationId(){
+  if(typeof crypto.randomUUID==='function')return crypto.randomUUID();
+  const bytes=crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
+  const hex=[...bytes].map(b=>b.toString(16).padStart(2,'0')).join('');
+  return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
+ }
  const tr=text=>window.DPIAI18N?.translate(text)||text;
  const who=()=>typeof currentEmail==='string'?currentEmail:null;
  const key=()=> 'dpia-agent-config:v1:'+ (who()||'guest');
@@ -33,7 +39,7 @@
  }
  function executionControl(state){
   const text=state==='paused'?'Reanudar agente':['active','running'].includes(state)?'Pausar agente':'Activar agente';
-  const control=button(text,activate,'primary');control.disabled=wizard||!record||!serverReady||serverBusy||state!=='inactive';control.setAttribute('aria-describedby','agentEngineNotice');return control;
+  const control=button(state==='admin_paused'?'Pausado por administrador':text,state==='inactive'?activate:togglePause,'primary');control.disabled=wizard||!record||!serverReady||serverBusy||!['inactive','active','paused'].includes(state)||(state!=='inactive'&&!pauseReady);control.setAttribute('aria-describedby','agentEngineNotice');return control;
  }
  function dashboard(){
   root.replaceChildren();wizard=false;
@@ -54,7 +60,7 @@
    const dl=document.createElement('dl');for(const text of ['Próxima ejecución','Última ejecución','Resultados recientes','Puntos consumidos'])dl.append(node('dt',text),node('dd','Sin ejecuciones'));
    panel.append(dl);
    const actions=node('div',undefined,'agent-actions');if(serverState==='inactive')actions.append(button('Editar configuración',()=>start()));
-   actions.append(executionControl(serverState));panel.append(actions);
+   actions.append(executionControl(serverState));if(record.engine_binding)actions.append(button('Actualizar estado',()=>refreshPause()));panel.append(actions);
   }
   panel.append(engineNotice(),storageNotice());feedback(panel);root.append(panel);window.DPIAI18N?.refresh();
  }
@@ -68,8 +74,37 @@
    if(response.status===401)openAuth();
    if(!response.ok||data.success!==true)throw Error(data.error||'No se confirmó la activación del agente. Reintentá.');
    if(!data.agent||data.agent.state!=='active'||data.agent.revision!==serverRevision||!valid(data.agent.configuration)||!data.agent.configuration.engine_binding?.id||data.execution_available!==false)throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
-   record=data.agent.configuration;serverState='active';
+   record=data.agent.configuration;serverState='active';engineRevision=record.engine_binding.revision;pauseReady=false;
   }catch(e){if(owner===who()&&serial===readSerial)error=e.name==='Error'?e.message:'No se confirmó la activación del agente. Reintentá.';}
+  finally{if(owner===who()&&serial===readSerial){serverBusy=false;dashboard();if(serverState==='active')refreshPause();}}
+ }
+ function acceptPause(data){
+  const agent=data.agent;
+  if(data.success!==true||data.execution_available!==false||!agent||!['active','paused','admin_paused','disabled'].includes(agent.state)||agent.revision!==serverRevision||agent.configuration?.engine_binding?.id!==record?.engine_binding?.id||!Number.isSafeInteger(agent.engine_revision)||agent.engine_revision<1)throw Error('No se confirmó el estado del agente.');
+  serverState=agent.state;engineRevision=agent.engine_revision;pauseReady=true;
+ }
+ async function refreshPause(){
+  if(!record?.engine_binding||serverBusy||wizard||!who()||pendingPause)return;
+  const owner=who(),serial=readSerial;serverBusy=true;
+  try{
+   const response=await fetch('/api/agente/pausa',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(20000)});
+   const data=await response.json();if(owner!==who()||serial!==readSerial)return;
+   if(!response.ok||data.success!==true)throw Error(data.error||'No se confirmó el estado del agente.');
+   acceptPause(data);error='';
+  }catch(e){if(owner===who()&&serial===readSerial){pauseReady=false;error=e.name==='Error'?e.message:'No se confirmó el estado del agente.';}}
+  finally{if(owner===who()&&serial===readSerial){serverBusy=false;dashboard();}}
+ }
+ async function togglePause(){
+  if(serverBusy||!pauseReady||!['active','paused'].includes(serverState))return;
+  const owner=who(),serial=readSerial;
+  pendingPause=pendingPause||{paused:serverState==='active',expected_revision:engineRevision,operation_id:pauseOperationId()};
+  serverBusy=true;error='';dashboard();
+  try{
+   const response=await fetch('/api/agente/pausa',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'pause-agent'},body:JSON.stringify(pendingPause),signal:AbortSignal.timeout(20000)});
+   const data=await response.json();if(owner!==who()||serial!==readSerial)return;
+   if(!response.ok||data.success!==true){if([401,403,409].includes(response.status)){pendingPause=null;pauseReady=false;}throw Error(data.error||'No se confirmó la pausa. Reintentá.');}
+   acceptPause(data);pendingPause=null;
+  }catch(e){if(owner===who()&&serial===readSerial)error=e.name==='Error'?e.message:'No se confirmó la pausa. Reintentá.';}
   finally{if(owner===who()&&serial===readSerial){serverBusy=false;dashboard();}}
  }
  async function json(url){const r=await fetch(url,{cache:'no-store',signal:controller.signal});if(!r.ok)throw Error('catalog');const data=await r.json();if(data.success!==true)throw Error('catalog');return data;}
@@ -173,7 +208,7 @@
  }
  async function open(){
   if(serverBusy&&identity===who())return;
-  identity=who();const owner=who(),serial=++readSerial;serverState='inactive';record=null;serverRevision=0;serverReady=false;error='';
+  identity=who();const owner=who(),serial=++readSerial;engineRevision=0;pauseReady=false;pendingPause=null;serverState='inactive';record=null;serverRevision=0;serverReady=false;error='';
   loadSerial++;controller?.abort();loading=false;
   if(!owner){serverBusy=false;dashboard();return;}
   serverBusy=true;dashboard();
@@ -189,11 +224,12 @@
    }
    serverReady=true;
   }catch(e){if(owner===who()&&serial===readSerial)error=e.name==='Error'?e.message:'No se pudo cargar la configuración del agente.';}
-  finally{if(owner===who()&&serial===readSerial){serverBusy=false;dashboard();}}
+  finally{if(owner===who()&&serial===readSerial){serverBusy=false;dashboard();if(record?.engine_binding)refreshPause();}}
  }
+ setInterval(()=>{if(!document.hidden&&!document.getElementById('agentPage').hidden)refreshPause();},15000);
  new MutationObserver(()=>{if(identity!==who()){
   loadSerial++;readSerial++;controller?.abort();serverBusy=false;serverReady=false;serverRevision=0;
-  identity=who();record=null;draft=null;wizard=false;root.replaceChildren();
+  identity=who();engineRevision=0;pauseReady=false;pendingPause=null;record=null;draft=null;wizard=false;root.replaceChildren();
   if(!document.getElementById('agentPage').hidden)open();
  }}).observe(document.getElementById('userBtn'),{childList:true,subtree:true,characterData:true});
  document.getElementById('languageSelect').addEventListener('change',()=>setTimeout(()=>{if(wizard){renderStep();if(draft.country&&draft.city)loadLocation(false);}else if(!document.getElementById('agentPage').hidden)dashboard();},0));
