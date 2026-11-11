@@ -5,7 +5,7 @@
  const FREQUENCIES={daily:'Diario',twice:'Dos veces por semana',weekly:'Semanal'};
  const STATES={unconfigured:'No configurado',inactive:'Configurado e inactivo',active:'Activo',running:'Ejecutando',paused:'Pausado',admin_paused:'Pausado por administrador',disabled:'Deshabilitado',insufficient:'Créditos insuficientes',error:'Error'};
  const STEPS=['Qué monitorear','Dónde y sobre qué','Cuándo','Límites y notificaciones','Confirmación'];
- let wizard=false,index=0,draft=null,record=null,identity=null,scopes=[],categories=[],cities=[],loading=false,loadSerial=0,controller=null,error='',engineRevision=0,pauseReady=false,pendingPause=null,pendingDelete=null,serverState='inactive',serverRevision=0,serverReady=false,serverBusy=false,readSerial=0;
+ let wizard=false,index=0,draft=null,record=null,identity=null,scopes=[],categories=[],cities=[],loading=false,loadSerial=0,controller=null,error='',engineRevision=0,pauseReady=false,pendingPause=null,pendingDelete=null,agentPoints=null,serverState='inactive',serverRevision=0,serverReady=false,serverBusy=false,readSerial=0;
  function pauseOperationId(){
   if(typeof crypto.randomUUID==='function')return crypto.randomUUID();
   const bytes=crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
@@ -37,6 +37,14 @@
   const rows=[['Tareas configuradas',config.tasks.map(id=>tr(TASKS[id])).join(', ')],['Ubicación',[config.city,config.country].filter(Boolean).join(', ')],['Ámbitos',names(config.scopes,scopes,'ambito_id',config.scopeLabels)],['Categorías',names(config.categories,categories,'categoria_id',config.categoryLabels)],['Frecuencia',tr(FREQUENCIES[config.frequency])],['Días',config.frequency==='daily'?tr('Todos los días'):config.days.map(weekday).join(', ')],['Horario',config.time+' · '+config.timezone],['Límite de puntos',String(config.points)+' / '+tr(config.period==='week'?'Por semana':'Por mes')],['Avisos de novedades',tr(config.notifications?'Solicitados, aún no disponibles':'Desactivados')]];
   for(const [label,value] of rows)dl.append(node('dt',label),raw('dd',value));return dl;
  }
+ function pointIndicator(){
+  const wrap=node('div',undefined,'agent-point-summary');wrap.setAttribute('aria-live','polite');
+  const p=agentPoints;
+  if(!p||!Number.isSafeInteger(p.effective_remaining)||!Number.isSafeInteger(p.budget)||!Number.isSafeInteger(p.budget_consumed)||!Number.isSafeInteger(p.budget_reserved)){wrap.append(node('span','Puntos no disponibles'));return wrap;}
+  const status=node('span',undefined,'agent-point-status'),dot=node('span',undefined,'agent-point-dot');
+  dot.dataset.color=p.color;dot.setAttribute('aria-hidden','true');status.append(dot,raw('span',p.effective_remaining+' '+tr('puntos restantes')));
+  wrap.append(status,raw('small',tr('Asignados')+': '+p.budget+' · '+tr('Gastados')+': '+p.budget_consumed+' · '+tr('Reservados')+': '+p.budget_reserved));return wrap;
+ }
  function executionControl(state){
   const text=state==='paused'?'Reanudar agente':['active','running'].includes(state)?'Pausar agente':'Activar agente';
   const control=button(state==='admin_paused'?'Pausado por administrador':text,state==='inactive'?activate:togglePause,'primary');control.disabled=wizard||!record||!serverReady||serverBusy||!['inactive','active','paused'].includes(state)||(state!=='inactive'&&!pauseReady);control.setAttribute('aria-describedby','agentEngineNotice');return control;
@@ -56,7 +64,7 @@
    if(!who())panel.append(node('p','Iniciá sesión para guardar tu agente.','agent-notice'));
   }
   else{
-   panel.append(summary(record));
+   panel.append(summary(record),pointIndicator());
    const dl=document.createElement('dl');for(const text of ['Próxima ejecución','Última ejecución','Resultados recientes','Puntos consumidos'])dl.append(node('dt',text),node('dd','Sin ejecuciones'));
    panel.append(dl);
    const actions=node('div',undefined,'agent-actions');if(serverState==='inactive')actions.append(button('Editar configuración',()=>start()));
@@ -94,19 +102,19 @@
   finally{if(owner===who()&&serial===readSerial){serverBusy=false;dashboard();}}
  }
  function acceptPause(data){
-  const agent=data.agent;
+  const agent=data.agent;agentPoints=data.points||null;
   if(data.success===true&&data.execution_available===false&&agent===null){record=null;serverRevision=0;engineRevision=0;pauseReady=false;pendingPause=null;pendingDelete=null;serverState='inactive';return;}
   if(data.success!==true||data.execution_available!==false||!agent||!['active','paused','admin_paused','disabled'].includes(agent.state)||agent.revision!==serverRevision||agent.configuration?.engine_binding?.id!==record?.engine_binding?.id||!Number.isSafeInteger(agent.engine_revision)||agent.engine_revision<1)throw Error('No se confirmó el estado del agente.');
   serverState=agent.state;engineRevision=agent.engine_revision;pauseReady=true;
  }
  async function refreshPause(){
-  if(!record?.engine_binding||serverBusy||wizard||!who()||pendingPause)return;
+  if(!record||serverBusy||wizard||!who()||pendingPause)return;
   const owner=who(),serial=readSerial;serverBusy=true;
   try{
-   const response=await fetch('/api/agente/pausa',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(20000)});
+   const response=await fetch(record.engine_binding?'/api/agente/pausa':'/api/agente/configuracion',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(20000)});
    const data=await response.json();if(owner!==who()||serial!==readSerial)return;
    if(!response.ok||data.success!==true)throw Error(data.error||'No se confirmó el estado del agente.');
-   acceptPause(data);error='';
+   if(record.engine_binding||data.agent===null)acceptPause(data);else{if(data.agent.revision!==serverRevision)throw Error('La configuración cambió. Volvé a cargarla.');agentPoints=data.points||null;}error='';
   }catch(e){if(owner===who()&&serial===readSerial){pauseReady=false;error=e.name==='Error'?e.message:'No se confirmó el estado del agente.';}}
   finally{if(owner===who()&&serial===readSerial){serverBusy=false;dashboard();}}
  }
@@ -202,7 +210,7 @@
    if(!response.ok||data.success!==true)throw Error(data.error||'No se confirmó el guardado del agente. Volvé a cargar su configuración.');
    if(!data.agent||!valid(data.agent.configuration)||!Number.isSafeInteger(data.agent.revision)||data.agent.revision<1||data.agent.state!=='inactive'||data.execution_available!==false)throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
    serverState=data.agent.state;record=data.agent.configuration;serverRevision=data.agent.revision;serverReady=true;loadSerial++;controller?.abort();
-   serverBusy=false;dashboard();
+   agentPoints=null;serverBusy=false;dashboard();refreshPause();
   }catch(e){
    if(owner===who()&&serial===readSerial){error=e.message&&e.name==='Error'?e.message:'No se confirmó el guardado del agente. Volvé a cargar su configuración.';serverBusy=false;renderStep();}
   }finally{if(owner===who()&&serial===readSerial)serverBusy=false;}
@@ -224,7 +232,7 @@
  }
  async function open(){
   if(serverBusy&&identity===who())return;
-  identity=who();const owner=who(),serial=++readSerial;engineRevision=0;pauseReady=false;pendingPause=null;pendingDelete=null;serverState='inactive';record=null;serverRevision=0;serverReady=false;error='';
+  identity=who();const owner=who(),serial=++readSerial;agentPoints=null;engineRevision=0;pauseReady=false;pendingPause=null;pendingDelete=null;serverState='inactive';record=null;serverRevision=0;serverReady=false;error='';
   loadSerial++;controller?.abort();loading=false;
   if(!owner){serverBusy=false;dashboard();return;}
   serverBusy=true;dashboard();
@@ -238,16 +246,17 @@
     if(!data.agent||!valid(data.agent.configuration)||!Number.isSafeInteger(data.agent.revision)||data.agent.revision<1||!['inactive','active'].includes(data.agent.state))throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
     serverState=data.agent.state;record=data.agent.configuration;serverRevision=data.agent.revision;
    }
-   serverReady=true;
+   agentPoints=data.points||null;serverReady=true;
   }catch(e){if(owner===who()&&serial===readSerial)error=e.name==='Error'?e.message:'No se pudo cargar la configuración del agente.';}
   finally{if(owner===who()&&serial===readSerial){serverBusy=false;dashboard();if(record?.engine_binding)refreshPause();}}
  }
  setInterval(()=>{if(!document.hidden&&!document.getElementById('agentPage').hidden)refreshPause();},15000);
  new MutationObserver(()=>{if(identity!==who()){
   loadSerial++;readSerial++;controller?.abort();serverBusy=false;serverReady=false;serverRevision=0;
-  identity=who();engineRevision=0;pauseReady=false;pendingPause=null;pendingDelete=null;record=null;draft=null;wizard=false;root.replaceChildren();
+  identity=who();agentPoints=null;engineRevision=0;pauseReady=false;pendingPause=null;pendingDelete=null;record=null;draft=null;wizard=false;root.replaceChildren();
   if(!document.getElementById('agentPage').hidden)open();
  }}).observe(document.getElementById('userBtn'),{childList:true,subtree:true,characterData:true});
+ window.addEventListener('dpia:credits-updated',()=>{if(!document.getElementById('agentPage').hidden)refreshPause();else agentPoints=null;});
  document.getElementById('languageSelect').addEventListener('change',()=>setTimeout(()=>{if(wizard){renderStep();if(draft.country&&draft.city)loadLocation(false);}else if(!document.getElementById('agentPage').hidden)dashboard();},0));
  // Future service may reuse these visual state definitions. No state can activate a task here.
  window.DPIAAgent={open,presentationFor:state=>({label:tr(STATES[state]||STATES.error),canEdit:state!=='running',showPause:['active','running'].includes(state),showResume:state==='paused',executionControlsEnabled:false})};

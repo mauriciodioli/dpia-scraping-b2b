@@ -34,7 +34,7 @@
    const response=await fetch('/api/consultas/creditos',{cache:'no-store'}),data=await response.json();
    if(serial!==generation||currentEmail!==current)return;
    if(!response.ok||!data.success||!data.credits)throw new Error(data.error||'No se pudieron consultar los puntos.');
-   credits=data.credits;testEnabled=!!data.test_credits_enabled;selfEnabled=data.self_topup_enabled===true;$('creditStatus').textContent='';
+   credits=data.credits;testEnabled=!!data.test_credits_enabled;selfEnabled=data.self_topup_enabled===true;window.dispatchEvent(new Event('dpia:credits-updated'));$('creditStatus').textContent='';
   }catch(error){if(serial!==generation)return;credits=null;testEnabled=false;selfEnabled=false;$('creditStatus').textContent=tr(error.message);}
   render();
  }

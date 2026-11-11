@@ -86,7 +86,9 @@ def pause():
         except (ValueError,TypeError,AttributeError):
             return jsonify(success=False,error='Revisá la solicitud.'),400
     try:
-        return jsonify(success=True,agent=read_pause(user_id,command),execution_available=False)
+        from services.agent_point_status import for_agent
+        agent=read_pause(user_id,command)
+        return jsonify(success=True,agent=agent,points=for_agent(user_id,agent),execution_available=False)
     except PreparationError as exc:return jsonify(success=False,error=str(exc)),exc.status
     except SQLAlchemyError:
         current_app.logger.warning('Agent pause database unavailable')

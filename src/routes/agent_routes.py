@@ -23,7 +23,9 @@ def configuration():
     store=current_app.extensions.get('agent_configuration_store') or AgentConfigurationStore()
     try:
         if request.method in ('GET','HEAD'):
-            return jsonify(success=True,agent=store.get(user_id),execution_available=False)
+            from services.agent_point_status import for_agent
+            agent=store.get(user_id)
+            return jsonify(success=True,agent=agent,points=for_agent(user_id,agent),execution_available=False)
         try:
             origin=request.headers.get('Origin')
             same_origin=not origin or urlsplit(origin).netloc==request.host

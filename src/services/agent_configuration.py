@@ -187,7 +187,8 @@ class AgentConfigurationStore:
                     bad('La configuración cambió en otra pestaña. Volvé a cargarla antes de editar.',409)
             elif expected_revision!=0:
                 bad('La configuración cambió en otra pestaña. Volvé a cargarla antes de editar.',409)
-            values=dict(estado='INACTIVO',idioma=config['language'],pais_codigo=COUNTRIES[config['country']][0],
+            owner_email=conn.execute(select(Usuario.correo_electronico).where(Usuario.id==user_id)).scalar_one()
+            values=dict(nombre=owner_email,estado='INACTIVO',idioma=config['language'],pais_codigo=COUNTRIES[config['country']][0],
                         ciudad=config['city'],zona_horaria=config['timezone'],
                         presupuesto_puntos_periodo=config['points'],periodo_presupuesto=PERIODS[config['period']],
                         notificaciones_activas=config['notifications'],configuracion=config,
@@ -197,7 +198,7 @@ class AgentConfigurationStore:
             if previous:
                 agent_id=previous['id'];conn.execute(update(agentes).where(agentes.c.id==agent_id,agentes.c.usuario_id==user_id).values(**values))
             else:
-                agent_id=conn.execute(insert(agentes).values(usuario_id=user_id,nombre='Mi agente',creado_en=now,**values)).inserted_primary_key[0]
+                agent_id=conn.execute(insert(agentes).values(usuario_id=user_id,creado_en=now,**values)).inserted_primary_key[0]
             task_rows=conn.execute(select(tareas).where(tareas.c.agente_id==agent_id)).mappings().all()
             current={row['tipo']:row for row in task_rows}
             if len(current)!=len(task_rows):bad('La configuración guardada no es compatible. Revisala antes de guardar.',409)
