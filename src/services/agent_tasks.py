@@ -121,6 +121,7 @@ class AgentTaskService:
                     timing = [dict(frequency=s['frecuencia'], days=s['dias_semana'], time=iso(s['hora_local']),
                                    timezone=s['zona_horaria'], next_run_at=None) for s in legacy]
                 result.append(dict(id=task['id'], name=task['nombre'], type=task['tipo'],
+                                   created_at=iso(task.get('creado_en')),
                                    state='active' if task['habilitada'] and (not engine or any(s['enabled'] for s in linked)) else 'paused', schedules=timing,
                                    last_run_at=iso(max(filter(None, [task['ultima_ejecucion_en'], last_runs.get(task['id'])]), default=None)), points_consumed=float(consumption[task['id']]) if consumption.get(task['id']) is not None else None))
-            return result
+            return sorted(result, key=lambda task: (task['state']=='active', task['created_at'] or '', task['id']), reverse=True)

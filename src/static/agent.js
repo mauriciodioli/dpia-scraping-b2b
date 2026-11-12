@@ -1,7 +1,7 @@
 /* Configuration-only UI. No scheduler, scraping, AI, notifications or point mutations. */
 (()=>{
  const root=document.getElementById('agentContent');
- let taskAgentId=null,taskExpanded=false;
+ let taskAgentId=null,taskExpanded=false,refreshTaskList=null;
  const TASKS={products:'Productos nuevos',prices:'Cambios de precios',suppliers:'Proveedores',local:'Oportunidades locales',jobs:'Oportunidades laborales',trends:'Tendencias'};
  const FREQUENCIES={daily:'Diario',twice:'Dos veces por semana',weekly:'Semanal'};
  const STATES={unconfigured:'No configurado',inactive:'Configurado e inactivo',active:'Activo',running:'Ejecutando',paused:'Pausado',admin_paused:'Pausado por administrador',disabled:'Deshabilitado',insufficient:'Créditos insuficientes',error:'Error'};
@@ -51,7 +51,7 @@
   const control=button(state==='admin_paused'?'Pausado por administrador':text,state==='inactive'?activate:togglePause,'primary');control.disabled=wizard||!record||!serverReady||serverBusy||!['inactive','active','paused'].includes(state)||(state!=='inactive'&&!pauseReady);if(wizard||!record)control.setAttribute('aria-describedby','agentEngineNotice');return control;
  }
  function dashboard(){
-  root.replaceChildren();wizard=false;queryContext=null;
+  root.replaceChildren();refreshTaskList=null;wizard=false;queryContext=null;
   const panel=node('div',undefined,record?'agent-summary':'agent-intro');
   if(who()&&!serverReady){
    if(serverBusy)panel.append(node('p','Cargando configuración del agente…','hint'));
@@ -112,14 +112,16 @@
  }
  async function refreshPause(){
   if(!record||serverBusy||wizard||!who()||pendingPause)return;
-  const owner=who(),serial=readSerial;serverBusy=true;
+  const owner=who(),serial=readSerial,before=JSON.stringify([record,serverState,engineRevision,pauseReady,agentPoints,error]);serverBusy=true;
   try{
    const response=await fetch(record.engine_binding?'/api/agente/pausa':'/api/agente/configuracion',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(20000)});
    const data=await response.json();if(owner!==who()||serial!==readSerial)return;
    if(!response.ok||data.success!==true)throw Error(data.error||'No se confirmó el estado del agente.');
    if(record.engine_binding||data.agent===null)acceptPause(data);else{if(data.agent.revision!==serverRevision)throw Error('La configuración cambió. Volvé a cargarla.');agentPoints=data.points||null;}error='';
   }catch(e){if(owner===who()&&serial===readSerial){pauseReady=false;error=e.name==='Error'?e.message:'No se confirmó el estado del agente.';}}
-  finally{if(owner===who()&&serial===readSerial){serverBusy=false;dashboard();}}
+  finally{if(owner===who()&&serial===readSerial){serverBusy=false;
+   if(before!==JSON.stringify([record,serverState,engineRevision,pauseReady,agentPoints,error]))dashboard();
+   else refreshTaskList?.();}}
  }
  async function togglePause(){
   if(serverBusy||!pauseReady||!['active','paused'].includes(serverState))return;
@@ -301,23 +303,27 @@
   details.open=taskExpanded;details.ontoggle=()=>{taskExpanded=details.open;};
   heading.append(node('span','Mis tareas'),raw('span',' (…) ▾'));details.append(heading,body);
   const owner=who(),agentId=taskAgentId;
-  let busy=false;
+  let busy=false,lastTasks=null;
   const current=()=>owner===who()&&agentId===taskAgentId&&details.isConnected;
-  async function load(taskId=null,action=null){
+  async function load(taskId=null,action=null,silent=false){
    if(busy||!agentId)return;busy=true;body.setAttribute('aria-busy','true');
-   body.querySelectorAll('button').forEach(el=>el.disabled=true);
-   const status=node('p','Cargando tareas…');status.setAttribute('role','status');body.append(status);
+   const disabled=new Map();
+   if(!silent)body.querySelectorAll('button').forEach(el=>{disabled.set(el,el.disabled);el.disabled=true;});
+   const status=node('p','Cargando tareas…');status.setAttribute('role','status');if(!silent)body.append(status);
    try{
     const suffix=action?'/'+taskId+(action==='eliminar'?'':'/'+action):'';
     const response=await fetch('/api/agentes/'+agentId+'/tareas'+suffix,{method:action?(action==='eliminar'?'DELETE':'PATCH'):'GET',credentials:'same-origin',cache:'no-store',headers:{'X-DPIA-Action':'manage-task'},signal:AbortSignal.timeout(20000)});
     const data=await response.json();if(!current())return;
     if(!response.ok||data.success!==true)throw Error(data.error||'No se confirmó el cambio de tareas. Reintentá.');
+    const tasks=[...data.tasks].sort((a,b)=>Number(b.state==='active')-Number(a.state==='active')||(b.created_at||'').localeCompare(a.created_at||'')||b.id-a.id);
+    const fingerprint=JSON.stringify(tasks);if(fingerprint===lastTasks)return;
+    lastTasks=fingerprint;
     heading.replaceChildren(node('span','Mis tareas'),raw('span',' ('+data.count+') ▾'));body.replaceChildren();
     if(!data.tasks.length)body.append(node('p','No hay tareas configuradas.'));
     const date=value=>value?new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{dateStyle:'short',timeStyle:'short'}).format(new Date(value+'Z')):tr('Sin datos');
     const types={PRODUCTOS_NUEVOS:'products',PRECIOS:'prices',PROVEEDORES:'suppliers',OPORTUNIDADES_LOCALES:'local',EMPLEOS:'jobs',TENDENCIAS:'trends'};
     const frequencies={DIARIA:'Diario',DAILY:'Diario',SEMANAL:'Semanal',WEEKLY:'Semanal',DOS_POR_SEMANA:'Dos veces por semana'};
-    for(const task of data.tasks){
+    for(const task of tasks){
      const card=node('article',undefined,'agent-task-card');
      card.append(raw('h4',task.name||tr(TASKS[types[task.type]]||task.type)),node('p',TASKS[types[task.type]]||task.type),statusBadge(task.state));
      const dl=document.createElement('dl');
@@ -334,9 +340,10 @@
      }
      card.append(dl,actions);body.append(card);
     }
-   }catch(e){if(current()){body.replaceChildren();const message=node('p',e.message||'No se confirmó el cambio de tareas. Reintentá.');message.setAttribute('role','alert');body.append(message,button('Reintentar',()=>load()));}}
-   finally{busy=false;body.removeAttribute('aria-busy');}
+   }catch(e){if(current()&&!silent){const message=node('p',e.message||'No se confirmó el cambio de tareas. Reintentá.');message.setAttribute('role','alert');body.append(message,button('Reintentar',()=>load()));}}
+   finally{busy=false;status.remove();for(const [el,value] of disabled)if(el.isConnected)el.disabled=value;body.removeAttribute('aria-busy');}
   }
+  refreshTaskList=()=>{if(current())load(null,null,true);};
   // Read once mounted; detached responses are discarded on account or dashboard changes.
   setTimeout(()=>{if(current())load();},0);
   return details;
