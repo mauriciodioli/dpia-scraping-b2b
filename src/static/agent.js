@@ -163,7 +163,7 @@
  }
  function startQueryContext(context){
   queryContext=context;identity=who();wizard=true;index=2;error='';
-  draft={...defaults(),...(record||{}),version:1,tasks:[context.category?.name?.toLowerCase().includes('laboral')||context.prompt?.toLowerCase().includes('empleo')?'jobs':'products'],query_context:structuredClone(context.query_context),country:context.country,city:context.city,scopes:[context.scope.id],categories:[context.category.id],language:context.language,scopeLabels:[context.scope],categoryLabels:[context.category]};
+  draft={...defaults(),...(record||{}),version:1,tasks:[context.taskType||((context.category?.name?.toLowerCase().includes('laboral')||context.prompt?.toLowerCase().includes('empleo'))?'jobs':'products')],query_context:structuredClone(context.query_context),country:context.country,city:context.city,scopes:[context.scope.id],categories:[context.category.id],language:context.language,scopeLabels:[context.scope],categoryLabels:[context.category]};
   scopes=structuredClone(catalogAmbitos);categories=structuredClone(catalogCategorias);cities=[context.city];
 
   refreshBudgetLimit();renderStep();root.querySelector('h3')?.focus();
@@ -192,7 +192,7 @@
    const days=listHeading(panel,draft.frequency==='twice'?'Elegí dos días':'Elegí un día');
    for(const day of [1,2,3,4,5,6,0])choice(days,weekday(day),draft.days.includes(day),checked=>toggle(draft.days,day,checked),false);
   }
-  panel.append(node('p','El horario es una preferencia. No hay tareas programadas todavía.','agent-notice'));
+  panel.append(node('p',queryContext&&record?'La tarea se agrega pausada. Podés activarla desde Mis tareas después de guardarla.':'El horario es una preferencia. No hay tareas programadas todavía.','agent-notice'));
  }
  async function refreshBudgetLimit(){
   const owner=who(),serial=++budgetReadSerial;availablePoints=null;
@@ -279,7 +279,6 @@
    if(!response.ok||data.success!==true)throw Error(data.error||'No se pudo cargar la configuración del agente.');
    if(data.execution_available!==false)throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
    if(data.agent!==null){
-    if(adding){serverBusy=false;queryContext=null;dashboard();refreshPause();return;}
    if(!data.agent||!valid(data.agent.configuration)||!Number.isSafeInteger(data.agent.revision)||data.agent.revision<1||!['inactive','active'].includes(data.agent.state))throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
     taskAgentId=data.agent.id;serverState=data.agent.state;record=data.agent.configuration;serverRevision=data.agent.revision;
    }

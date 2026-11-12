@@ -70,10 +70,10 @@ function preparedAgentContext(){
  const scope=catalogAmbitos.find(row=>row.ambito_id===body.ambito_id),category=catalogCategorias.find(row=>row.categoria_id===body.categoria_id);
  if(!scope||!category||!category.ambito_ids.includes(scope.ambito_id))return null;
  let issue='';
- if(isEmploymentQuery(body)||!['buscar','novedades','explorar'].includes(body.mode))issue='Esta consulta no corresponde al monitoreo de productos compatible con Agents.';
+ if(!['buscar','novedades','explorar'].includes(body.mode))issue='Esta modalidad de consulta todavía no es compatible con Agents.';
  else if(body.attachments?.length)issue='Agents todavía no admite los adjuntos de esta consulta.';
  else if(body.user_message.length>3500||queryPrepared.summary.length>3500)issue='El pedido o resumen supera el límite de 3500 caracteres para configurar el agente.';
- return {owner:currentEmail,country:body.pais,city:body.ciudad,language:body.idioma,scope:{id:scope.ambito_id,name:scope.nombre},category:{id:category.categoria_id,name:category.nombre},prompt:body.user_message,summary:queryPrepared.summary,query_context:{prompt:body.user_message,summary:queryPrepared.summary,mode:body.mode,postal_id:body.codigo_postal_id,currency:body.budget_currency||''},issue};
+ return {taskType:isEmploymentQuery(body)?'jobs':'products',owner:currentEmail,country:body.pais,city:body.ciudad,language:body.idioma,scope:{id:scope.ambito_id,name:scope.nombre},category:{id:category.categoria_id,name:category.nombre},prompt:body.user_message,summary:queryPrepared.summary,query_context:{prompt:body.user_message,summary:queryPrepared.summary,mode:body.mode,postal_id:body.codigo_postal_id,currency:body.budget_currency||''},issue};
 }
 function consultAgentVisible(){
  if(currentEmail)return !!preparedAgentContext();
