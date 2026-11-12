@@ -655,3 +655,6 @@ html[data-theme="dark"] .agent-field input,html[data-theme="dark"] .agent-field 
 .query-history-card.query-history-agent{border-color:#159b61;border-inline-start:4px solid #159b61;background:color-mix(in srgb,#159b61 10%,var(--panel,#fff))}.query-history-agent-label{grid-column:1/-1;color:#128052;font-weight:700;font-size:12px}
 
 .agent-task-list{margin:1rem 0}.agent-task-list>summary{cursor:pointer;font-weight:600;padding:.65rem 0}.agent-task-card{border:1px solid var(--border,#8886);border-radius:12px;padding:1rem;margin:.65rem 0}.agent-task-card h4{margin:0 0 .4rem}.agent-task-card dd{overflow-wrap:anywhere}.agent-task-card .agent-actions{display:flex;flex-wrap:wrap;gap:.5rem}
+
+/* Agent schedule refresh metadata; shown only with server-confirmed timestamps. */
+.query-history-refresh{display:inline-flex;align-items:center;align-self:flex-start;gap:6px;font-size:.8rem;font-weight:600;color:#128052;background:color-mix(in srgb,#159b61 10%,transparent);padding:5px 9px;border-radius:8px}

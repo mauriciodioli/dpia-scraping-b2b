@@ -653,6 +653,10 @@ Object.assign(DPIA_TRANSLATIONS,{
  'Mis búsquedas de la PWA':['My PWA searches','Moje wyszukiwania PWA','Le mie ricerche PWA'],
  'API DPIA · Trabajos del Scrapeador':['DPIA API · Scraper jobs','API DPIA · Zadania scrapera','API DPIA · Lavori dello scraper'],
  'Actualizar historial':['Refresh history','Odśwież historię','Aggiorna cronologia'],
+ 'Actualizado automáticamente':['Automatically updated','Zaktualizowano automatycznie','Aggiornato automaticamente'],
+ 'Se detectaron cambios':['Changes detected','Wykryto zmiany','Modifiche rilevate'],
+ 'Sin cambios desde la última revisión':['No changes since last check','Bez zmian od ostatniego sprawdzenia','Nessuna modifica dall’ultimo controllo'],
+ 'Última comprobación automática':['Last automatic check','Ostatnie automatyczne sprawdzenie','Ultimo controllo automatico'],
  'Ver más búsquedas':['More searches','Więcej wyszukiwań','Altre ricerche'],
  'Cargando historial…':['Loading history…','Ładowanie historii…','Caricamento cronologia…'],
  'Recuperá los resultados guardados sin repetir el scraping. Abrí una búsqueda para preparar sus imágenes.':['Retrieve saved results without repeating scraping. Open a search to prepare its images.','Pobierz zapisane wyniki bez ponownego scrapowania. Otwórz wyszukiwanie, aby przygotować obrazy.','Recupera i risultati salvati senza ripetere lo scraping. Apri una ricerca per prepararne le immagini.']

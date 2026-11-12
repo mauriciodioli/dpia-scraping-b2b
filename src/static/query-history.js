@@ -49,6 +49,7 @@
    const out=$('queryResults'),productCards=[...out.childNodes];out.replaceChildren();
    function text(tag,value){const el=document.createElement(tag);el.textContent=value;el.setAttribute('data-catalog-name','');out.append(el);return el;}
    text('h3','Respuesta de Agente · '+data.agent_name);
+   if(data.last_checked_at){const checked=new Date(data.last_checked_at);if(!Number.isNaN(checked.getTime()))text('p',tr('Actualizado automáticamente')+' · '+new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{dateStyle:'medium',timeStyle:'short'}).format(checked)).className='query-history-refresh';}
    if(data.evidence_status==='UNVERIFIED')text('p','Información no verificada.');
    text('p',data.result.summary);out.append(...productCards);
    for(const finding of presentation.text){const card=document.createElement('article');card.className='prompt-result';const paragraph=document.createElement('p');paragraph.textContent=finding;card.append(paragraph);out.append(card);}
@@ -84,6 +85,19 @@
    const date=document.createElement('time');date.className='query-history-date';
    const stamp=row.created_at?new Date(row.created_at):null;
    if(stamp&&!Number.isNaN(stamp.getTime())){date.dateTime=row.created_at;date.textContent=new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{dateStyle:'medium',timeStyle:'short'}).format(stamp);}else date.textContent=tr('Fecha no disponible');
+   // Automatic refresh is only displayed when the Agents API supplies a real timestamp.
+   // Never infer an update from the original job creation date.
+   let refresh=null;
+   if(row.source==='agents'&&row.last_checked_at){
+    const checked=new Date(row.last_checked_at);
+    if(!Number.isNaN(checked.getTime())){
+     refresh=document.createElement('span');refresh.className='query-history-refresh';
+     const formatted=new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{dateStyle:'medium',timeStyle:'short'}).format(checked);
+     refresh.textContent=tr('Actualizado automáticamente')+' · '+formatted;
+     refresh.title=tr(row.changed===true?'Se detectaron cambios':row.changed===false?'Sin cambios desde la última revisión':'Última comprobación automática');
+     refresh.setAttribute('data-automatic-refresh','');
+    }
+   }
    const summary=document.createElement('span');summary.className='query-history-summary';summary.setAttribute('data-catalog-name','');summary.textContent=shorten(raw||row.category||'',180);
    const meta=document.createElement('span');meta.className='query-history-meta';
    const state=document.createElement('span');state.className='query-history-state';state.dataset.state=row.state;state.textContent=tr(states[row.state]||'Estado sin confirmar');
@@ -92,7 +106,7 @@
    meta.append(state,count,context);
    const action=document.createElement('span');action.className='query-history-open';action.textContent=tr('Consultar resultados')+' →';
    if(row.source==='agents'){const label=document.createElement('span');label.className='query-history-agent-label';label.textContent='Respuesta de Agente · '+row.agent_name;card.append(label);}
-   card.append(title,date);if(summary.textContent&&raw!==title.textContent)card.append(summary);card.append(meta,action);
+   card.append(title,date);if(refresh)card.append(refresh);if(summary.textContent&&raw!==title.textContent)card.append(summary);card.append(meta,action);
    card.onclick=()=>row.source==='agents'?loadAgentResult(row.operation_id):row.remote?loadRemote(row.operation_id,place):loadQueryOperation(row.operation_id);
    $('queryHistoryList').append(card);
   }
