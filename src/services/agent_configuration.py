@@ -12,6 +12,8 @@ from services.locations import postal_ids_for_city
 from services.dpia_client import DPIAClient, catalog_filters
 from services.query_preparation import PreparationError, COUNTRIES
 from utils.db import db
+from services.task_names import task_name
+from services.task_name_backfill import fill_missing_v1_names
 
 # Independent metadata: importing these tables never creates them through db.create_all().
 metadata = MetaData()
@@ -192,11 +194,15 @@ class AgentConfigurationStore:
             elif previous:
                 stored=self._serialize(conn,previous)
                 # A retry after an uncertain response returns the confirmed same configuration.
-                if previous['configuracion']==config:return stored
+                if previous['configuracion']==config:
+                    fill_missing_v1_names(conn,tareas,previous['id'],previous['ciudad'] or '')
+                    return stored
                 if previous['version_config']!=expected_revision:
                     bad('La configuración cambió en otra pestaña. Volvé a cargarla antes de editar.',409)
             elif expected_revision!=0:
                 bad('La configuración cambió en otra pestaña. Volvé a cargarla antes de editar.',409)
+            if previous:
+                fill_missing_v1_names(conn,tareas,previous['id'],previous['ciudad'] or '')
             from services.scraping_quota import MySQLScrapingQuota
             quota=current_app.extensions.get('scraping_quota') or MySQLScrapingQuota()
             available=quota.credits(user_id)['available']
@@ -229,7 +235,8 @@ class AgentConfigurationStore:
                     fields['parametros'].update({key:previous_params[key] for key in
                         ('_agent_configuration','_configuration_revision') if key in previous_params})
                     conn.execute(update(tareas).where(tareas.c.id==current[kind]['id']).values(**fields))
-                else:conn.execute(insert(tareas).values(agente_id=agent_id,tipo=kind,creado_en=now,**fields))
+                else:conn.execute(insert(tareas).values(agente_id=agent_id,tipo=kind,
+                    nombre=task_name(kind.replace('_', ' ').lower(), city=config['city']),creado_en=now,**fields))
             schedule=conn.execute(select(programaciones.c.id).where(programaciones.c.agente_id==agent_id)).first()
             fields=dict(activa=False,frecuencia=FREQUENCIES[config['frequency']],
                         dias_semana=list(range(1,8)) if config['frequency']=='daily' else sorted(day or 7 for day in config['days']),
@@ -287,7 +294,7 @@ class AgentConfigurationStore:
                       'schedule': {'frequency': config['frequency'], 'days': config['days'],
                                    'time': config['time'], 'timezone': config['timezone']}}
             values = {'agente_id': agent['id'], 'tipo': kind,
-                      'nombre': context['prompt'][:150], 'habilitada': False,
+                      'nombre': task_name(context['prompt'], city=config['city']), 'habilitada': False,
                       'parametros': params, 'creado_en': now, 'actualizado_en': now}
             if 'ae_agent_id' in task_table.c:
                 values['ae_agent_id'] = engine_id

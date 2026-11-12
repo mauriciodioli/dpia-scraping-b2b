@@ -303,10 +303,10 @@
   details.open=taskExpanded;details.ontoggle=()=>{taskExpanded=details.open;};
   heading.append(node('span','Mis tareas'),raw('span',' (…) ▾'));details.append(heading,body);
   const owner=who(),agentId=taskAgentId;
-  let busy=false,lastTasks=null;
+  let busy=false,editing=false,lastTasks=null;
   const current=()=>owner===who()&&agentId===taskAgentId&&details.isConnected;
   async function load(taskId=null,action=null,silent=false){
-   if(busy||!agentId)return;busy=true;body.setAttribute('aria-busy','true');
+   if(busy||editing||!agentId)return;busy=true;body.setAttribute('aria-busy','true');
    const disabled=new Map();
    if(!silent)body.querySelectorAll('button').forEach(el=>{disabled.set(el,el.disabled);el.disabled=true;});
    const status=node('p','Cargando tareas…');status.setAttribute('role','status');if(!silent)body.append(status);
@@ -325,7 +325,36 @@
     const frequencies={DIARIA:'Diario',DAILY:'Diario',SEMANAL:'Semanal',WEEKLY:'Semanal',DOS_POR_SEMANA:'Dos veces por semana'};
     for(const task of tasks){
      const card=node('article',undefined,'agent-task-card');
-     card.append(raw('h4',task.name||tr(TASKS[types[task.type]]||task.type)),node('p',TASKS[types[task.type]]||task.type),statusBadge(task.state));
+     const title=raw('h4',task.name||tr(TASKS[types[task.type]]||task.type)),titleRow=node('div',undefined,'agent-task-title');
+     const pencil=button('✎',()=>{
+      if(editing||busy)return;editing=true;
+      const editor=node('div',undefined,'agent-task-name-editor'),input=document.createElement('input'),error=node('p');
+      input.type='text';input.maxLength=120;input.required=true;input.value=task.name||title.textContent;
+      input.setAttribute('aria-label',tr('Nombre de la tarea'));error.setAttribute('role','alert');
+      const counter=raw('small',''),updateCounter=()=>{counter.textContent=Array.from(input.value).length+' / 120';};
+      input.oninput=()=>{input.setCustomValidity('');error.textContent='';updateCounter();};updateCounter();
+      let saving=false;
+      const close=async()=>{
+       if(saving||!current())return;
+       const name=input.value.trim();
+       if(name===task.name){editor.remove();titleRow.hidden=false;editing=false;pencil.focus();return;}
+       if(!name||Array.from(name).length>120){error.textContent=tr('El nombre debe tener entre 1 y 120 caracteres.');return;}
+       saving=true;input.disabled=true;done.disabled=true;
+       try{
+        const response=await fetch('/api/agentes/'+agentId+'/tareas/'+task.id+'/renombrar',{method:'PATCH',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'manage-task'},body:JSON.stringify({name,expected_revision:task.revision||1}),signal:AbortSignal.timeout(20000)});
+        const data=await response.json();if(!current())return;
+        if(!response.ok||data.success!==true)throw Error(data.error||'No se guardó el nombre. Reintentá.');
+        const saved=data.tasks.find(item=>item.id===task.id);task.name=saved.name;task.revision=saved.revision;title.textContent=saved.name;
+        lastTasks=null;editor.remove();titleRow.hidden=false;editing=false;pencil.focus();
+       }catch(e){if(current())error.textContent=e.message||tr('No se guardó el nombre. Reintentá.');}
+       finally{saving=false;input.disabled=false;done.disabled=false;}
+      };
+      const done=button('Cerrar',close);input.onblur=close;
+      input.onkeydown=event=>{if(event.key==='Enter'||event.key==='Escape'){event.preventDefault();close();}};
+      editor.append(input,counter,done,error);titleRow.hidden=true;titleRow.after(editor);input.focus();input.select();
+     });
+     pencil.setAttribute('aria-label',tr('Cambiar nombre de la tarea'));pencil.title=tr('Cambiar nombre de la tarea');
+     titleRow.append(title,pencil);card.append(titleRow,node('p',TASKS[types[task.type]]||task.type),statusBadge(task.state));
      const dl=document.createElement('dl');
      for(const timing of task.schedules){
       const rows=[['Frecuencia',tr(frequencies[timing.frequency]||timing.frequency||'Sin datos')],['Días',(timing.days||[]).map(day=>weekday(day%7)).join(', ')||tr('Sin datos')],['Horario',timing.time||tr('Sin datos')],['Zona horaria',timing.timezone||tr('Sin datos')],['Próxima ejecución',date(timing.next_run_at)]];

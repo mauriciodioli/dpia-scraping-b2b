@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 import requests
 from flask import current_app
 from services.agent_configuration import bad
+from services.task_names import normalize_task_payload
 
 PATH = '/api/agents/v1/internal/pwa-activations'
 
@@ -52,6 +53,10 @@ def translate(agent, user_id):
 
 
 def provision(payload):
+    try:
+        payload = {**payload, 'agent': normalize_task_payload(payload['agent'])}
+    except ValueError as exc:
+        bad(str(exc), 422)
     base = current_app.config.get('AGENTS_INTERNAL_URL', '').rstrip('/')
     secret = current_app.config.get('PWA_ACTIVATION_SECRET', '')
     parsed = urlsplit(base)

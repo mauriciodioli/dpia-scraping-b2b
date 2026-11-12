@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta, time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from model.agent_tasks import AgentTaskRepository
 from services.agent_configuration import bad
+from services.task_names import validate_task_name
 
 
 def deleted(task):
@@ -46,7 +47,7 @@ class AgentTaskService:
     def __init__(self, repository=None):
         self.repository = repository or AgentTaskRepository()
 
-    def handle(self, owner, agent_id, task_id=None, action=None):
+    def handle(self, owner, agent_id, task_id=None, action=None, command=None):
         repo = self.repository
         if action=='activar':
             with repo.transaction(owner,agent_id) as (conn,tables,agent):
@@ -78,6 +79,21 @@ class AgentTaskService:
                 if deleted(task):
                     if action != 'eliminar':
                         bad('Tarea no disponible.', 404)
+                elif action == 'renombrar':
+                    try:
+                        name = validate_task_name(command['name']).strip()
+                    except (ValueError, KeyError, TypeError):
+                        bad('El nombre debe tener entre 1 y 120 caracteres válidos.')
+                    params = dict(task['parametros'] or {})
+                    if command['expected_revision'] != params.get('_configuration_revision', 1):
+                        bad('La tarea cambió. Volvé a cargarla antes de editar.', 409)
+                    if name != task['nombre']:
+                        if '_agent_configuration' in params:
+                            params['_agent_configuration'] = {**params['_agent_configuration'], 'name': name}
+                        params['_configuration_revision'] = command['expected_revision'] + 1
+                        repo.change(conn, tables['agente_tareas'], task_id, nombre=name, parametros=params,
+                                    actualizado_en=datetime.now(timezone.utc).replace(tzinfo=None))
+                    tasks = repo.tasks(conn, tables, agent_id)
                 else:
                     # Never guess which task an unlinked/shared schedule executes.
                     if any(s['activa'] for s in legacy) or any(s.get('legacy_task_id') is None and s['enabled'] for s in schedules):
@@ -121,6 +137,7 @@ class AgentTaskService:
                     timing = [dict(frequency=s['frecuencia'], days=s['dias_semana'], time=iso(s['hora_local']),
                                    timezone=s['zona_horaria'], next_run_at=None) for s in legacy]
                 result.append(dict(id=task['id'], name=task['nombre'], type=task['tipo'],
+                                   revision=(task['parametros'] or {}).get('_configuration_revision', 1),
                                    created_at=iso(task.get('creado_en')),
                                    state='active' if task['habilitada'] and (not engine or any(s['enabled'] for s in linked)) else 'paused', schedules=timing,
                                    last_run_at=iso(max(filter(None, [task['ultima_ejecucion_en'], last_runs.get(task['id'])]), default=None)), points_consumed=float(consumption[task['id']]) if consumption.get(task['id']) is not None else None))

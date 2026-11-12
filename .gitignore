@@ -38,3 +38,7 @@ htmlcov/
 # Archivos SQL locales: no versionar
 *.sql
 /docs/agent-tasks.md
+
+# Documentación Markdown y verificación local
+*.md
+/scripts/check_task_names_agents.py

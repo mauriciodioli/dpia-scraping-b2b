@@ -24,7 +24,7 @@ def tasks(agent_id, task_id=None, action=None):
     if request.method != 'GET':
         if request.method == 'DELETE':
             action = 'eliminar'
-        if action not in (('eliminar',) if request.method == 'DELETE' else ('activar', 'pausar')):
+        if action not in (('eliminar',) if request.method == 'DELETE' else ('activar', 'pausar', 'renombrar')):
             return jsonify(success=False, error='Acción no disponible.'), 404
         try:
             origin = request.headers.get('Origin')
@@ -35,7 +35,15 @@ def tasks(agent_id, task_id=None, action=None):
             return jsonify(success=False, error='Solicitud no autorizada.'), 403
     try:
         service = current_app.extensions.get('agent_task_service') or AgentTaskService()
-        items = service.handle(owner, agent_id, task_id, action)
+        command = None
+        if action == 'renombrar':
+            if not request.is_json or (request.content_length or 0) > 4096:
+                return jsonify(success=False, error='Nombre inválido.'), 400
+            command = request.get_json(silent=True)
+            if (not isinstance(command, dict) or set(command) != {'name', 'expected_revision'}
+                    or type(command['expected_revision']) is not int or command['expected_revision'] < 1):
+                return jsonify(success=False, error='Nombre o revisión inválidos.'), 400
+        items = service.handle(owner, agent_id, task_id, action, command) if command is not None else service.handle(owner, agent_id, task_id, action)
         return jsonify(success=True, tasks=items, count=len(items), execution_available=False)
     except PreparationError as exc:
         return jsonify(success=False, error=str(exc)), exc.status
