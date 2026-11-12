@@ -44,11 +44,11 @@
   if(!p||!Number.isSafeInteger(p.effective_remaining)||!Number.isSafeInteger(p.budget)||!Number.isSafeInteger(p.budget_consumed)||!Number.isSafeInteger(p.budget_reserved)){wrap.append(node('span','Puntos no disponibles'));return wrap;}
   const status=node('span',undefined,'agent-point-status'),dot=node('span',undefined,'agent-point-dot');
   dot.dataset.color=p.color;dot.setAttribute('aria-hidden','true');status.append(dot,raw('span',p.effective_remaining+' '+tr('puntos restantes')));
-  wrap.append(status,raw('small',tr('Asignados')+': '+p.budget+' · '+tr('Gastados')+': '+p.budget_consumed+' · '+tr('Reservados')+': '+p.budget_reserved));return wrap;
+  wrap.append(status);return wrap;
  }
  function executionControl(state){
   const text=state==='paused'?'Reanudar agente':['active','running'].includes(state)?'Pausar agente':'Activar agente';
-  const control=button(state==='admin_paused'?'Pausado por administrador':text,state==='inactive'?activate:togglePause,'primary');control.disabled=wizard||!record||!serverReady||serverBusy||!['inactive','active','paused'].includes(state)||(state!=='inactive'&&!pauseReady);control.setAttribute('aria-describedby','agentEngineNotice');return control;
+  const control=button(state==='admin_paused'?'Pausado por administrador':text,state==='inactive'?activate:togglePause,'primary');control.disabled=wizard||!record||!serverReady||serverBusy||!['inactive','active','paused'].includes(state)||(state!=='inactive'&&!pauseReady);if(wizard||!record)control.setAttribute('aria-describedby','agentEngineNotice');return control;
  }
  function dashboard(){
   root.replaceChildren();wizard=false;queryContext=null;
@@ -58,21 +58,22 @@
    else panel.append(button('Reintentar',open));
    feedback(panel);root.append(panel);return;
   }
-  panel.append(statusBadge(record?serverState:'unconfigured'));
+  if(!record)panel.append(statusBadge('unconfigured'));
   if(!record){
    panel.append(node('h3','DPIA busca por vos'),node('p','Encontrá productos nuevos, cambios de precios, proveedores y oportunidades sin buscar todos los días'),button('Configurar mi agente',()=>who()?start():openAuth(),'primary'));
    if(who()&&readLocalDraft())panel.append(button('Recuperar borrador local',()=>start(readLocalDraft())));
    if(!who())panel.append(node('p','Iniciá sesión para guardar tu agente.','agent-notice'));
   }
   else{
-   panel.append(summary(record),pointIndicator());
-   const dl=document.createElement('dl');for(const text of ['Próxima ejecución','Última ejecución','Resultados recientes','Puntos consumidos'])dl.append(node('dt',text),node('dd','Sin ejecuciones'));
-   panel.append(dl);
+   const header=node('div',undefined,'agent-identity'),logo=node('div',undefined,'consult-art agent-logo'),symbol=document.createElement('img');
+   logo.dataset.active=String(['active','running'].includes(serverState));
+   symbol.className='dpia-symbol';symbol.src='/static/branding/favicon.png';symbol.alt='';symbol.setAttribute('aria-hidden','true');logo.append(symbol);
+   const info=node('div',undefined,'agent-identity-info');info.append(raw('h3',who()),statusBadge(serverState),pointIndicator());header.append(logo,info);panel.append(header);
    panel.append(taskPanel());
    const actions=node('div',undefined,'agent-actions');if(serverState==='inactive')actions.append(button('Editar configuración',()=>start()));
    actions.append(executionControl(serverState));const remove=button('Eliminar agente',deleteAgent,'agent-delete');remove.disabled=serverBusy||!!record.engine_binding&&!pauseReady;actions.append(remove);if(record.engine_binding)actions.append(button('Actualizar estado',()=>refreshPause()));panel.append(actions);
   }
-  panel.append(engineNotice(),storageNotice());feedback(panel);root.append(panel);window.DPIAI18N?.refresh();
+  if(!record)panel.append(engineNotice(),storageNotice());feedback(panel);root.append(panel);window.DPIAI18N?.refresh();
  }
  async function activate(){
   if(serverBusy||!record||serverState!=='inactive'||wizard)return;
