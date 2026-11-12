@@ -14,8 +14,6 @@ def iso(value):
 
 
 def next_run(schedule, now):
-    if schedule['next_run_at'] and schedule['next_run_at'] > now:
-        return schedule['next_run_at']
     definition = schedule['definition'] or {}
     try:
         zone = ZoneInfo(schedule['timezone'])
@@ -23,11 +21,20 @@ def next_run(schedule, now):
         if definition['frequency'] not in ('DAILY', 'WEEKLY'):
             raise ValueError()
         local = now.replace(tzinfo=timezone.utc).astimezone(zone)
-        for offset in range(8):
+        for offset in range(371):
             day = local.date() + timedelta(days=offset)
             if definition['frequency'] == 'WEEKLY' and day.isoweekday() not in definition['weekdays']:
                 continue
-            candidate = datetime.combine(day, clock, zone).astimezone(timezone.utc).replace(tzinfo=None)
+            local_time = datetime.combine(day, clock)
+            if local_time <= local.replace(tzinfo=None):continue
+            candidates=set()
+            for fold in (0,1):
+                aware=local_time.replace(tzinfo=zone,fold=fold).astimezone(timezone.utc)
+                if aware.astimezone(zone).replace(tzinfo=None)==local_time:
+                    candidates.add(aware.replace(tzinfo=None))
+            # Same REJECT_AMBIGUOUS_OR_NONEXISTENT policy as Engine local_utc.
+            if len(candidates)!=1:raise ValueError()
+            candidate=candidates.pop()
             if candidate > now:
                 return candidate
     except (KeyError, TypeError, ValueError, ZoneInfoNotFoundError):
@@ -41,6 +48,18 @@ class AgentTaskService:
 
     def handle(self, owner, agent_id, task_id=None, action=None):
         repo = self.repository
+        if action=='activar':
+            with repo.transaction(owner,agent_id) as (conn,tables,agent):
+                tasks=repo.tasks(conn,tables,agent_id)
+                selected=next((task for task in tasks if task['id']==task_id),None)
+                if selected is None or deleted(selected):bad('Tarea no disponible.',404)
+                engines=repo.engines(conn,tables,owner,agent_id)
+                if len(engines)>1:bad('El vínculo de las tareas requiere revisión.',409)
+                schedules=repo.schedules(conn,tables,owner,engines[0]['id']) if engines else []
+                missing=bool(engines) and not any(s.get('legacy_task_id')==task_id for s in schedules)
+            if missing:
+                from services.agent_activation import synchronize_task
+                synchronize_task(owner,agent_id,task_id)
         with repo.transaction(owner, agent_id) as (conn, tables, agent):
             tasks = repo.tasks(conn, tables, agent_id)
             engines = repo.engines(conn, tables, owner, agent_id)
@@ -61,7 +80,7 @@ class AgentTaskService:
                         bad('Tarea no disponible.', 404)
                 else:
                     # Never guess which task an unlinked/shared schedule executes.
-                    if any(s['activa'] for s in legacy) or any(s.get('legacy_task_id') is None for s in schedules):
+                    if any(s['activa'] for s in legacy) or any(s.get('legacy_task_id') is None and s['enabled'] for s in schedules):
                         bad('La programación compartida requiere vincular cada tarea.', 409)
                     linked = [s for s in schedules if s.get('legacy_task_id') == task_id]
                     enabled = action == 'activar'
@@ -93,10 +112,15 @@ class AgentTaskService:
                     timing.append(dict(frequency=definition.get('frequency'), days=list(range(1, 8)) if definition.get('frequency') == 'DAILY' else definition.get('weekdays'),
                                        time=definition.get('execution_time'), timezone=s['timezone'],
                                        next_run_at=iso(s['next_run_at']) if s['enabled'] and task['habilitada'] else None))
+                saved=(task['parametros'] or {}).get('schedule')
+                if not timing and saved:
+                    timing=[dict(frequency='DAILY' if saved['frequency']=='daily' else 'WEEKLY',
+                        days=list(range(1,8)) if saved['frequency']=='daily' else sorted(day or 7 for day in saved['days']),
+                        time=saved['time'],timezone=saved['timezone'],next_run_at=None)]
                 if not timing:
                     timing = [dict(frequency=s['frecuencia'], days=s['dias_semana'], time=iso(s['hora_local']),
                                    timezone=s['zona_horaria'], next_run_at=None) for s in legacy]
                 result.append(dict(id=task['id'], name=task['nombre'], type=task['tipo'],
-                                   state='active' if task['habilitada'] else 'paused', schedules=timing,
+                                   state='active' if task['habilitada'] and (not engine or any(s['enabled'] for s in linked)) else 'paused', schedules=timing,
                                    last_run_at=iso(max(filter(None, [task['ultima_ejecucion_en'], last_runs.get(task['id'])]), default=None)), points_consumed=float(consumption[task['id']]) if consumption.get(task['id']) is not None else None))
             return result

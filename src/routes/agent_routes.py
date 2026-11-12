@@ -74,6 +74,7 @@ def create_task():
         config = verify_catalog(validate_config(body['configuration']))
         store = current_app.extensions.get('agent_configuration_store') or AgentConfigurationStore()
         task = store.add_task_to_existing_agent(user_id, config)
+        task = store.synchronize_task_schedule(user_id, task)
         return jsonify(success=True, task=task), 200 if task['duplicate'] else 201
     except PreparationError as exc:
         return jsonify(success=False, error=str(exc)), exc.status

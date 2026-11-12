@@ -151,8 +151,8 @@ class AgentConfigurationStore:
         except (KeyError,PreparationError):
             bad('La configuración guardada no es compatible. Revisala antes de guardar.',409)
         task_rows=conn.execute(select(tareas).where(tareas.c.agente_id==row['id'])).mappings().all()
-        enabled=[task['tipo'] for task in task_rows if task['tipo'] in {TASKS[t] for t in config.get('tasks',[]) if t in TASKS}]
-        if any({k:v for k,v in (task['parametros'] or {}).items() if k not in ('_deleted_at','_agent_configuration','_configuration_revision')}!={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']} for task in task_rows if task['tipo'] in enabled):
+        enabled=[task['tipo'] for task in task_rows if (task['parametros'] or {}).get('schema_version')==1 and task['tipo'] in {TASKS[t] for t in config.get('tasks',[]) if t in TASKS}]
+        if any({k:v for k,v in (task['parametros'] or {}).items() if k not in ('_deleted_at','_agent_configuration','_configuration_revision','schedule')}!={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']} for task in task_rows if (task['parametros'] or {}).get('schema_version')==1 and task['tipo'] in enabled):
             bad('Los parámetros de las tareas no coinciden con la configuración guardada.',409)
         schedules=conn.execute(select(programaciones).where(programaciones.c.agente_id==row['id'])).mappings().all()
         if len(schedules)!=1 or len(enabled)!=len(set(enabled)) or set(enabled)!={TASKS[t] for t in config.get('tasks',[]) if t in TASKS}:
@@ -222,6 +222,7 @@ class AgentConfigurationStore:
                 if kind not in desired:conn.execute(update(tareas).where(tareas.c.id==row['id']).values(habilitada=False,actualizado_en=now))
             for kind in sorted(desired):
                 fields=dict(habilitada=True,parametros={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']},actualizado_en=now)
+                fields['parametros']['schedule']={key:config[key] for key in ('frequency','days','time','timezone')}
                 if kind in current:
                     # Keep independent task editor settings when saving agent defaults.
                     previous_params=current[kind]['parametros'] or {}
@@ -268,6 +269,10 @@ class AgentConfigurationStore:
             for task in existing:
                 params = task['parametros'] or {}
                 if not params.get('_deleted_at') and params.get('identity_hash') == digest:
+                    timing={key:config[key] for key in ('frequency','days','time','timezone')}
+                    if params.get('schedule')!=timing:
+                        conn.execute(update(task_table).where(task_table.c.id==task['id'],
+                            task_table.c.agente_id==agent['id']).values(parametros={**params,'schedule':timing},actualizado_en=now))
                     return {'id': task['id'], 'agent_id': agent['id'], 'duplicate': True}
             engine_table = SA_Table('ae_agents', SA_MetaData(), autoload_with=conn, resolve_fks=False)
             engines = conn.execute(select(engine_table).where(engine_table.c.legacy_agent_id == agent['id'],
@@ -291,6 +296,20 @@ class AgentConfigurationStore:
             # snapshot and tool grants; keep this task paused until provisioned explicitly.
             return {'id': task_id, 'agent_id': agent['id'], 'duplicate': False,
                     'schedule_pending': True}
+
+    def synchronize_task_schedule(self, user_id, task):
+        from model.agent_tasks import AgentTaskRepository
+        from services.agent_activation import synchronize_task
+        repo=AgentTaskRepository()
+        # Release shared locks before HTTP: Engine must be able to read the committed task.
+        with repo.transaction(user_id,task['agent_id']) as (conn,tables,agent):
+            tasks=repo.tasks(conn,tables,task['agent_id'])
+            if not any(row['id']==task['id'] for row in tasks):bad('Tarea no disponible.',404)
+            engines=repo.engines(conn,tables,user_id,task['agent_id'])
+            if len(engines)>1:bad('El vínculo de las tareas requiere revisión.',409)
+        if not engines:return {**task,'schedule_pending':True}
+        schedule=synchronize_task(user_id,task['agent_id'],task['id'])
+        return {**task,'schedule_pending':False,'schedule':schedule}
 
     def activate(self,user_id,expected_revision):
         from services.agent_activation import translate, provision

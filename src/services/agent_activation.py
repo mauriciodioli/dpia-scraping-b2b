@@ -78,3 +78,29 @@ def provision(payload):
         return {'id': remote['id'], 'revision': remote['revision']}
     except (requests.RequestException, ValueError, KeyError, TypeError):
         bad('No se confirmó la activación del agente. Reintentá; no se creará un duplicado.', 502)
+
+
+def synchronize_task(user_id, agent_id, task_id):
+    """Use the existing signed provisioning endpoint after the local task commits."""
+    payload=dict(operation='sync_task_schedule',owner_id=user_id,source_agent_id=agent_id,task_id=task_id)
+    base=current_app.config.get('AGENTS_INTERNAL_URL','').rstrip('/')
+    secret=current_app.config.get('PWA_ACTIVATION_SECRET','')
+    parsed=urlsplit(base)
+    if (not secret or parsed.scheme not in ('http','https') or not parsed.hostname or parsed.username
+            or parsed.password or parsed.path or parsed.query or parsed.fragment):
+        bad('La conexión interna del agente no está configurada.',503)
+    raw=json.dumps(payload,sort_keys=True,separators=(',',':')).encode()
+    stamp=str(int(time.time()))
+    signature=hmac.new(secret.encode(),stamp.encode()+b'\n'+PATH.encode()+b'\n'+raw,hashlib.sha256).hexdigest()
+    try:
+        response=requests.post(base+PATH,data=raw,headers={'Content-Type':'application/json',
+            'X-DPIA-Timestamp':stamp,'X-DPIA-Signature':signature},timeout=(3.05,15),allow_redirects=False)
+        data=response.json()
+        if response.status_code!=200:bad('No se confirmó la programación de la tarea. Reintentá.',502)
+        if (data['api_version']!='agents.v1' or type(data['owner_id']) is not int or data['owner_id']!=user_id
+                or type(data['source_agent_id']) is not int or data['source_agent_id']!=agent_id
+                or type(data['task_id']) is not int or data['task_id']!=task_id or data['execution_enabled'] is not False
+                or data['schedule']['legacy_task_id']!=task_id):raise ValueError()
+        return data['schedule']
+    except (requests.RequestException,ValueError,KeyError,TypeError):
+        bad('No se confirmó la programación de la tarea. Reintentá.',502)

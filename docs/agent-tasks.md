@@ -10,7 +10,7 @@ Se incorpora «Mis tareas (N)» a `agentContent`, antes de los controles existen
 - `src/services/agent_configuration.py`: lectura compatible con tareas individuales pausadas o eliminadas. La edición explícita de configuración conserva el comportamiento previo de seleccionar/reactivar tareas.
 - `src/app.py`: registro del Blueprint.
 - `src/static/agent.js`, `styles.css`, `i18n.js` y `src/templates/index.html`: vista, traducciones y versiones de recursos.
-- `tests/test_agent_tasks.py`, `tests/test_agent_tasks_ui.py`: regresiones aisladas; `.gitignore` permite versionarlas.
+- `tests/test_agent_tasks.py`, `tests/test_agent_tasks_ui.py`: regresiones aisladas; permanecen excluidas de Git conforme a la configuración actual.
 
 ## Endpoints
 
@@ -44,3 +44,26 @@ Comprobaciones ejecutadas:
 - `PYTHONPATH=src:tests python -m unittest test_agent_tasks test_agent_configuration test_agent_activation test_agent_pause test_agent_tasks_ui -q`: 34 pruebas correctas.
 - `test_agent_ui`, `test_agent_activation_ui`, `test_agent_pause_ui`: otras 11 pruebas correctas en Chromium.
 - `git diff --check`: correcto.
+
+
+## Verificación de coordinación B2B ↔ Agent Engine (2026-11-12)
+
+Esta sección actualiza el comportamiento de programación descrito anteriormente. Se encontraron cortes en la conexión: la activación creaba una programación general sin tarea; las tareas nuevas conservaban su horario solo en B2B; el dispatcher no propagaba el identificador de tarea.
+
+Ahora la programación individual de `agente_tareas.parametros.schedule` se sincroniza mediante el endpoint firmado existente de activación, al crear/modificar una tarea vinculada y al activar una tarea que carece de programación propia. La activación inicial registra una programación por tarea. Se reutiliza la fila vinculada y se conservan las programaciones de las demás tareas. Una tarea nueva permanece pausada hasta su activación. No se ejecutó ninguna actualización masiva de datos existentes.
+
+La relación es `agente_tareas.id` → `ae_schedules.legacy_task_id` → `ae_jobs.legacy_task_id`, con validación del agente y propietario. `Dispatcher.tick()` selecciona las programaciones habilitadas cuyo `next_run_at` UTC ha llegado; `_run_schedule()` comprueba la tarea, crea su trabajo y avanza su próxima fecha. Se conserva la idempotencia por programación y horario. La programación general histórica conocida de la activación PWA se deshabilita al establecer los vínculos individuales.
+
+Prueba aislada con zona `Europe/Rome`:
+
+| Tarea | Horario local | Instante UTC comprobado | Resultado |
+| --- | --- | --- | --- |
+| Productos nuevos | Lunes 09:00, activa | 2026-11-16 08:00 | Solo tarea 101 |
+| Proveedores | Miércoles 10:00, pausada | 2026-11-18 09:00 | Sin trabajo para tarea 102 |
+| Tendencias | Viernes 15:00, activa | 2026-11-20 14:00 | Solo tarea 103 |
+
+Los trabajos conservan su identificador de tarea. Dos tareas al mismo horario crean dos trabajos distintos sin duplicarse al repetir el tick. Agregar/modificar una tarea conserva intactas las otras tres programaciones. A las 09:00 de Roma corresponden las 08:00 UTC en invierno y las 07:00 UTC en verano; se verificaron las transiciones de marzo y octubre de 2026. Se mantiene la política existente del motor de rechazar horas locales ambiguas o inexistentes.
+
+Validación: 6 pruebas integrales de coordinación y 27 de configuración/activación/pausa B2B correctas. De 22 regresiones adicionales del motor pasan 21; falla la de deshabilitación de una programación tras revocar un cliente. Se reprodujo el mismo fallo con el código original de HEAD en una copia temporal, por lo que queda fuera de esta corrección. Una prueba antigua de tareas B2B también tiene una fixture incompatible: intenta agregar de nuevo `ae_agent_id`, ya presente en el modelo original. Las pruebas locales permanecen ignoradas por Git.
+
+No se añadieron tablas ni se ejecutaron migraciones, tareas reales, proveedores pagos, despliegues o reinicios. La validación usa SQLite aislado y transporte HTTP local; queda pendiente comprobar los datos de una instalación MySQL desplegada. La interfaz de programación, presupuestos y scrapers no se modificaron.
