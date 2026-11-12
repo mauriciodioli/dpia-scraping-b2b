@@ -38,8 +38,3 @@ htmlcov/
 # Archivos SQL locales: no versionar
 *.sql
 
-# Version the isolated task management regression tests.
-!/tests/
-/tests/*
-!/tests/test_agent_tasks.py
-!/tests/test_agent_tasks_ui.py
