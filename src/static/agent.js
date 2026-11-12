@@ -219,7 +219,7 @@
  function check(step){
 
   if(step===0&&!draft.tasks.length)return 'Seleccioná al menos una tarea.';
-  if(step===1&&(loading||error||!draft.country||!draft.city||!draft.scopes.length||!draft.categories.length))return 'Elegí ubicación, ámbitos y categorías disponibles.';
+  if(step===1&&(loading||(!queryContext&&error)||!draft.country||!draft.city||!draft.scopes.length||!draft.categories.length))return 'Elegí ubicación, ámbitos y categorías disponibles.';
   if(step===2&&(!/^\d{2}:\d{2}$/.test(draft.time)||!validZone(draft.timezone)||(draft.frequency!=='daily'&&draft.days.length!==(draft.frequency==='twice'?2:1))))return 'Revisá el horario y los días seleccionados.';
   if(step===3&&!(queryContext&&record)&&availablePoints===null)return 'No se pudo consultar tu saldo. Reintentá antes de guardar.';
   if(step===3&&!(queryContext&&record)&&draft.points>availablePoints)return 'El presupuesto supera tus puntos disponibles.';
@@ -232,7 +232,8 @@
   if(!who()){openAuth();return;}
   for(let step=0;step<4;step++){const issue=check(step);if(issue){index=step;error=issue;renderStep();return;}}
   const value={...structuredClone(draft),version:1,language:window.DPIAI18N?.language||'es'};
-  for(const field of ['scopeLabels','categoryLabels','savedAt'])delete value[field];
+  const fields=new Set(['version','tasks','country','city','scopes','categories','frequency','days','time','timezone','points','period','notifications','language','query_context']);
+  for(const field of Object.keys(value))if(!fields.has(field))delete value[field];
   if(!valid(value)){error='La configuración guardada no es válida. Revisala antes de guardar.';renderStep();return;}
   const owner=who(),serial=++readSerial;serverBusy=true;error='';renderStep();
   try{
@@ -260,7 +261,7 @@
   if(serverBusy){const status=node('p','Guardando configuración…','hint');status.setAttribute('role','status');panel.append(status);}
   feedback(panel);const actions=node('div',undefined,'agent-actions');
   actions.append(button('Cancelar',()=>{loadSerial++;controller?.abort();dashboard();}));
-  if(index>0)actions.append(button('Anterior',()=>{index--;error='';renderStep();}));
+  if(index>(queryContext?2:0))actions.append(button('Anterior',()=>{index--;error='';renderStep();}));
   const next=button(index===4?(queryContext&&record?'Agregar tarea a mi agente':'Crear agente'):'Siguiente',()=>{if(index===4){save();return;}const issue=check(index);if(issue){error=issue;renderStep();return;}error='';index++;renderStep();root.querySelector('h3').focus();},'primary');next.disabled=(index===1&&loading);actions.append(next);
   if(index===4)actions.append(executionControl('inactive'));
   if(error&&index===4)actions.append(button('Volver a cargar configuración',open));
