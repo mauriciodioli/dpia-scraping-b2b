@@ -27,6 +27,8 @@ def create_app():
     app.register_blueprint(agent_bp)
     from routes.agent_pause_routes import pause_bp
     app.register_blueprint(pause_bp)
+    from routes.agent_task_routes import task_bp
+    app.register_blueprint(task_bp)
     from routes.agent_delete_routes import delete_bp
     app.register_blueprint(delete_bp)
     from controllers.publicaciones import publicaciones

@@ -1,6 +1,7 @@
 /* Configuration-only UI. No scheduler, scraping, AI, notifications or point mutations. */
 (()=>{
  const root=document.getElementById('agentContent');
+ let taskAgentId=null,taskExpanded=false;
  const TASKS={products:'Productos nuevos',prices:'Cambios de precios',suppliers:'Proveedores',local:'Oportunidades locales',jobs:'Oportunidades laborales',trends:'Tendencias'};
  const FREQUENCIES={daily:'Diario',twice:'Dos veces por semana',weekly:'Semanal'};
  const STATES={unconfigured:'No configurado',inactive:'Configurado e inactivo',active:'Activo',running:'Ejecutando',paused:'Pausado',admin_paused:'Pausado por administrador',disabled:'Deshabilitado',insufficient:'Créditos insuficientes',error:'Error'};
@@ -67,6 +68,7 @@
    panel.append(summary(record),pointIndicator());
    const dl=document.createElement('dl');for(const text of ['Próxima ejecución','Última ejecución','Resultados recientes','Puntos consumidos'])dl.append(node('dt',text),node('dd','Sin ejecuciones'));
    panel.append(dl);
+   panel.append(taskPanel());
    const actions=node('div',undefined,'agent-actions');if(serverState==='inactive')actions.append(button('Editar configuración',()=>start()));
    actions.append(executionControl(serverState));const remove=button('Eliminar agente',deleteAgent,'agent-delete');remove.disabled=serverBusy||!!record.engine_binding&&!pauseReady;actions.append(remove);if(record.engine_binding)actions.append(button('Actualizar estado',()=>refreshPause()));panel.append(actions);
   }
@@ -240,7 +242,7 @@
    if(response.status===401)openAuth();
    if(!response.ok||data.success!==true)throw Error(data.error||'No se confirmó el guardado del agente. Volvé a cargar su configuración.');
    if(!data.agent||!valid(data.agent.configuration)||!Number.isSafeInteger(data.agent.revision)||data.agent.revision<1||data.agent.state!=='inactive'||data.execution_available!==false)throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
-   serverState=data.agent.state;record=data.agent.configuration;serverRevision=data.agent.revision;serverReady=true;loadSerial++;controller?.abort();
+   taskAgentId=data.agent.id;serverState=data.agent.state;record=data.agent.configuration;serverRevision=data.agent.revision;serverReady=true;loadSerial++;controller?.abort();
    agentPoints=null;serverBusy=false;dashboard();refreshPause();
   }catch(e){
    if(owner===who()&&serial===readSerial){error=e.message&&e.name==='Error'?e.message:'No se confirmó el guardado del agente. Volvé a cargar su configuración.';serverBusy=false;renderStep();}
@@ -276,7 +278,7 @@
    if(data.execution_available!==false)throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
    if(data.agent!==null){
     if(!data.agent||!valid(data.agent.configuration)||!Number.isSafeInteger(data.agent.revision)||data.agent.revision<1||!['inactive','active'].includes(data.agent.state))throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
-    serverState=data.agent.state;record=data.agent.configuration;serverRevision=data.agent.revision;
+    taskAgentId=data.agent.id;serverState=data.agent.state;record=data.agent.configuration;serverRevision=data.agent.revision;
    }
    agentPoints=data.points||null;serverReady=true;
   }catch(e){if(owner===who()&&serial===readSerial)error=e.name==='Error'?e.message:'No se pudo cargar la configuración del agente.';}
@@ -290,6 +292,51 @@
  }}).observe(document.getElementById('userBtn'),{childList:true,subtree:true,characterData:true});
  window.addEventListener('dpia:credits-updated',()=>{if(wizard)refreshBudgetLimit();else if(!document.getElementById('agentPage').hidden)refreshPause();else agentPoints=null;});
  document.getElementById('languageSelect').addEventListener('change',()=>setTimeout(()=>{if(wizard){renderStep();if(draft.country&&draft.city)loadLocation(false);}else if(!document.getElementById('agentPage').hidden)dashboard();},0));
+ function taskPanel(){
+  const details=node('details',undefined,'agent-task-list'),heading=node('summary'),body=node('div');
+  details.open=taskExpanded;details.ontoggle=()=>{taskExpanded=details.open;};
+  heading.append(node('span','Mis tareas'),raw('span',' (…) ▾'));details.append(heading,body);
+  const owner=who(),agentId=taskAgentId;
+  let busy=false;
+  const current=()=>owner===who()&&agentId===taskAgentId&&details.isConnected;
+  async function load(taskId=null,action=null){
+   if(busy||!agentId)return;busy=true;body.setAttribute('aria-busy','true');
+   body.querySelectorAll('button').forEach(el=>el.disabled=true);
+   const status=node('p','Cargando tareas…');status.setAttribute('role','status');body.append(status);
+   try{
+    const suffix=action?'/'+taskId+(action==='eliminar'?'':'/'+action):'';
+    const response=await fetch('/api/agentes/'+agentId+'/tareas'+suffix,{method:action?(action==='eliminar'?'DELETE':'PATCH'):'GET',credentials:'same-origin',cache:'no-store',headers:{'X-DPIA-Action':'manage-task'},signal:AbortSignal.timeout(20000)});
+    const data=await response.json();if(!current())return;
+    if(!response.ok||data.success!==true)throw Error(data.error||'No se confirmó el cambio de tareas. Reintentá.');
+    heading.replaceChildren(node('span','Mis tareas'),raw('span',' ('+data.count+') ▾'));body.replaceChildren();
+    if(!data.tasks.length)body.append(node('p','No hay tareas configuradas.'));
+    const date=value=>value?new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{dateStyle:'short',timeStyle:'short'}).format(new Date(value+'Z')):tr('Sin datos');
+    const types={PRODUCTOS_NUEVOS:'products',PRECIOS:'prices',PROVEEDORES:'suppliers',OPORTUNIDADES_LOCALES:'local',EMPLEOS:'jobs',TENDENCIAS:'trends'};
+    const frequencies={DIARIA:'Diario',DAILY:'Diario',SEMANAL:'Semanal',WEEKLY:'Semanal',DOS_POR_SEMANA:'Dos veces por semana'};
+    for(const task of data.tasks){
+     const card=node('article',undefined,'agent-task-card');
+     card.append(raw('h4',task.name||tr(TASKS[types[task.type]]||task.type)),node('p',TASKS[types[task.type]]||task.type),statusBadge(task.state));
+     const dl=document.createElement('dl');
+     for(const timing of task.schedules){
+      const rows=[['Frecuencia',tr(frequencies[timing.frequency]||timing.frequency||'Sin datos')],['Días',(timing.days||[]).map(day=>weekday(day%7)).join(', ')||tr('Sin datos')],['Horario',timing.time||tr('Sin datos')],['Zona horaria',timing.timezone||tr('Sin datos')],['Próxima ejecución',date(timing.next_run_at)]];
+      for(const [label,value] of rows)dl.append(node('dt',label),raw('dd',value));
+     }
+     dl.append(node('dt','Última ejecución'),raw('dd',date(task.last_run_at)));
+     if(task.points_consumed!==null)dl.append(node('dt','Puntos consumidos'),raw('dd',String(task.points_consumed)));
+     const actions=node('div',undefined,'agent-actions');
+     for(const [action,label] of [['activar','Activar'],['pausar','Pausar'],['eliminar','Eliminar']]){
+      const control=button(label,()=>{if(action==='eliminar'&&!window.confirm(tr('¿Eliminar esta tarea? Se conservará el historial.')))return;load(task.id,action);});
+      control.disabled=action==='activar'&&task.state==='active'||action==='pausar'&&task.state==='paused';actions.append(control);
+     }
+     card.append(dl,actions);body.append(card);
+    }
+   }catch(e){if(current()){body.replaceChildren();const message=node('p',e.message||'No se confirmó el cambio de tareas. Reintentá.');message.setAttribute('role','alert');body.append(message,button('Reintentar',()=>load()));}}
+   finally{busy=false;body.removeAttribute('aria-busy');}
+  }
+  // Read once mounted; detached responses are discarded on account or dashboard changes.
+  setTimeout(()=>{if(current())load();},0);
+  return details;
+ }
  // Future service may reuse these visual state definitions. No state can activate a task here.
  window.DPIAAgent={open,fromQuery,presentationFor:state=>({label:tr(STATES[state]||STATES.error),canEdit:state!=='running',showPause:['active','running'].includes(state),showResume:state==='paused',executionControlsEnabled:false})};
  if(typeof syncQueryConversation==='function')syncQueryConversation();

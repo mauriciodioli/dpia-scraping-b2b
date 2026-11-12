@@ -150,9 +150,9 @@ class AgentConfigurationStore:
             validate_config({key:config[key] for key in FIELDS | ({'query_context'} if 'query_context' in config else set())})
         except (KeyError,PreparationError):
             bad('La configuración guardada no es compatible. Revisala antes de guardar.',409)
-        task_rows=conn.execute(select(tareas).where(tareas.c.agente_id==row['id'],tareas.c.habilitada.is_(True))).mappings().all()
-        enabled=[task['tipo'] for task in task_rows]
-        if any(task['parametros']!={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']} for task in task_rows):
+        task_rows=conn.execute(select(tareas).where(tareas.c.agente_id==row['id'])).mappings().all()
+        enabled=[task['tipo'] for task in task_rows if task['tipo'] in {TASKS[t] for t in config.get('tasks',[]) if t in TASKS}]
+        if any({k:v for k,v in (task['parametros'] or {}).items() if k not in ('_deleted_at','_agent_configuration','_configuration_revision')}!={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']} for task in task_rows if task['tipo'] in enabled):
             bad('Los parámetros de las tareas no coinciden con la configuración guardada.',409)
         schedules=conn.execute(select(programaciones).where(programaciones.c.agente_id==row['id'])).mappings().all()
         if len(schedules)!=1 or len(enabled)!=len(set(enabled)) or set(enabled)!={TASKS[t] for t in config.get('tasks',[]) if t in TASKS}:
@@ -222,7 +222,12 @@ class AgentConfigurationStore:
                 if kind not in desired:conn.execute(update(tareas).where(tareas.c.id==row['id']).values(habilitada=False,actualizado_en=now))
             for kind in sorted(desired):
                 fields=dict(habilitada=True,parametros={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']},actualizado_en=now)
-                if kind in current:conn.execute(update(tareas).where(tareas.c.id==current[kind]['id']).values(**fields))
+                if kind in current:
+                    # Keep independent task editor settings when saving agent defaults.
+                    previous_params=current[kind]['parametros'] or {}
+                    fields['parametros'].update({key:previous_params[key] for key in
+                        ('_agent_configuration','_configuration_revision') if key in previous_params})
+                    conn.execute(update(tareas).where(tareas.c.id==current[kind]['id']).values(**fields))
                 else:conn.execute(insert(tareas).values(agente_id=agent_id,tipo=kind,creado_en=now,**fields))
             schedule=conn.execute(select(programaciones.c.id).where(programaciones.c.agente_id==agent_id)).first()
             fields=dict(activa=False,frecuencia=FREQUENCIES[config['frequency']],
