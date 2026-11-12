@@ -52,6 +52,38 @@ def configuration():
         return jsonify(success=False,error='No se confirmó el guardado del agente. Revisá las tablas y volvé a cargar su configuración.'),503
 
 
+@agent_bp.post('/tareas')
+def create_task():
+    user_id = session.get('user_id')
+    if type(user_id) is not int:
+        return jsonify(success=False, error='Iniciá sesión.'), 401
+    origin = request.headers.get('Origin')
+    try:
+        same_origin = not origin or urlsplit(origin).netloc == request.host
+    except ValueError:
+        same_origin = False
+    if (request.headers.get('X-DPIA-Action') != 'create-task'
+            or request.headers.get('Sec-Fetch-Site') == 'cross-site' or not same_origin):
+        return jsonify(success=False, error='Solicitud no autorizada.'), 403
+    if not request.is_json or (request.content_length or 0) > 65536:
+        return jsonify(success=False, error='Consulta inválida.'), 400
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or set(body) != {'configuration'}:
+        return jsonify(success=False, error='Consulta inválida.'), 400
+    try:
+        config = verify_catalog(validate_config(body['configuration']))
+        store = current_app.extensions.get('agent_configuration_store') or AgentConfigurationStore()
+        task = store.add_task_to_existing_agent(user_id, config)
+        return jsonify(success=True, task=task), 200 if task['duplicate'] else 201
+    except PreparationError as exc:
+        return jsonify(success=False, error=str(exc)), exc.status
+    except (CatalogError, CatalogFiltersError):
+        return jsonify(success=False, error='No se pudo verificar el catálogo.'), 502
+    except SQLAlchemyError:
+        current_app.logger.exception('Task creation failed')
+        return jsonify(success=False, error='No se confirmó la creación de la tarea.'), 503
+
+
 @agent_bp.post('/activar')
 def activate():
     user_id=session.get('user_id')

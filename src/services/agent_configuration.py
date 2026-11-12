@@ -28,7 +28,7 @@ tareas = Table('agente_tareas', metadata,
     Column('tipo', String(30)), Column('nombre', String(150)), Column('habilitada', Boolean),
     Column('parametros', JSON), Column('ultima_ejecucion_en', DateTime),
     Column('creado_en', DateTime), Column('actualizado_en', DateTime),
-    UniqueConstraint('agente_id', 'tipo'))
+    Column('ae_agent_id', String(36)))
 programaciones = Table('agente_programaciones', metadata,
     Column('id', Integer, primary_key=True), Column('agente_id', Integer, nullable=False),
     Column('activa', Boolean), Column('frecuencia', String(20)), Column('dias_semana', JSON),
@@ -237,6 +237,60 @@ class AgentConfigurationStore:
             if schedule:conn.execute(update(programaciones).where(programaciones.c.id==schedule.id).values(**fields))
             else:conn.execute(insert(programaciones).values(agente_id=agent_id,creado_en=now,**fields))
             return {'id':agent_id,'revision':revision,'state':'inactive','configuration':config}
+
+    def add_task_to_existing_agent(self, user_id, config):
+        """Append one task without changing the existing agent, its budget or other tasks."""
+        import hashlib
+        import json
+        from sqlalchemy import MetaData as SA_MetaData, Table as SA_Table
+        from uuid import uuid4
+        if len(config['tasks']) != 1:
+            bad('Una consulta debe crear una sola tarea.', 422)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        kind = TASKS[config['tasks'][0]]
+        context = config.get('query_context')
+        if not context:
+            bad('La tarea necesita una consulta preparada.', 422)
+        identity = {'type': kind, 'prompt': ' '.join(context['prompt'].casefold().split()),
+                    'country': config['country'], 'city': config['city'].casefold(),
+                    'scopes': config['scopes'], 'categories': config['categories'],
+                    'mode': context['mode']}
+        digest = hashlib.sha256(json.dumps(identity, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        from model.agent_tasks import AgentTaskRepository
+        repo = AgentTaskRepository()
+        with self._engine().begin() as conn:
+            self._user(conn, user_id, lock=True)
+            agent = self._existing(conn, user_id)
+            if not agent or (agent['configuracion'] or {}).get('_deleted_at'):
+                bad('Primero creá el agente.', 409)
+            task_table = SA_Table('agente_tareas', SA_MetaData(), autoload_with=conn, resolve_fks=False)
+            existing = conn.execute(select(task_table).where(task_table.c.agente_id == agent['id']).with_for_update()).mappings().all()
+            for task in existing:
+                params = task['parametros'] or {}
+                if not params.get('_deleted_at') and params.get('identity_hash') == digest:
+                    return {'id': task['id'], 'agent_id': agent['id'], 'duplicate': True}
+            engine_table = SA_Table('ae_agents', SA_MetaData(), autoload_with=conn, resolve_fks=False)
+            engines = conn.execute(select(engine_table).where(engine_table.c.legacy_agent_id == agent['id'],
+                                      engine_table.c.owner_id == user_id).with_for_update()).mappings().all()
+            if len(engines) > 1:
+                bad('Hay más de un vínculo con Agent Engine.', 409)
+            engine_id = engines[0]['id'] if engines else None
+            params = {'schema_version': 2, 'scope_ids': config['scopes'],
+                      'category_ids': config['categories'], 'identity_hash': digest,
+                      'query_context': context, 'country': config['country'],
+                      'city': config['city'], 'language': config['language'],
+                      'schedule': {'frequency': config['frequency'], 'days': config['days'],
+                                   'time': config['time'], 'timezone': config['timezone']}}
+            values = {'agente_id': agent['id'], 'tipo': kind,
+                      'nombre': context['prompt'][:150], 'habilitada': False,
+                      'parametros': params, 'creado_en': now, 'actualizado_en': now}
+            if 'ae_agent_id' in task_table.c:
+                values['ae_agent_id'] = engine_id
+            task_id = conn.execute(insert(task_table).values(**values)).inserted_primary_key[0]
+            # Never fabricate a remote executable schedule. It needs a verified request
+            # snapshot and tool grants; keep this task paused until provisioned explicitly.
+            return {'id': task_id, 'agent_id': agent['id'], 'duplicate': False,
+                    'schedule_pending': True}
 
     def activate(self,user_id,expected_revision):
         from services.agent_activation import translate, provision

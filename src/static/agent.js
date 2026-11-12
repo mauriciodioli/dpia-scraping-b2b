@@ -163,9 +163,9 @@
  }
  function startQueryContext(context){
   queryContext=context;identity=who();wizard=true;index=2;error='';
-  draft={...defaults(),...(record||{}),version:1,tasks:['products'],query_context:structuredClone(context.query_context),country:context.country,city:context.city,scopes:[context.scope.id],categories:[context.category.id],language:context.language,scopeLabels:[context.scope],categoryLabels:[context.category]};
+  draft={...defaults(),...(record||{}),version:1,tasks:[context.category?.name?.toLowerCase().includes('laboral')||context.prompt?.toLowerCase().includes('empleo')?'jobs':'products'],query_context:structuredClone(context.query_context),country:context.country,city:context.city,scopes:[context.scope.id],categories:[context.category.id],language:context.language,scopeLabels:[context.scope],categoryLabels:[context.category]};
   scopes=structuredClone(catalogAmbitos);categories=structuredClone(catalogCategorias);cities=[context.city];
-  if(record?.engine_binding)queryContext.issue='Ya tenés un agente vinculado. Esta consulta no reemplazará su configuración activa.';
+
   refreshBudgetLimit();renderStep();root.querySelector('h3')?.focus();
  }
  function choice(parent,text,checked,change,translated=true){const label=node('label',undefined,'agent-choice'),check=document.createElement('input');check.type='checkbox';check.checked=checked;check.onchange=()=>change(check.checked);label.append(check,translated?node('span',text):raw('span',text));parent.append(label);}
@@ -217,12 +217,12 @@
   panel.append(node('p','Las búsquedas externas pueden consumir puntos. Guardar esta configuración no descuenta puntos ni reserva saldo.','agent-notice'),node('p','Los avisos se guardan como preferencia; no se solicitará permiso ni se enviarán notificaciones en esta etapa.','agent-notice'));
  }
  function check(step){
-  if(queryContext?.issue)return queryContext.issue;
+
   if(step===0&&!draft.tasks.length)return 'Seleccioná al menos una tarea.';
   if(step===1&&(loading||error||!draft.country||!draft.city||!draft.scopes.length||!draft.categories.length))return 'Elegí ubicación, ámbitos y categorías disponibles.';
   if(step===2&&(!/^\d{2}:\d{2}$/.test(draft.time)||!validZone(draft.timezone)||(draft.frequency!=='daily'&&draft.days.length!==(draft.frequency==='twice'?2:1))))return 'Revisá el horario y los días seleccionados.';
-  if(step===3&&availablePoints===null)return 'No se pudo consultar tu saldo. Reintentá antes de guardar.';
-  if(step===3&&draft.points>availablePoints)return 'El presupuesto supera tus puntos disponibles.';
+  if(step===3&&!(queryContext&&record)&&availablePoints===null)return 'No se pudo consultar tu saldo. Reintentá antes de guardar.';
+  if(step===3&&!(queryContext&&record)&&draft.points>availablePoints)return 'El presupuesto supera tus puntos disponibles.';
   if(step===3&&(!Number.isSafeInteger(draft.points)||draft.points<0||draft.points>1000000))return 'Ingresá un límite de puntos entero y no negativo.';
   return '';
  }
@@ -236,11 +236,13 @@
   if(!valid(value)){error='La configuración guardada no es válida. Revisala antes de guardar.';renderStep();return;}
   const owner=who(),serial=++readSerial;serverBusy=true;error='';renderStep();
   try{
-   const response=await fetch('/api/agente/configuracion',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'configure-agent'},body:JSON.stringify({configuration:value,expected_revision:serverRevision}),signal:AbortSignal.timeout(60000)});
+   const adding=!!(queryContext&&record);
+   const response=await fetch(adding?'/api/agente/tareas':'/api/agente/configuracion',{method:adding?'POST':'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':adding?'create-task':'configure-agent'},body:JSON.stringify(adding?{configuration:value}:{configuration:value,expected_revision:serverRevision}),signal:AbortSignal.timeout(60000)});
    const data=await response.json();
    if(owner!==who()||serial!==readSerial)return;
    if(response.status===401)openAuth();
    if(!response.ok||data.success!==true)throw Error(data.error||'No se confirmó el guardado del agente. Volvé a cargar su configuración.');
+   if(adding){serverBusy=false;queryContext=null;dashboard();refreshPause();return;}
    if(!data.agent||!valid(data.agent.configuration)||!Number.isSafeInteger(data.agent.revision)||data.agent.revision<1||data.agent.state!=='inactive'||data.execution_available!==false)throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
    taskAgentId=data.agent.id;serverState=data.agent.state;record=data.agent.configuration;serverRevision=data.agent.revision;serverReady=true;loadSerial++;controller?.abort();
    agentPoints=null;serverBusy=false;dashboard();refreshPause();
@@ -259,7 +261,7 @@
   feedback(panel);const actions=node('div',undefined,'agent-actions');
   actions.append(button('Cancelar',()=>{loadSerial++;controller?.abort();dashboard();}));
   if(index>0)actions.append(button('Anterior',()=>{index--;error='';renderStep();}));
-  const next=button(index===4?'Guardar sin activar':'Siguiente',()=>{if(index===4){save();return;}const issue=check(index);if(issue){error=issue;renderStep();return;}error='';index++;renderStep();root.querySelector('h3').focus();},'primary');next.disabled=!!queryContext?.issue||(index===1&&loading);actions.append(next);
+  const next=button(index===4?(queryContext&&record?'Agregar tarea a mi agente':'Crear agente'):'Siguiente',()=>{if(index===4){save();return;}const issue=check(index);if(issue){error=issue;renderStep();return;}error='';index++;renderStep();root.querySelector('h3').focus();},'primary');next.disabled=(index===1&&loading);actions.append(next);
   if(index===4)actions.append(executionControl('inactive'));
   if(error&&index===4)actions.append(button('Volver a cargar configuración',open));
   panel.append(actions);if(serverBusy)panel.querySelectorAll('button,input,select').forEach(el=>el.disabled=true);root.append(panel);window.DPIAI18N?.refresh();
@@ -277,7 +279,8 @@
    if(!response.ok||data.success!==true)throw Error(data.error||'No se pudo cargar la configuración del agente.');
    if(data.execution_available!==false)throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
    if(data.agent!==null){
-    if(!data.agent||!valid(data.agent.configuration)||!Number.isSafeInteger(data.agent.revision)||data.agent.revision<1||!['inactive','active'].includes(data.agent.state))throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
+    if(adding){serverBusy=false;queryContext=null;dashboard();refreshPause();return;}
+   if(!data.agent||!valid(data.agent.configuration)||!Number.isSafeInteger(data.agent.revision)||data.agent.revision<1||!['inactive','active'].includes(data.agent.state))throw Error('La respuesta del agente no es válida. Volvé a cargar su configuración.');
     taskAgentId=data.agent.id;serverState=data.agent.state;record=data.agent.configuration;serverRevision=data.agent.revision;
    }
    agentPoints=data.points||null;serverReady=true;
