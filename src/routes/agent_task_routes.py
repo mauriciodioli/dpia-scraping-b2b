@@ -24,7 +24,7 @@ def tasks(agent_id, task_id=None, action=None):
     if request.method != 'GET':
         if request.method == 'DELETE':
             action = 'eliminar'
-        if action not in (('eliminar',) if request.method == 'DELETE' else ('activar', 'pausar', 'renombrar')):
+        if action not in (('eliminar',) if request.method == 'DELETE' else ('activar', 'pausar', 'renombrar', 'programar')):
             return jsonify(success=False, error='Acción no disponible.'), 404
         try:
             origin = request.headers.get('Origin')
@@ -36,6 +36,12 @@ def tasks(agent_id, task_id=None, action=None):
     try:
         service = current_app.extensions.get('agent_task_service') or AgentTaskService()
         command = None
+        if action == 'programar':
+            if not request.is_json or (request.content_length or 0)>4096:
+                return jsonify(success=False,error='Programación inválida.'),400
+            command=request.get_json(silent=True)
+            if not isinstance(command,dict):
+                return jsonify(success=False,error='Programación inválida.'),400
         if action == 'renombrar':
             if not request.is_json or (request.content_length or 0) > 4096:
                 return jsonify(success=False, error='Nombre inválido.'), 400

@@ -85,9 +85,10 @@ def provision(payload):
         bad('No se confirmó la activación del agente. Reintentá; no se creará un duplicado.', 502)
 
 
-def synchronize_task(user_id, agent_id, task_id):
+def synchronize_task(user_id, agent_id, task_id, schedule=None):
     """Use the existing signed provisioning endpoint after the local task commits."""
-    payload=dict(operation='sync_task_schedule',owner_id=user_id,source_agent_id=agent_id,task_id=task_id)
+    payload=dict(operation='sync_task_schedule' if schedule is None else 'update_task_schedule',owner_id=user_id,source_agent_id=agent_id,task_id=task_id)
+    if schedule is not None:payload['schedule']=schedule
     base=current_app.config.get('AGENTS_INTERNAL_URL','').rstrip('/')
     secret=current_app.config.get('PWA_ACTIVATION_SECRET','')
     parsed=urlsplit(base)
@@ -101,7 +102,13 @@ def synchronize_task(user_id, agent_id, task_id):
         response=requests.post(base+PATH,data=raw,headers={'Content-Type':'application/json',
             'X-DPIA-Timestamp':stamp,'X-DPIA-Signature':signature},timeout=(3.05,15),allow_redirects=False)
         data=response.json()
-        if response.status_code!=200:bad('No se confirmó la programación de la tarea. Reintentá.',502)
+        if response.status_code!=200:
+            code=data.get('error',{});code=code.get('code') if isinstance(code,dict) else code
+            message={'revision_conflict':'La programación cambió. Volvé a cargar la tarea.',
+                'execution_time_in_past':'Elegí una fecha y hora futuras.',
+                'task_paused':'Activá la tarea antes de habilitar su programación.',
+                'invalid_contract':'Revisá la fecha, hora, frecuencia y días seleccionados.'}.get(code,'No se confirmó la programación de la tarea. Reintentá.')
+            bad(message,response.status_code if response.status_code in (400,409,422) else 502)
         if (data['api_version']!='agents.v1' or type(data['owner_id']) is not int or data['owner_id']!=user_id
                 or type(data['source_agent_id']) is not int or data['source_agent_id']!=agent_id
                 or type(data['task_id']) is not int or data['task_id']!=task_id or data['execution_enabled'] is not False

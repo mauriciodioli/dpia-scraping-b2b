@@ -353,7 +353,7 @@
     if(!data.tasks.length)body.append(node('p','No hay tareas configuradas.'));
     const date=value=>value?new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{dateStyle:'short',timeStyle:'short'}).format(new Date(value+'Z')):tr('Sin datos');
     const types={PRODUCTOS_NUEVOS:'products',PRECIOS:'prices',PROVEEDORES:'suppliers',OPORTUNIDADES_LOCALES:'local',EMPLEOS:'jobs',TENDENCIAS:'trends'};
-    const frequencies={DIARIA:'Diario',DAILY:'Diario',SEMANAL:'Semanal',WEEKLY:'Semanal',DOS_POR_SEMANA:'Dos veces por semana'};
+    const frequencies={DIARIA:'Diario',DAILY:'Diario',SEMANAL:'Semanal',WEEKLY:'Semanal',ONCE:'Una vez',DOS_POR_SEMANA:'Dos veces por semana'};
     for(const task of tasks){
      const card=node('article',undefined,'agent-task-card');
      const title=raw('h4',task.name||tr(TASKS[types[task.type]]||task.type)),titleRow=node('div',undefined,'agent-task-title');
@@ -386,10 +386,40 @@
      });
      pencil.setAttribute('aria-label',tr('Cambiar nombre de la tarea'));pencil.title=tr('Cambiar nombre de la tarea');
      titleRow.append(title,pencil);card.append(titleRow,node('p',TASKS[types[task.type]]||task.type),statusBadge(task.state));
+     const editSchedule=()=>{
+      if(editing||busy)return;
+      if(task.schedules.length>1){window.alert(tr('Hay más de una programación vinculada.'));return;}
+      editing=true;
+      const timing=task.schedules[0]||{},form=node('form',undefined,'agent-task-name-editor'),error=node('p');error.setAttribute('role','alert');
+      const input=(label,type,value)=>{const wrap=node('label'),el=document.createElement(type==='select'?'select':'input');wrap.append(node('span',label));if(type!=='select')el.type=type;el.value=value||'';el.setAttribute('aria-label',tr(label));wrap.append(el);form.append(wrap);return el;};
+      const frequency=input('Frecuencia','select','');
+      for(const [value,label] of [['ONCE','Una vez'],['DAILY','Diario'],['WEEKLY','Semanal']]){const option=node('option',label);option.value=value;frequency.append(option);}frequency.value=timing.frequency||'DAILY';
+      const date=input('Fecha de ejecución','date',timing.execution_date),days=input('Días de la semana (1=lunes, 7=domingo)','text',(timing.days||[1]).join(',')),time=input('Horario','time',timing.time||'09:00'),zone=input('Zona horaria','text',timing.timezone||'Europe/Rome');
+      time.required=true;zone.required=true;
+      const visibility=()=>{date.parentElement.hidden=frequency.value!=='ONCE';date.required=frequency.value==='ONCE';days.parentElement.hidden=frequency.value!=='WEEKLY';};frequency.onchange=visibility;visibility();
+      const save=node('button','Guardar programación');save.type='submit';
+      const cancel=button('Cancelar',()=>{editing=false;form.remove();});
+      form.append(node('p','Para una fecha concreta, seleccioná Una vez. La hora se interpreta en la zona horaria indicada.'),error,save,cancel);card.append(form);frequency.focus();
+      form.onsubmit=async event=>{event.preventDefault();if(save.disabled)return;save.disabled=true;cancel.disabled=true;
+       const command={enabled:timing.enabled??task.state==='active',expected_revision:timing.revision||0,frequency:frequency.value,
+        weekdays:frequency.value==='DAILY'?[1,2,3,4,5,6,7]:frequency.value==='WEEKLY'?days.value.split(',').map(v=>Number(v.trim())):[],
+        execution_time:time.value,delivery_time:timing.delivery_time||time.value,timezone:zone.value.trim(),dst_policy:'REJECT_AMBIGUOUS_OR_NONEXISTENT'};
+       if(frequency.value==='ONCE')command.execution_date=date.value;
+       try{const response=await fetch('/api/agentes/'+agentId+'/tareas/'+task.id+'/programar',{method:'PATCH',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'manage-task'},body:JSON.stringify(command),signal:AbortSignal.timeout(20000)});
+        const data=await response.json();if(!current())return;
+        if(!response.ok||data.success!==true)throw Error(data.error||tr('No se guardó la programación. Reintentá.'));
+        editing=false;lastTasks=null;await load();
+       }catch(e){if(current())error.textContent=e.message;}finally{save.disabled=false;cancel.disabled=false;}
+      };
+     };
      const dl=document.createElement('dl');
      for(const timing of task.schedules){
       const rows=[['Frecuencia',tr(frequencies[timing.frequency]||timing.frequency||'Sin datos')],['Días',(timing.days||[]).map(day=>weekday(day%7)).join(', ')||tr('Sin datos')],['Horario',timing.time||tr('Sin datos')],['Zona horaria',timing.timezone||tr('Sin datos')],['Próxima ejecución',date(timing.next_run_at)]];
-      for(const [label,value] of rows)dl.append(node('dt',label),raw('dd',value));
+      if(timing.frequency==='ONCE')rows.splice(1,0,['Fecha de ejecución',timing.execution_date||tr('Sin datos')]);
+      for(const [label,value] of rows){const dd=raw('dd',value);
+       if(['Frecuencia','Fecha de ejecución','Próxima ejecución'].includes(label)){const pencil=button('✎',editSchedule);pencil.setAttribute('aria-label',tr('Editar programación de la tarea')+' — '+tr(label));dd.append(pencil);}
+       dl.append(node('dt',label),dd);
+      }
      }
      dl.append(node('dt','Última ejecución'),raw('dd',date(task.last_run_at)));
      if(task.points_consumed!==null)dl.append(node('dt','Puntos consumidos'),raw('dd',String(task.points_consumed)));

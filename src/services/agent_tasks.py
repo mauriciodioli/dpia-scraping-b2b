@@ -19,11 +19,12 @@ def next_run(schedule, now):
     try:
         zone = ZoneInfo(schedule['timezone'])
         clock = time.fromisoformat(definition['execution_time'])
-        if definition['frequency'] not in ('DAILY', 'WEEKLY'):
+        if definition['frequency'] not in ('ONCE', 'DAILY', 'WEEKLY'):
             raise ValueError()
         local = now.replace(tzinfo=timezone.utc).astimezone(zone)
         for offset in range(371):
-            day = local.date() + timedelta(days=offset)
+            day = datetime.fromisoformat(definition['execution_date']).date() if definition['frequency']=='ONCE' else local.date() + timedelta(days=offset)
+            if definition['frequency']=='ONCE' and offset:break
             if definition['frequency'] == 'WEEKLY' and day.isoweekday() not in definition['weekdays']:
                 continue
             local_time = datetime.combine(day, clock)
@@ -49,6 +50,14 @@ class AgentTaskService:
 
     def handle(self, owner, agent_id, task_id=None, action=None, command=None):
         repo = self.repository
+        if action == 'programar':
+            # Release B2B locks before the signed Agents call; Agents owns schedule validation/persistence.
+            with repo.transaction(owner,agent_id) as (conn,tables,agent):
+                selected=next((t for t in repo.tasks(conn,tables,agent_id) if t['id']==task_id),None)
+                if selected is None or deleted(selected):bad('Tarea no disponible.',404)
+            from services.agent_activation import synchronize_task
+            synchronize_task(owner,agent_id,task_id,schedule=command)
+            return self.handle(owner,agent_id)
         if action=='activar':
             with repo.transaction(owner,agent_id) as (conn,tables,agent):
                 tasks=repo.tasks(conn,tables,agent_id)
@@ -125,7 +134,7 @@ class AgentTaskService:
                 timing = []
                 for s in linked:
                     definition = s['definition'] or {}
-                    timing.append(dict(frequency=definition.get('frequency'), days=list(range(1, 8)) if definition.get('frequency') == 'DAILY' else definition.get('weekdays'),
+                    timing.append(dict(revision=s['revision'],enabled=bool(s['enabled']),execution_date=definition.get('execution_date'),delivery_time=definition.get('delivery_time'),frequency=definition.get('frequency'), days=list(range(1, 8)) if definition.get('frequency') == 'DAILY' else definition.get('weekdays'),
                                        time=definition.get('execution_time'), timezone=s['timezone'],
                                        next_run_at=iso(s['next_run_at']) if s['enabled'] and task['habilitada'] else None))
                 saved=(task['parametros'] or {}).get('schedule')
