@@ -673,3 +673,6 @@ html[data-theme="dark"] .agent-field input,html[data-theme="dark"] .agent-field 
 
 .agent-schedule-dialog .agent-feedback{color:#cf465b}.agent-schedule-dialog .agent-actions{position:sticky;bottom:0;padding:12px 0 0;background:#f8f6ff}html[data-theme="dark"] .agent-schedule-dialog .agent-actions{background:#211735}
 @media(max-width:520px){.agent-schedule-dialog form{gap:12px}.agent-schedule-dialog .agent-choices{gap:6px}.agent-schedule-dialog .agent-choice{min-height:40px;padding:8px}.agent-schedule-dialog .agent-fields{gap:10px}}
+
+.agent-owner-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.agent-owner-actions>.agent-delete{margin-inline-start:auto;border:1px solid #cf465b70;color:#b83248;background:transparent}html[data-theme="dark"] .agent-owner-actions>.agent-delete{color:#ff9bac;border-color:#ff9bac60}.agent-owner-actions>.agent-delete:hover{background:#cf465b18}
+@media(max-width:520px){.agent-owner-actions>.primary{width:auto}.agent-owner-actions>.agent-delete{margin-inline-start:auto}}

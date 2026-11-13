@@ -78,8 +78,8 @@
    panel.append(button('＋ Crear tarea',()=>window.DPIACrearTarea?.open(),'primary'));
     panel.append(taskPanel());
    if(record){
-   const actions=node('div',undefined,'agent-actions');if(serverState==='inactive')actions.append(button('Editar configuración',()=>start()));
-   actions.append(executionControl(serverState));const remove=button('Eliminar agente',deleteAgent,'agent-delete');remove.disabled=serverBusy||!!record.engine_binding&&!pauseReady;actions.append(remove);if(record.engine_binding)actions.append(button('Actualizar estado',()=>refreshPause()));panel.append(actions);
+   const actions=node('div',undefined,'agent-actions agent-owner-actions');if(serverState==='inactive')actions.append(button('Editar configuración',()=>start()));
+   actions.append(executionControl(serverState));const remove=button('Eliminar agente',deleteAgent,'action-button agent-delete');remove.disabled=serverBusy||!!record.engine_binding&&!pauseReady;if(record.engine_binding)actions.append(button('Actualizar estado',()=>refreshPause()));actions.append(remove);panel.append(actions);
    }
   }
   if(!who())panel.append(engineNotice(),storageNotice());feedback(panel);root.append(panel);window.DPIAI18N?.refresh();
@@ -355,6 +355,7 @@
     const types={PRODUCTOS_NUEVOS:'products',PRECIOS:'prices',PROVEEDORES:'suppliers',OPORTUNIDADES_LOCALES:'local',EMPLEOS:'jobs',TENDENCIAS:'trends'};
     const frequencies={DIARIA:'Diario',DAILY:'Diario',SEMANAL:'Semanal',WEEKLY:'Semanal',ONCE:'Una vez',DOS_POR_SEMANA:'Dos veces por semana'};
     for(const task of tasks){
+     const pausedByAgent=task.paused_by_agent||['paused','admin_paused','disabled'].includes(serverState),configuredState=task.configured_state||task.state;
      const card=node('article',undefined,'agent-task-card');
      const title=raw('h4',task.name||tr(TASKS[types[task.type]]||task.type)),titleRow=node('div',undefined,'agent-task-title');
      const pencil=button('✎',()=>{
@@ -385,7 +386,8 @@
       editor.append(input,counter,done,error);titleRow.hidden=true;titleRow.after(editor);input.focus();input.select();
      });
      pencil.setAttribute('aria-label',tr('Cambiar nombre de la tarea'));pencil.title=tr('Cambiar nombre de la tarea');
-     titleRow.append(title,pencil);card.append(titleRow,node('p',TASKS[types[task.type]]||task.type),statusBadge(task.state));
+     titleRow.append(title,pencil);card.append(titleRow,node('p',TASKS[types[task.type]]||task.type),statusBadge(pausedByAgent?'paused':task.state));
+     if(pausedByAgent&&configuredState==='active')card.append(node('p','Se reanudará cuando actives el agente.','agent-notice'));
      const editSchedule=()=>{
       if(editing||busy)return;
       if(task.schedules.length>1){window.alert(tr('Hay más de una programación vinculada.'));return;}
@@ -408,7 +410,7 @@
       const actions=node('div',undefined,'agent-actions');actions.append(cancel,save);
       form.append(node('p','Para una fecha concreta, seleccioná Una vez. La hora se interpreta en la zona horaria indicada.','agent-notice'),error,actions);document.body.append(dialog);dialog.showModal();frequency.focus();
       form.onsubmit=async event=>{event.preventDefault();if(save.disabled)return;error.textContent='';if(frequency.value==='WEEKLY'&&!checks.some(check=>check.checked)){error.textContent=tr('Seleccioná al menos un día.');checks[0].focus();return;}save.disabled=true;cancel.disabled=true;
-       const command={enabled:timing.enabled??task.state==='active',expected_revision:timing.revision||0,frequency:frequency.value,
+       const command={enabled:timing.enabled??configuredState==='active',expected_revision:timing.revision||0,frequency:frequency.value,
         weekdays:frequency.value==='DAILY'?[1,2,3,4,5,6,7]:frequency.value==='WEEKLY'?checks.filter(check=>check.checked).map(check=>Number(check.value)):[],
         execution_time:time.value,delivery_time:timing.delivery_time||time.value,timezone:zone.value.trim(),dst_policy:'REJECT_AMBIGUOUS_OR_NONEXISTENT'};
        if(frequency.value==='ONCE')command.execution_date=date.value;
@@ -421,7 +423,7 @@
      };
      const dl=document.createElement('dl');
      for(const timing of task.schedules){
-      const rows=[['Frecuencia',tr(frequencies[timing.frequency]||timing.frequency||'Sin datos')],['Días',(timing.days||[]).map(day=>weekday(day%7)).join(', ')||tr('Sin datos')],['Horario',timing.time||tr('Sin datos')],['Zona horaria',timing.timezone||tr('Sin datos')],['Próxima ejecución',date(timing.next_run_at)]];
+      const rows=[['Frecuencia',tr(frequencies[timing.frequency]||timing.frequency||'Sin datos')],['Días',(timing.days||[]).map(day=>weekday(day%7)).join(', ')||tr('Sin datos')],['Horario',timing.time||tr('Sin datos')],['Zona horaria',timing.timezone||tr('Sin datos')],['Próxima ejecución',date(pausedByAgent?null:timing.next_run_at)]];
       if(timing.frequency==='ONCE')rows.splice(1,0,['Fecha de ejecución',timing.execution_date||tr('Sin datos')]);
       for(const [label,value] of rows){const dd=raw('dd',value);
        if(label==='Frecuencia'){const pencil=button('✎',editSchedule);pencil.setAttribute('aria-label',tr('Editar programación de la tarea'));pencil.dataset.editSchedule='';dd.append(pencil);}
@@ -433,7 +435,7 @@
      const actions=node('div',undefined,'agent-actions');
      for(const [action,label] of [['activar','Activar'],['pausar','Pausar'],['eliminar','Eliminar']]){
       const control=button(label,()=>{if(action==='eliminar'&&!window.confirm(tr('¿Eliminar esta tarea? Se conservará el historial.')))return;load(task.id,action);});
-      control.disabled=action==='activar'&&task.state==='active'||action==='pausar'&&task.state==='paused';actions.append(control);
+      control.disabled=action==='activar'&&(pausedByAgent||configuredState==='active')||action==='pausar'&&configuredState==='paused';actions.append(control);
      }
      card.append(dl,actions);body.append(card);
     }

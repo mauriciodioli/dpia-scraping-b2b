@@ -46,6 +46,20 @@ class AgentTaskRepository:
                             a.c.owner_id == owner).with_for_update()).mappings().all()
 
     @staticmethod
+    def paused(conn, engine):
+        if not engine:
+            return False
+        if engine.get('configuration_state') == 'DISABLED':
+            return True
+        if not inspect(conn).has_table('ae_agent_events'):
+            return False
+        events = Table('ae_agent_events', MetaData(), autoload_with=conn, resolve_fks=False)
+        flags = conn.execute(select(events.c.details).where(
+            events.c.owner_id == engine['owner_id'], events.c.agent_id == engine['id'],
+            events.c.action == 'AGENT_PAUSE_CHANGED').order_by(events.c.revision.desc()).limit(1)).scalar()
+        return bool(flags and (flags.get('user_paused') or flags.get('admin_paused')))
+
+    @staticmethod
     def schedules(conn, tables, owner, engine_id):
         s = tables['ae_schedules']
         return conn.execute(select(s).where(s.c.owner_id == owner, s.c.agent_id == engine_id)

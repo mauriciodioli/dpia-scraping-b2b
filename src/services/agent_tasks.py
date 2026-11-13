@@ -76,6 +76,7 @@ class AgentTaskService:
             if len(engines) > 1:
                 bad('El vínculo de las tareas requiere revisión.', 409)
             engine = engines[0] if engines else None
+            agent_paused = repo.paused(conn, engine)
             schedules = repo.schedules(conn, tables, owner, engine['id']) if engine else []
             for task in tasks:
                 if task.get('ae_agent_id') and (not engine or task['ae_agent_id'] != engine['id']):
@@ -136,7 +137,7 @@ class AgentTaskService:
                     definition = s['definition'] or {}
                     timing.append(dict(revision=s['revision'],enabled=bool(s['enabled']),execution_date=definition.get('execution_date'),delivery_time=definition.get('delivery_time'),frequency=definition.get('frequency'), days=list(range(1, 8)) if definition.get('frequency') == 'DAILY' else definition.get('weekdays'),
                                        time=definition.get('execution_time'), timezone=s['timezone'],
-                                       next_run_at=iso(s['next_run_at']) if s['enabled'] and task['habilitada'] else None))
+                                       next_run_at=iso(s['next_run_at']) if s['enabled'] and task['habilitada'] and not agent_paused else None))
                 saved=(task['parametros'] or {}).get('schedule')
                 if not timing and saved:
                     timing=[dict(frequency='DAILY' if saved['frequency']=='daily' else 'WEEKLY',
@@ -145,9 +146,11 @@ class AgentTaskService:
                 if not timing:
                     timing = [dict(frequency=s['frecuencia'], days=s['dias_semana'], time=iso(s['hora_local']),
                                    timezone=s['zona_horaria'], next_run_at=None) for s in legacy]
+                configured_active=bool(task['habilitada'] and (not engine or any(s['enabled'] for s in linked)))
                 result.append(dict(id=task['id'], name=task['nombre'], type=task['tipo'],
                                    revision=(task['parametros'] or {}).get('_configuration_revision', 1),
                                    created_at=iso(task.get('creado_en')),
-                                   state='active' if task['habilitada'] and (not engine or any(s['enabled'] for s in linked)) else 'paused', schedules=timing,
+                                   state='active' if configured_active and not agent_paused else 'paused',
+                                   configured_state='active' if configured_active else 'paused', paused_by_agent=agent_paused, schedules=timing,
                                    last_run_at=iso(max(filter(None, [task['ultima_ejecucion_en'], last_runs.get(task['id'])]), default=None)), points_consumed=float(consumption[task['id']]) if consumption.get(task['id']) is not None else None))
             return sorted(result, key=lambda task: (task['state']=='active', task['created_at'] or '', task['id']), reverse=True)
