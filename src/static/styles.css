@@ -749,3 +749,5 @@ html[data-theme="dark"] #agentPage .agent-task-list{--tc-card:#241a5e;--tc-pause
 @media(max-width:420px){#agentPage .agent-task-highlights{grid-template-columns:1fr}}
 
 .agent-result-card .agent-result-excerpt{font-size:13px;opacity:.85}
+
+.agent-task-run-history{grid-column:1/-1;border:1px solid #a58ac545;border-radius:12px;padding:12px;margin-top:10px}.agent-task-run-history>summary{cursor:pointer;font-weight:600}.agent-task-run{padding:14px 0;border-bottom:1px solid #a58ac530}.agent-task-run:last-child{border:0}.agent-task-run p,.agent-task-run li{font-size:13px;line-height:1.6;overflow-wrap:anywhere}.agent-task-run-error{color:#c24450}html[data-theme="dark"] .agent-task-run-error{color:#ff9bac}.agent-task-run details{font-size:12px;opacity:.85}

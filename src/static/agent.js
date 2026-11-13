@@ -465,6 +465,24 @@
      else if(pausedByAgent||configuredState==='paused')nextBox.append(node('small','Activala para programarla'));
      lastBox.append(node('span','Última ejecución'),node('strong',last||'Aún no se ejecutó'));
      info.append(nextBox,lastBox);
+     const runs=task.execution_history||[];
+     if(runs.length){
+      const states={SCHEDULED:'Programada',QUEUED:'En espera',RUNNING:'En ejecución',REVIEWING:'Revisión automática',APPROVED:'Revisada',READY_FOR_DELIVERY:'Pendiente de entrega',DELIVERED:'Entregada',FAILED:'Fallida',CANCELLED:'Cancelada',CORRECTION_REQUIRED:'En corrección'};
+      const reasons={TASK_ATTEMPT_BUDGET_EXCEEDED:'Se alcanzó el límite de intentos antes de completar todos los pasos.',TASK_ATTEMPTS_EXHAUSTED:'Se agotaron los reintentos.',HANDLER_FAILED:'Falló un paso de ejecución. El registro anterior no conserva la causa exacta.',analysis_input_limit:'Los datos recibidos superaron el tamaño permitido para el análisis.',provider_timeout:'El proveedor no respondió a tiempo.',provider_deadline_insufficient:'No quedó tiempo suficiente para llamar al proveedor.',output_token_budget_exceeded:'No quedó presupuesto de salida suficiente para el análisis.'};
+      lastBox.append(node('small',states[runs[0].state]||runs[0].state));
+      const history=node('details',undefined,'agent-task-run-history');history.append(node('summary','Ver últimas ejecuciones'));
+      for(const run of runs){const entry=node('article',undefined,'agent-task-run');entry.append(raw('strong',(displayDate(run.started_at||run.created_at)||tr('Sin fecha'))+' · '+tr(states[run.state]||run.state)));
+       if(run.state==='FAILED'){entry.append(node('p','La ejecución falló y no se entregó una respuesta final.','agent-task-run-error'));if((run.steps||[]).some(step=>step.state==='COMPLETED'))entry.append(node('p','Hubo pasos completados antes del fallo.'));}
+       if(run.reason_code)entry.append(node('p',reasons[run.reason_code]||'No se pudo completar la ejecución.'));
+       const steps=node('ul');
+       for(const step of run.steps||[]){const label=step.tool==='openai.analysis'?'Análisis con OpenAI':step.tool.startsWith('mcp.')?'Búsqueda de información':step.tool==='dpia.amazon.search'?'Búsqueda de productos':'Paso de herramienta';
+        const state=step.state==='COMPLETED'?'Completado':step.state==='FAILED'?'Fallido':step.state==='RUNNING'?'En ejecución':'No completado';const row=node('li');row.append(raw('strong',tr(label)+' · '+tr(state)));
+        if(step.reason_code){row.append(node('p',reasons[step.reason_code]||'El paso no se completó.'));if(!step.submitted)row.append(node('p','No se confirmó el envío de esta solicitud al proveedor.'));}steps.append(row);
+       }entry.append(steps);
+       const technical=node('details');technical.append(node('summary','Detalle técnico'));technical.append(raw('p','ID: '+run.id));if(run.reason_code)technical.append(raw('p','Código: '+run.reason_code));for(const step of run.steps||[])if(step.reason_code)technical.append(raw('p',step.tool+': '+step.reason_code));entry.append(technical);history.append(entry);
+      }info.append(history);
+     }
+
      if(task.points_consumed!==null)info.append(node('p','Puntos consumidos: '+String(task.points_consumed),'agent-task-points'));
      const actions=node('div',undefined,'agent-task-controls');
      const toggle=button('',()=>load(task.id,configuredState==='active'?'pausar':'activar'),'agent-task-toggle');

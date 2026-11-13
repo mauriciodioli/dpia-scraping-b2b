@@ -95,3 +95,36 @@ class AgentTaskRepository:
         return dict(conn.execute(select(jobs.c.legacy_task_id, func.max(jobs.c.started_at))
                     .where(jobs.c.owner_id == owner, jobs.c.agent_id == engine_id,
                            jobs.c.legacy_task_id.in_(task_ids)).group_by(jobs.c.legacy_task_id)).all())
+
+    @staticmethod
+    def execution_history(conn, owner, engine_id, task_ids):
+        if not engine_id or not task_ids or not inspect(conn).has_table('ae_jobs'):
+            return {}
+        jobs=Table('ae_jobs',MetaData(),autoload_with=conn,resolve_fks=False)
+        columns=('id','legacy_task_id','state','error_code','created_at','started_at','finished_at')
+        if not set(columns).issubset(jobs.c.keys()):return {}
+        rows=conn.execute(select(*(jobs.c[key] for key in columns)).where(
+            jobs.c.owner_id==owner,jobs.c.agent_id==engine_id,jobs.c.legacy_task_id.in_(task_ids))
+            .order_by(jobs.c.created_at.desc(),jobs.c.id.desc()).limit(100)).mappings().all()
+        history={};runs={}
+        for row in rows:
+            items=history.setdefault(row['legacy_task_id'],[])
+            if len(items)>=5:continue
+            run={key:row[key].isoformat() if row[key] is not None else None for key in ('created_at','started_at','finished_at')}
+            run.update(id=row['id'],state=row['state'],reason_code=row['error_code'],steps=[])
+            items.append(run);runs[row['id']]=run
+        if runs and inspect(conn).has_table('ae_tasks'):
+            tasks=Table('ae_tasks',MetaData(),autoload_with=conn,resolve_fks=False)
+            steps=conn.execute(select(tasks.c.id,tasks.c.job_id,tasks.c.tool_id,tasks.c.state,tasks.c.provider_submission_state)
+                .where(tasks.c.owner_id==owner,tasks.c.job_id.in_(runs)).order_by(tasks.c.position).limit(1000)).mappings().all()
+            errors={}
+            if steps and inspect(conn).has_table('ae_attempts'):
+                attempts=Table('ae_attempts',MetaData(),autoload_with=conn,resolve_fks=False)
+                for row in conn.execute(select(attempts.c.task_id,attempts.c.error_code).where(
+                    attempts.c.owner_id==owner,attempts.c.task_id.in_([s['id'] for s in steps]),attempts.c.error_code.is_not(None))
+                    .order_by(attempts.c.number.desc()).limit(1000)).mappings():
+                    errors.setdefault(row['task_id'],row['error_code'])
+            for step in steps:
+                runs[step['job_id']]['steps'].append(dict(tool=step['tool_id'],state=step['state'],
+                    submitted=step['provider_submission_state']!='NOT_SUBMITTED',reason_code=errors.get(step['id'])))
+        return history

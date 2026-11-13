@@ -127,6 +127,7 @@ class AgentTaskService:
                     schedules = repo.schedules(conn, tables, owner, engine['id']) if engine else []
             consumption = repo.consumed(conn, [t['id'] for t in tasks])
             last_runs = repo.last_runs(conn, owner, engine['id'] if engine else None, [t['id'] for t in tasks])
+            history = repo.execution_history(conn,owner,engine['id'] if engine else None,[t['id'] for t in tasks])
             result = []
             for task in tasks:
                 if deleted(task):
@@ -149,7 +150,7 @@ class AgentTaskService:
                 configured_active=bool(task['habilitada'] and (not engine or any(s['enabled'] for s in linked)))
                 result.append(dict(id=task['id'], name=task['nombre'], type=task['tipo'],
                                    revision=(task['parametros'] or {}).get('_configuration_revision', 1),
-                                   created_at=iso(task.get('creado_en')),
+                                   created_at=iso(task.get('creado_en')), execution_history=history.get(task['id'],[]),
                                    state='active' if configured_active and not agent_paused else 'paused',
                                    configured_state='active' if configured_active else 'paused', paused_by_agent=agent_paused, schedules=timing,
                                    last_run_at=iso(max(filter(None, [task['ultima_ejecucion_en'], last_runs.get(task['id'])]), default=None)), points_consumed=float(consumption[task['id']]) if consumption.get(task['id']) is not None else None))
