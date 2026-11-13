@@ -390,25 +390,32 @@
       if(editing||busy)return;
       if(task.schedules.length>1){window.alert(tr('Hay más de una programación vinculada.'));return;}
       editing=true;
-      const timing=task.schedules[0]||{},form=node('form',undefined,'agent-task-name-editor'),error=node('p');error.setAttribute('role','alert');
-      const input=(label,type,value)=>{const wrap=node('label'),el=document.createElement(type==='select'?'select':'input');wrap.append(node('span',label));if(type!=='select')el.type=type;el.value=value||'';el.setAttribute('aria-label',tr(label));wrap.append(el);form.append(wrap);return el;};
+      const timing=task.schedules[0]||{},dialog=node('dialog',undefined,'auth-dialog agent-schedule-dialog'),form=node('form'),grid=node('div',undefined,'agent-fields'),error=node('p',undefined,'agent-feedback');error.setAttribute('role','alert');
+      dialog.setAttribute('aria-label',tr('Editar programación'));dialog.append(node('h2','Editar programación'),raw('p',task.name),form);form.append(grid);
+      dialog.addEventListener('cancel',event=>{if(save.disabled)event.preventDefault();});
+      dialog.addEventListener('close',()=>{editing=false;dialog.remove();if(current())card.querySelector('[data-edit-schedule]')?.focus();});
+      const input=(label,type,value)=>{const wrap=node('label',undefined,'agent-field'),el=document.createElement(type==='select'?'select':'input');wrap.append(node('span',label));if(type!=='select')el.type=type;el.value=value||'';el.setAttribute('aria-label',tr(label));wrap.append(el);grid.append(wrap);return el;};
       const frequency=input('Frecuencia','select','');
       for(const [value,label] of [['ONCE','Una vez'],['DAILY','Diario'],['WEEKLY','Semanal']]){const option=node('option',label);option.value=value;frequency.append(option);}frequency.value=timing.frequency||'DAILY';
-      const date=input('Fecha de ejecución','date',timing.execution_date),days=input('Días de la semana (1=lunes, 7=domingo)','text',(timing.days||[1]).join(',')),time=input('Horario','time',timing.time||'09:00'),zone=input('Zona horaria','text',timing.timezone||'Europe/Rome');
+      const date=input('Fecha de ejecución','date',timing.execution_date),time=input('Horario','time',timing.time||'09:00'),zone=input('Zona horaria','text',timing.timezone||'Europe/Rome');
+      const days=node('fieldset',undefined,'agent-schedule-days'),choices=node('div',undefined,'agent-choices'),checks=[];
+      days.append(node('legend','Días de la semana'),choices);form.append(days);
+      for(let day=1;day<=7;day++){const label=node('label',undefined,'agent-choice'),check=document.createElement('input');check.type='checkbox';check.onchange=()=>{error.textContent='';};check.value=day;check.checked=(timing.days||[1]).includes(day);label.append(check,raw('span',weekday(day%7)));choices.append(label);checks.push(check);}
       time.required=true;zone.required=true;
-      const visibility=()=>{date.parentElement.hidden=frequency.value!=='ONCE';date.required=frequency.value==='ONCE';days.parentElement.hidden=frequency.value!=='WEEKLY';};frequency.onchange=visibility;visibility();
-      const save=node('button','Guardar programación');save.type='submit';
-      const cancel=button('Cancelar',()=>{editing=false;form.remove();});
-      form.append(node('p','Para una fecha concreta, seleccioná Una vez. La hora se interpreta en la zona horaria indicada.'),error,save,cancel);card.append(form);frequency.focus();
-      form.onsubmit=async event=>{event.preventDefault();if(save.disabled)return;save.disabled=true;cancel.disabled=true;
+      const visibility=()=>{date.parentElement.hidden=frequency.value!=='ONCE';date.required=frequency.value==='ONCE';days.hidden=frequency.value!=='WEEKLY';};frequency.onchange=visibility;visibility();
+      const save=node('button','Guardar programación','primary');save.type='submit';
+      const cancel=button('Cancelar',()=>dialog.close());
+      const actions=node('div',undefined,'agent-actions');actions.append(cancel,save);
+      form.append(node('p','Para una fecha concreta, seleccioná Una vez. La hora se interpreta en la zona horaria indicada.','agent-notice'),error,actions);document.body.append(dialog);dialog.showModal();frequency.focus();
+      form.onsubmit=async event=>{event.preventDefault();if(save.disabled)return;error.textContent='';if(frequency.value==='WEEKLY'&&!checks.some(check=>check.checked)){error.textContent=tr('Seleccioná al menos un día.');checks[0].focus();return;}save.disabled=true;cancel.disabled=true;
        const command={enabled:timing.enabled??task.state==='active',expected_revision:timing.revision||0,frequency:frequency.value,
-        weekdays:frequency.value==='DAILY'?[1,2,3,4,5,6,7]:frequency.value==='WEEKLY'?days.value.split(',').map(v=>Number(v.trim())):[],
+        weekdays:frequency.value==='DAILY'?[1,2,3,4,5,6,7]:frequency.value==='WEEKLY'?checks.filter(check=>check.checked).map(check=>Number(check.value)):[],
         execution_time:time.value,delivery_time:timing.delivery_time||time.value,timezone:zone.value.trim(),dst_policy:'REJECT_AMBIGUOUS_OR_NONEXISTENT'};
        if(frequency.value==='ONCE')command.execution_date=date.value;
        try{const response=await fetch('/api/agentes/'+agentId+'/tareas/'+task.id+'/programar',{method:'PATCH',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'manage-task'},body:JSON.stringify(command),signal:AbortSignal.timeout(20000)});
         const data=await response.json();if(!current())return;
         if(!response.ok||data.success!==true)throw Error(data.error||tr('No se guardó la programación. Reintentá.'));
-        editing=false;lastTasks=null;await load();
+        editing=false;dialog.close();lastTasks=null;await load();
        }catch(e){if(current())error.textContent=e.message;}finally{save.disabled=false;cancel.disabled=false;}
       };
      };
@@ -417,7 +424,7 @@
       const rows=[['Frecuencia',tr(frequencies[timing.frequency]||timing.frequency||'Sin datos')],['Días',(timing.days||[]).map(day=>weekday(day%7)).join(', ')||tr('Sin datos')],['Horario',timing.time||tr('Sin datos')],['Zona horaria',timing.timezone||tr('Sin datos')],['Próxima ejecución',date(timing.next_run_at)]];
       if(timing.frequency==='ONCE')rows.splice(1,0,['Fecha de ejecución',timing.execution_date||tr('Sin datos')]);
       for(const [label,value] of rows){const dd=raw('dd',value);
-       if(['Frecuencia','Fecha de ejecución','Próxima ejecución'].includes(label)){const pencil=button('✎',editSchedule);pencil.setAttribute('aria-label',tr('Editar programación de la tarea')+' — '+tr(label));dd.append(pencil);}
+       if(label==='Frecuencia'){const pencil=button('✎',editSchedule);pencil.setAttribute('aria-label',tr('Editar programación de la tarea'));pencil.dataset.editSchedule='';dd.append(pencil);}
        dl.append(node('dt',label),dd);
       }
      }
