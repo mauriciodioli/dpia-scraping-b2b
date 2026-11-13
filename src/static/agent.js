@@ -69,11 +69,8 @@
    logo.dataset.active=String(['active','running'].includes(serverState));
    symbol.className='dpia-symbol';symbol.src='/static/branding/favicon.png';symbol.alt='';symbol.setAttribute('aria-hidden','true');logo.append(symbol);
    const info=node('div',undefined,'agent-identity-info');info.append(raw('h3',who()),statusBadge(serverState),pointIndicator());header.append(logo,info);panel.append(header);
-   const createCard=node('div',undefined,'agent-create-task-card');
-   createCard.append(node('h3','Crear nueva tarea'),node('p','Elegí tu situación y contale a DPIA qué querés que haga.'));
-   createCard.append(button('＋ Crear tarea',()=>{window.location.href='/crear-tarea';},'primary'));
-   panel.append(createCard);
-   panel.append(taskPanel());
+   panel.append(button('＋ Crear tarea',()=>window.DPIACrearTarea?.open(),'primary'));
+    panel.append(taskPanel());
    const actions=node('div',undefined,'agent-actions');if(serverState==='inactive')actions.append(button('Editar configuración',()=>start()));
    actions.append(executionControl(serverState));const remove=button('Eliminar agente',deleteAgent,'agent-delete');remove.disabled=serverBusy||!!record.engine_binding&&!pauseReady;actions.append(remove);if(record.engine_binding)actions.append(button('Actualizar estado',()=>refreshPause()));panel.append(actions);
   }

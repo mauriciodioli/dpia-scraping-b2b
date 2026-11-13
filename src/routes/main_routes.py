@@ -4,11 +4,6 @@ from flask import Blueprint, render_template
 main_bp = Blueprint("main", __name__)
 
 
-@main_bp.get("/crear-tarea")
-def crear_tarea():
-    return render_template("crear-tarea.html")
-
-
 @main_bp.get("/")
 def index():
     from services.query_sources import ENABLED_EXTERNAL
