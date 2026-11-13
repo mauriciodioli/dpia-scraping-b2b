@@ -389,7 +389,7 @@
      const dl=document.createElement('dl');
      for(const timing of task.schedules){
       const rows=[['Frecuencia',tr(frequencies[timing.frequency]||timing.frequency||'Sin datos')],['Días',(timing.days||[]).map(day=>weekday(day%7)).join(', ')||tr('Sin datos')],['Horario',timing.time||tr('Sin datos')],['Zona horaria',timing.timezone||tr('Sin datos')],['Próxima ejecución',date(timing.next_run_at)]];
-      for(const [label,value] of rows.filter(([label])=>!config.query_context||!['Ámbitos','Categorías'].includes(label)||config.scopes.length))dl.append(node('dt',label),raw('dd',value));
+      for(const [label,value] of rows)dl.append(node('dt',label),raw('dd',value));
      }
      dl.append(node('dt','Última ejecución'),raw('dd',date(task.last_run_at)));
      if(task.points_consumed!==null)dl.append(node('dt','Puntos consumidos'),raw('dd',String(task.points_consumed)));
