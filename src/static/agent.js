@@ -6,6 +6,7 @@
  const FREQUENCIES={daily:'Diario',twice:'Dos veces por semana',weekly:'Semanal'};
  const STATES={unconfigured:'No configurado',inactive:'Configurado e inactivo',active:'Activo',running:'Ejecutando',paused:'Pausado',admin_paused:'Pausado por administrador',disabled:'Deshabilitado',insufficient:'Créditos insuficientes',error:'Error'};
  const STEPS=['Qué monitorear','Dónde y sobre qué','Cuándo','Límites y notificaciones','Confirmación'];
+ let waitingForSession=null;
  let pendingQueryContext=null,queryContext=null,wizard=false,index=0,draft=null,record=null,identity=null,scopes=[],categories=[],cities=[],loading=false,loadSerial=0,controller=null,error='',engineRevision=0,pauseReady=false,pendingPause=null,pendingDelete=null,agentPoints=null,availablePoints=null,budgetReadSerial=0,serverState='inactive',serverRevision=0,serverReady=false,serverBusy=false,readSerial=0;
  function pauseOperationId(){
   if(typeof crypto.randomUUID==='function')return crypto.randomUUID();
@@ -272,6 +273,24 @@
   panel.append(actions);if(serverBusy)panel.querySelectorAll('button,input,select').forEach(el=>el.disabled=true);root.append(panel);window.DPIAI18N?.refresh();
  }
  async function open(){
+  // show() can run before this module or before /auth/me completes on reload.
+  // Coalesce navigation and the identity observer while restoring that session.
+  if(window.DPIAAuthReady){
+   const ready=window.DPIAAuthReady;
+   if(waitingForSession===ready)return;
+   waitingForSession=ready;
+   const status=node('p','Restaurando sesión…','hint');status.setAttribute('role','status');
+   if(!serverBusy)root.replaceChildren(status);
+   try{await ready;}
+   catch(e){
+    if(window.DPIAAuthReady===ready&&!document.getElementById('agentPage').hidden){
+     const message=node('p','No se pudo restaurar la sesión. Reintentá.','agent-feedback');message.setAttribute('role','alert');
+     root.replaceChildren(message,button('Reintentar',()=>{initAuth();open();}));
+    }
+    return;
+   }finally{if(waitingForSession===ready)waitingForSession=null;}
+   if(document.getElementById('agentPage').hidden)return;
+  }
   if(serverBusy&&identity===who())return;
   identity=who();const owner=who(),serial=++readSerial;agentPoints=null;availablePoints=null;budgetReadSerial++;engineRevision=0;pauseReady=false;pendingPause=null;pendingDelete=null;serverState='inactive';record=null;serverRevision=0;serverReady=false;error='';
   loadSerial++;controller?.abort();loading=false;
@@ -380,5 +399,7 @@
  }
  // Future service may reuse these visual state definitions. No state can activate a task here.
  window.DPIAAgent={open,fromQuery,presentationFor:state=>({label:tr(STATES[state]||STATES.error),canEdit:state!=='running',showPause:['active','running'].includes(state),showResume:state==='paused',executionControlsEnabled:false})};
+ // The initial show() may have preceded registration of DPIAAgent.
+ if(!document.getElementById('agentPage').hidden)open();
  if(typeof syncQueryConversation==='function')syncQueryConversation();
 })();
