@@ -63,7 +63,7 @@ def validate_config(data):
         bad('Seleccioná al menos una tarea.')
     if not isinstance(data['country'],str) or data['country'] not in COUNTRIES or not isinstance(data['city'],str) or not 1<=len(data['city'].strip())<=100:
         bad('Elegí ubicación, ámbitos y categorías disponibles.')
-    if not positive_ids(data['scopes']) or not positive_ids(data['categories']):
+    if not (isinstance(data.get('query_context'),dict) and data['query_context'].get('mode') in ('explorar','novedades') and data['scopes']==[] and data['categories']==[]) and (not positive_ids(data['scopes']) or not positive_ids(data['categories'])):
         bad('Elegí ubicación, ámbitos y categorías disponibles.')
     frequency=data['frequency'];days=data['days']
     if not isinstance(frequency,str) or frequency not in FREQUENCIES or not isinstance(days,list) or len(days)>7 or any(type(d) is not int or not 0<=d<=6 for d in days) or len(set(days))!=len(days):
@@ -104,6 +104,9 @@ def verify_catalog(config):
     if config.get('query_context', {}).get('postal_id', 0) not in (0, *ids):
         bad('El código postal de la consulta no corresponde a la ubicación.', 422)
     postal=db.session.get(CodigoPostal,ids[0])
+    if config.get('query_context') and config['scopes']==[] and config['categories']==[]:
+        if postal is None:bad('Elegí una ubicación disponible.')
+        return {**config,'city':postal.ciudad.strip(),'scopeLabels':[],'categoryLabels':[]}
     params=catalog_filters(MultiDict({'idioma':config['language']}),'ambitos')
     client=DPIAClient(current_app.config.get('SCRAPEADOR_SERVICE_KEY',''),timeout=(3.05,10))
     def fetch(task):
@@ -154,8 +157,13 @@ class AgentConfigurationStore:
             bad('La configuración guardada no es compatible. Revisala antes de guardar.',409)
         task_rows=conn.execute(select(tareas).where(tareas.c.agente_id==row['id'])).mappings().all()
         enabled=[task['tipo'] for task in task_rows if (task['parametros'] or {}).get('schema_version')==1 and task['tipo'] in {TASKS[t] for t in config.get('tasks',[]) if t in TASKS}]
-        if any({k:v for k,v in (task['parametros'] or {}).items() if k not in ('_deleted_at','_agent_configuration','_configuration_revision','schedule')}!={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']} for task in task_rows if (task['parametros'] or {}).get('schema_version')==1 and task['tipo'] in enabled):
+        if any({k:v for k,v in (task['parametros'] or {}).items() if k not in ('_deleted_at','_agent_configuration','_configuration_revision','schedule','query_context','country','city','language')}!={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']} for task in task_rows if (task['parametros'] or {}).get('schema_version')==1 and task['tipo'] in enabled):
             bad('Los parámetros de las tareas no coinciden con la configuración guardada.',409)
+        for task in task_rows:
+            params=task['parametros'] or {}
+            if params.get('schema_version')==1 and task['tipo'] in enabled and params.get('query_context') is not None:
+                if any(params.get(key)!=config.get(key) for key in ('query_context','country','city','language')):
+                    bad('Los parámetros de las tareas no coinciden con la configuración guardada.',409)
         schedules=conn.execute(select(programaciones).where(programaciones.c.agente_id==row['id'])).mappings().all()
         if len(schedules)!=1 or len(enabled)!=len(set(enabled)) or set(enabled)!={TASKS[t] for t in config.get('tasks',[]) if t in TASKS}:
             bad('La configuración guardada no es compatible. Revisala antes de guardar.',409)
@@ -228,6 +236,8 @@ class AgentConfigurationStore:
                 if kind not in desired:conn.execute(update(tareas).where(tareas.c.id==row['id']).values(habilitada=False,actualizado_en=now))
             for kind in sorted(desired):
                 fields=dict(habilitada=True,parametros={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']},actualizado_en=now)
+                if config.get('query_context') and config['scopes']==[] and config['categories']==[]:
+                    fields['parametros'].update(query_context=config['query_context'],country=config['country'],city=config['city'],language=config['language'])
                 fields['parametros']['schedule']={key:config[key] for key in ('frequency','days','time','timezone')}
                 if kind in current:
                     # Keep independent task editor settings when saving agent defaults.

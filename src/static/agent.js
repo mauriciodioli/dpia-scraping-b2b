@@ -25,7 +25,7 @@
  function timeZone(){return Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';}
  function validZone(value){try{new Intl.DateTimeFormat('en',{timeZone:value});return typeof value==='string';}catch(_){return false;}}
  function validLabels(value){return value===undefined||(Array.isArray(value)&&value.length<=500&&value.every(row=>row&&Number.isSafeInteger(row.id)&&row.id>0&&typeof row.name==='string'&&row.name.length<=500));}
- function valid(value){return value&&validLabels(value.scopeLabels)&&validLabels(value.categoryLabels)&&value.version===1&&Array.isArray(value.tasks)&&value.tasks.length>0&&value.tasks.every(t=>Object.hasOwn(TASKS,t))&&typeof value.country==='string'&&value.country.trim().length>0&&value.country.length<=100&&typeof value.city==='string'&&value.city.trim().length>0&&value.city.length<=100&&Array.isArray(value.scopes)&&value.scopes.length>0&&value.scopes.length<=500&&value.scopes.every(v=>Number.isSafeInteger(v)&&v>0)&&Array.isArray(value.categories)&&value.categories.length>0&&value.categories.length<=500&&value.categories.every(v=>Number.isSafeInteger(v)&&v>0)&&Object.hasOwn(FREQUENCIES,value.frequency)&&Array.isArray(value.days)&&value.days.every(v=>Number.isInteger(v)&&v>=0&&v<=6)&&new Set(value.days).size===value.days.length&&(value.frequency==='daily'||value.days.length===(value.frequency==='twice'?2:1))&&/^\d{2}:\d{2}$/.test(value.time)&&Number(value.time.slice(0,2))<24&&Number(value.time.slice(3))<60&&validZone(value.timezone)&&Number.isSafeInteger(value.points)&&value.points>=0&&value.points<=1000000&&['week','month'].includes(value.period)&&typeof value.notifications==='boolean';}
+ function valid(value){return value&&validLabels(value.scopeLabels)&&validLabels(value.categoryLabels)&&value.version===1&&Array.isArray(value.tasks)&&value.tasks.length>0&&value.tasks.every(t=>Object.hasOwn(TASKS,t))&&typeof value.country==='string'&&value.country.trim().length>0&&value.country.length<=100&&typeof value.city==='string'&&value.city.trim().length>0&&value.city.length<=100&&Array.isArray(value.scopes)&&(value.scopes.length>0||['explorar','novedades'].includes(value.query_context?.mode)&&value.categories?.length===0)&&value.scopes.length<=500&&value.scopes.every(v=>Number.isSafeInteger(v)&&v>0)&&Array.isArray(value.categories)&&(value.categories.length>0||['explorar','novedades'].includes(value.query_context?.mode)&&value.scopes?.length===0)&&value.categories.length<=500&&value.categories.every(v=>Number.isSafeInteger(v)&&v>0)&&Object.hasOwn(FREQUENCIES,value.frequency)&&Array.isArray(value.days)&&value.days.every(v=>Number.isInteger(v)&&v>=0&&v<=6)&&new Set(value.days).size===value.days.length&&(value.frequency==='daily'||value.days.length===(value.frequency==='twice'?2:1))&&/^\d{2}:\d{2}$/.test(value.time)&&Number(value.time.slice(0,2))<24&&Number(value.time.slice(3))<60&&validZone(value.timezone)&&Number.isSafeInteger(value.points)&&value.points>=0&&value.points<=1000000&&['week','month'].includes(value.period)&&typeof value.notifications==='boolean';}
  function readLocalDraft(){try{const result=JSON.parse(localStorage.getItem(key())||'null');return valid(result)?result:null;}catch(_){return null;}}
  function defaults(){return {version:1,tasks:[],country:typeof country==='string'?country:'',city:typeof city==='string'?city:'',scopes:[...selected].map(Number),categories:[],frequency:'weekly',days:[1],time:'09:00',timezone:timeZone(),points:0,period:'month',notifications:false};}
  function weekday(day){return new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{weekday:'long',timeZone:'UTC'}).format(new Date(Date.UTC(2026,10,1+day)));}
@@ -37,7 +37,7 @@
   const dl=document.createElement('dl');
   const names=(ids,list,field,saved)=>ids.map(id=>list.find(row=>row[field]===id)?.nombre||(saved||[]).find(row=>row.id===id)?.name||String(id)).join(', ');
   const rows=[['Tareas configuradas',config.tasks.map(id=>tr(TASKS[id])).join(', ')],['Ubicación',[config.city,config.country].filter(Boolean).join(', ')],['Ámbitos',names(config.scopes,scopes,'ambito_id',config.scopeLabels)],['Categorías',names(config.categories,categories,'categoria_id',config.categoryLabels)],['Frecuencia',tr(FREQUENCIES[config.frequency])],['Días',config.frequency==='daily'?tr('Todos los días'):config.days.map(weekday).join(', ')],['Horario',config.time+' · '+config.timezone],['Límite de puntos',String(config.points)+' / '+tr(config.period==='week'?'Por semana':'Por mes')],['Avisos de novedades',tr(config.notifications?'Solicitados, aún no disponibles':'Desactivados')]];
-  for(const [label,value] of rows)dl.append(node('dt',label),raw('dd',value));return dl;
+  for(const [label,value] of rows.filter(([label])=>!config.query_context||!['Ámbitos','Categorías'].includes(label)||config.scopes.length))dl.append(node('dt',label),raw('dd',value));return dl;
  }
  function pointIndicator(){
   const wrap=node('div',undefined,'agent-point-summary');wrap.setAttribute('aria-live','polite');
@@ -175,7 +175,7 @@
  }
  function startQueryContext(context){
   queryContext=context;identity=who();wizard=true;index=2;error='';
-  draft={...defaults(),...(record||{}),version:1,tasks:[context.taskType||((context.category?.name?.toLowerCase().includes('laboral')||context.prompt?.toLowerCase().includes('empleo'))?'jobs':'products')],query_context:structuredClone(context.query_context),country:context.country,city:context.city,scopes:[context.scope.id],categories:[context.category.id],language:context.language,scopeLabels:[context.scope],categoryLabels:[context.category]};
+  draft={...defaults(),...(record||{}),version:1,tasks:[context.taskType||((context.category?.name?.toLowerCase().includes('laboral')||context.prompt?.toLowerCase().includes('empleo'))?'jobs':'products')],query_context:structuredClone(context.query_context),country:context.country,city:context.city,scopes:context.scope?[context.scope.id]:[],categories:context.category?[context.category.id]:[],language:context.language,scopeLabels:context.scope?[context.scope]:[],categoryLabels:context.category?[context.category]:[]};
   scopes=structuredClone(catalogAmbitos);categories=structuredClone(catalogCategorias);cities=[context.city];
 
   refreshBudgetLimit();renderStep();root.querySelector('h3')?.focus();
@@ -234,7 +234,7 @@
  function check(step){
 
   if(step===0&&!draft.tasks.length)return 'Seleccioná al menos una tarea.';
-  if(step===1&&(loading||(!queryContext&&error)||!draft.country||!draft.city||!draft.scopes.length||!draft.categories.length))return 'Elegí ubicación, ámbitos y categorías disponibles.';
+  if(step===1&&(loading||(!queryContext&&error)||!draft.country||!draft.city||(!queryContext&&(!draft.scopes.length||!draft.categories.length))))return 'Elegí ubicación, ámbitos y categorías disponibles.';
   if(step===2&&(!/^\d{2}:\d{2}$/.test(draft.time)||!validZone(draft.timezone)||(draft.frequency!=='daily'&&draft.days.length!==(draft.frequency==='twice'?2:1))))return 'Revisá el horario y los días seleccionados.';
   if(step===3&&!(queryContext&&record)&&availablePoints===null)return 'No se pudo consultar tu saldo. Reintentá antes de guardar.';
   if(step===3&&!(queryContext&&record)&&draft.points>availablePoints)return 'El presupuesto supera tus puntos disponibles.';
@@ -389,7 +389,7 @@
      const dl=document.createElement('dl');
      for(const timing of task.schedules){
       const rows=[['Frecuencia',tr(frequencies[timing.frequency]||timing.frequency||'Sin datos')],['Días',(timing.days||[]).map(day=>weekday(day%7)).join(', ')||tr('Sin datos')],['Horario',timing.time||tr('Sin datos')],['Zona horaria',timing.timezone||tr('Sin datos')],['Próxima ejecución',date(timing.next_run_at)]];
-      for(const [label,value] of rows)dl.append(node('dt',label),raw('dd',value));
+      for(const [label,value] of rows.filter(([label])=>!config.query_context||!['Ámbitos','Categorías'].includes(label)||config.scopes.length))dl.append(node('dt',label),raw('dd',value));
      }
      dl.append(node('dt','Última ejecución'),raw('dd',date(task.last_run_at)));
      if(task.points_consumed!==null)dl.append(node('dt','Puntos consumidos'),raw('dd',String(task.points_consumed)));

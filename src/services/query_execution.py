@@ -18,7 +18,8 @@ def internal_results(source,prepared):
         # Same existing postal scope, with keyword filtering before pagination.
         rows,_=publications_for_city(ctx['pais'],ctx['ciudad'],category_id=cat,terms=terms)
         return rows
-    query=Publicacion.query.filter(func.lower(func.trim(Publicacion.estado))=='activo',Publicacion.categoria_id==cat)
+    query=Publicacion.query.filter(func.lower(func.trim(Publicacion.estado))=='activo')
+    if cat is not None:query=query.filter(Publicacion.categoria_id==cat)
     if terms:query=query.filter(or_(*(or_(Publicacion.titulo.ilike('%'+t+'%'),Publicacion.descripcion.ilike('%'+t+'%')) for t in terms)))
     rows=query.order_by(Publicacion.fecha_creacion.desc(),Publicacion.id.desc()).limit(24).all()
     return [dict(id=row.id,titulo=row.titulo,descripcion=row.descripcion,imagen=row.imagen,precio=row.precio,moneda=row.moneda) for row in rows]

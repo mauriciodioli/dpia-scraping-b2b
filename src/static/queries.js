@@ -14,6 +14,7 @@ function journeyScopes(){
  const allowed=queryJourney==='jobs'?null:queryJourney==='import'?new Set([6,108]):commercialScopeIds;
  return catalogAmbitos.filter(scope=>(!allowed||allowed.has(Number(scope.ambito_id)))&&categories.some(item=>item.ambito_ids.includes(scope.ambito_id)));
 }
+function queryWithoutClassification(){return !!queryJourney&&['explorar','novedades'].includes(queryMode)&&['ready','empty'].includes(catalogState.ambitos)&&['ready','empty'].includes(catalogState.categorias)&&!journeyScopes().length;}
 function setQueryJourney(value){
  queryJourney=value;
  document.querySelector('#queryScope').value='';document.querySelector('#queryCategory').value='';
@@ -23,8 +24,9 @@ function setQueryJourney(value){
  localCategory=null;refreshQuerySelectors();
 }
 // Employment categories 41 and 778, verified in catalog-reference.json.
-function isEmploymentQuery(ids){return employmentCategoryIds.has(Number(ids?.categoria_id??document.querySelector('#queryCategory').value));}
+function isEmploymentQuery(ids){return (ids?.situation??queryJourney)==='jobs'||employmentCategoryIds.has(Number(ids?.categoria_id??document.querySelector('#queryCategory').value));}
 function employmentDraft(){
+ if(queryWithoutClassification())return ({es:`Orientame sobre oportunidades laborales para ${city}, ${country}. Considerá puestos, experiencia, requisitos y modalidad. No inventes vacantes, empresas, salarios ni enlaces. Diferenciá orientaciones de ofertas verificadas y usá N/D para datos no confirmados.`,en:`Suggest employment opportunities for ${city}, ${country}. Consider roles, experience, requirements and work arrangements. Do not invent vacancies, employers, salaries or links. Distinguish AI guidance from verified offers.`,it:`Indicami opportunità lavorative per ${city}, ${country}. Considera ruoli, esperienza, requisiti e modalità. Non inventare offerte, aziende, stipendi o link. Distingui orientamento da offerte verificate.`,pl:`Zaproponuj możliwości zatrudnienia dla ${city}, ${country}. Uwzględnij stanowiska, doświadczenie, wymagania i tryb pracy. Nie wymyślaj ofert, firm, wynagrodzeń ani linków. Oddziel wskazówki od zweryfikowanych ofert.`})[catalogLanguage()];
  const template=window.DPIAI18N?.translate('Orientame sobre oportunidades laborales en {categoria}, dentro de {ambito}, para {ciudad}, {pais}. Considerá puestos, experiencia, requisitos y modalidad. No inventes vacantes, empresas, salarios ni enlaces. Diferenciá orientaciones de ofertas verificadas y usá N/D para datos no confirmados.')||'';
  return template.replace('{categoria}',document.querySelector('#queryCategory').selectedOptions[0]?.textContent||'').replace('{ambito}',document.querySelector('#queryScope').selectedOptions[0]?.textContent||'').replace('{ciudad}',city).replace('{pais}',country);
 }
@@ -61,24 +63,25 @@ function refreshQuerySelectors(category=null, scopeId=null){
  postalSelect.replaceChildren();
  for(const record of catalogPostalCodes)postalSelect.add(new Option(city,String(record.id)));
  if([...postalSelect.options].some(option=>option.value===oldPostal))postalSelect.value=oldPostal;
+ scopeSelect.closest('label')?.toggleAttribute('hidden',queryWithoutClassification());categorySelect.closest('label')?.toggleAttribute('hidden',queryWithoutClassification());
  invalidateQuery();if(queryMode==='novedades')updateNovelDraft();else if(queryMode==='explorar')updateExploreDraft();
 }
 function preparedAgentContext(){
  if(queryBusy||!currentEmail||!queryPrepared||queryPrepared.owner!==currentEmail||JSON.stringify(queryBody())!==queryPrepared.fingerprint||typeof queryPrepared.summary!=='string'||!queryPrepared.summary.trim()||queryPrepared.summary.length>65536)return null;
  const body=queryPrepared.body;
- if(!body||!body.pais||!body.ciudad||!Number.isSafeInteger(body.ambito_id)||body.ambito_id<1||!Number.isSafeInteger(body.categoria_id)||body.categoria_id<1)return null;
+ if(!body||!body.pais||!body.ciudad||(!queryWithoutClassification()&&(!Number.isSafeInteger(body.ambito_id)||body.ambito_id<1||!Number.isSafeInteger(body.categoria_id)||body.categoria_id<1)))return null;
  const scope=catalogAmbitos.find(row=>row.ambito_id===body.ambito_id),category=catalogCategorias.find(row=>row.categoria_id===body.categoria_id);
- if(!scope||!category||!category.ambito_ids.includes(scope.ambito_id))return null;
+ if(!queryWithoutClassification()&&(!scope||!category||!category.ambito_ids.includes(scope.ambito_id)))return null;
  let issue='';
  if(!['buscar','novedades','explorar'].includes(body.mode))issue='Esta modalidad de consulta todavía no es compatible con Agents.';
  else if(body.attachments?.length)issue='Agents todavía no admite los adjuntos de esta consulta.';
  else if(body.user_message.length>3500||queryPrepared.summary.length>3500)issue='El pedido o resumen supera el límite de 3500 caracteres para configurar el agente.';
- return {taskType:isEmploymentQuery(body)?'jobs':'products',owner:currentEmail,country:body.pais,city:body.ciudad,language:body.idioma,scope:{id:scope.ambito_id,name:scope.nombre},category:{id:category.categoria_id,name:category.nombre},prompt:body.user_message,summary:queryPrepared.summary,query_context:{prompt:body.user_message,summary:queryPrepared.summary,mode:body.mode,postal_id:body.codigo_postal_id,currency:body.budget_currency||''},issue};
+ return {taskType:isEmploymentQuery(body)?'jobs':'products',owner:currentEmail,country:body.pais,city:body.ciudad,language:body.idioma,scope:scope?{id:scope.ambito_id,name:scope.nombre}:null,category:category?{id:category.categoria_id,name:category.nombre}:null,prompt:body.user_message,summary:queryPrepared.summary,query_context:{prompt:body.user_message,summary:queryPrepared.summary,mode:body.mode,postal_id:body.codigo_postal_id,currency:body.budget_currency||''},issue};
 }
 function consultAgentVisible(){
  if(currentEmail)return !!preparedAgentContext();
  const body=queryBody(),scope=catalogAmbitos.find(row=>row.ambito_id===body.ambito_id),category=catalogCategorias.find(row=>row.categoria_id===body.categoria_id);
- if(queryBusy||!body.pais||!body.ciudad||!body.user_message.trim()||!scope||!category||!category.ambito_ids.includes(scope.ambito_id))return false;
+ if(queryBusy||!body.pais||!body.ciudad||!body.user_message.trim()||(!queryWithoutClassification()&&(!scope||!category||!category.ambito_ids.includes(scope.ambito_id))))return false;
  if(!isEmploymentQuery(body)&&(queryMode==='explorar'||queryBudgetEdited)){
   const min=document.querySelector('#queryBudgetMin'),max=document.querySelector('#queryBudgetMax');
   if((min.value||max.value)&&(!min.value||!max.value||!min.checkValidity()||!max.checkValidity()||Number(max.value)<Number(min.value)))return false;
@@ -114,11 +117,11 @@ function submitConsultQuery(){
 function queueQueryPreparation(){
  clearTimeout(queryPreparationTimer);
  queryPreparationTimer=setTimeout(()=>{
-  if(page!=='consultPage'||!currentEmail||catalogState.ambitos!=='ready'||catalogState.categorias!=='ready')return;
+  if(page!=='consultPage'||!currentEmail||!['ready','empty'].includes(catalogState.ambitos)||!['ready','empty'].includes(catalogState.categorias))return;
   if(queryBusy){queryPreparationQueued=true;return;}
   const body=queryBody();
   if(queryPrepared&&JSON.stringify(body)===queryPrepared.fingerprint)return;
-  if(!body.ambito_id||!body.categoria_id||(!body.user_message&&!body.attachments.length))return;
+  if((!queryWithoutClassification()&&(!body.ambito_id||!body.categoria_id))||(!body.user_message&&!body.attachments.length))return;
   prepareDPIAQuery({automatic:true});
  },600);
 }
@@ -143,6 +146,7 @@ function invalidateQuery(schedule=true){
 function chooseQueryCategory(item, scopeId=null){queryMode='buscar';refreshQuerySelectors(item,scopeId);localCategory={id:String(item.categoria_id),name:item.nombre};}
 function updateNovelDraft(force=false){
  const prompt=document.querySelector('#promptText'),scope=document.querySelector('#queryScope'),category=document.querySelector('#queryCategory');
+ if(queryWithoutClassification()){if(!force&&prompt.value.trim()&&prompt.value!==novelAutoDraft)return;setupExploreBudget();updateExploreDraft(true);return;}
  if(!scope.value||!category.value||(!force&&prompt.value.trim()&&prompt.value!==novelAutoDraft))return;
  const a=scope.selectedOptions[0].textContent,c=category.selectedOptions[0].textContent;
  const templates={
@@ -163,7 +167,7 @@ async function openNovelQuery(){
  const scopes=(queryJourney?available:(interests.length?interests:available)).filter(scope=>journeyCategories().some(category=>category.ambito_ids.includes(scope.ambito_id)));
  const current=document.querySelector('#queryScope').value;
  const scope=scopes.find(item=>String(item.ambito_id)===current)||scopes.find(item=>String(item.ambito_id)===activeCatalogScope)||scopes[0];
- if(!scope){refreshQuerySelectors();status.textContent=window.DPIAI18N.translate('No hay ámbitos y categorías compatibles con esta opción en la ubicación seleccionada.');return;}
+ if(!scope){refreshQuerySelectors();if(queryWithoutClassification()){if(isEmploymentQuery())queryMode='explorar';setupExploreBudget();updateExploreDraft(true);status.textContent='Revisá el pedido. Podés modificarlo y ajustar los filtros antes de continuar.';}else status.textContent=window.DPIAI18N.translate('No hay ámbitos y categorías compatibles con esta opción en la ubicación seleccionada.');return;}
  const oldCategory=Number(document.querySelector('#queryCategory').value);
  const category=journeyCategories().find(item=>item.categoria_id===oldCategory&&item.ambito_ids.includes(scope.ambito_id))||journeyCategories().find(item=>item.ambito_ids.includes(scope.ambito_id));
  refreshQuerySelectors(category,scope.ambito_id);syncLocalCategory();updateNovelDraft(true);
@@ -174,13 +178,13 @@ async function openExploreQuery(){
  if(queryBusy)return;
  await openNovelQuery();queryMode='explorar';invalidateQuery();
  setupExploreBudget();updateExploreDraft(true);
- if(queryJourney&&(!document.querySelector('#queryScope').value||!document.querySelector('#queryCategory').value)){document.querySelector('#queryStatus').textContent=window.DPIAI18N.translate('No hay ámbitos y categorías compatibles con esta opción en la ubicación seleccionada.');return;}
+ if(queryJourney&&!queryWithoutClassification()&&(!document.querySelector('#queryScope').value||!document.querySelector('#queryCategory').value)){document.querySelector('#queryStatus').textContent=window.DPIAI18N.translate('No hay ámbitos y categorías compatibles con esta opción en la ubicación seleccionada.');return;}
  document.querySelector('#queryStatus').textContent='Revisá el pedido. Explorar genera sugerencias con IA, sin consumir ejecuciones de scraping.';
 }
 function updateExploreDraft(force=false){
  const prompt=document.querySelector('#promptText'),scopeSelect=document.querySelector('#queryScope'),categorySelect=document.querySelector('#queryCategory');
  if(!force&&prompt.value.trim()&&prompt.value!==exploreAutoDraft)return;
- if(!scopeSelect.value||!categorySelect.value){exploreAutoDraft='';prompt.value='';return;}
+ if(!scopeSelect.value||!categorySelect.value){if(queryWithoutClassification()){const drafts={es:queryMode==='novedades'?`Buscá novedades y productos relevantes para ${city}, ${country}. Proponé una búsqueda concreta de productos útiles y evitá duplicados. No inventes precios ni presentes tendencias como verificadas sin evidencia.`:`Sugerí productos útiles para ${city}, ${country}. Explicá sus ventajas y proponé precios de venta orientativos cuando puedas fundamentarlos. Indicá sitios donde pueda comparar opciones.`,en:`Suggest useful products and new developments for ${city}, ${country}. Explain benefits and indicative selling prices only when justified. Do not invent prices or verified trends.`,it:`Suggerisci prodotti utili e novità per ${city}, ${country}. Spiega i vantaggi e prezzi indicativi solo se motivati. Non inventare prezzi o tendenze verificate.`,pl:`Zaproponuj przydatne produkty i nowości dla ${city}, ${country}. Wyjaśnij zalety i uzasadnione ceny orientacyjne. Nie wymyślaj cen ani potwierdzonych trendów.`};exploreBudgetDraft=exploreBudgetText();exploreAutoDraft=(isEmploymentQuery()?employmentDraft():drafts[catalogLanguage()]||drafts.es)+'\n'+exploreBudgetDraft;novelAutoDraft=queryMode==='novedades'?exploreAutoDraft:novelAutoDraft;prompt.value=exploreAutoDraft;syncQueryConversation();return;}exploreAutoDraft='';prompt.value='';return;}
  const scope=scopeSelect.selectedOptions[0].textContent,category=categorySelect.selectedOptions[0].textContent;
  const drafts={es:`Sugerí productos útiles de ${category}, en ${scope}, para ${city}, ${country}. Explicá sus ventajas y proponé precios de venta orientativos cuando puedas fundamentarlos. Indicá sitios donde pueda comparar opciones.`,en:`Suggest useful products in ${category}, within ${scope}, for ${city}, ${country}. Explain their benefits and suggest indicative selling prices when justified. Include sites where I can compare options.`,it:`Suggerisci prodotti utili di ${category}, nell'ambito ${scope}, per ${city}, ${country}. Spiega i vantaggi e proponi prezzi indicativi quando motivati. Indica siti dove confrontare le opzioni.`,pl:`Zaproponuj przydatne produkty w kategorii ${category}, w obszarze ${scope}, dla ${city}, ${country}. Wyjaśnij zalety i zaproponuj uzasadnione ceny orientacyjne. Wskaż serwisy do porównania ofert.`};
  exploreBudgetDraft=exploreBudgetText();exploreAutoDraft=(isEmploymentQuery()?employmentDraft():drafts[catalogLanguage()]||drafts.es)+'\n'+exploreBudgetDraft;prompt.value=exploreAutoDraft;syncQueryConversation();
@@ -217,6 +221,8 @@ function syncExploreBudget(){
   prompt.value=exploreBudgetDraft&&prompt.value.includes(exploreBudgetDraft)?prompt.value.replace(exploreBudgetDraft,next):prompt.value.trim()+'\n'+next;
   exploreBudgetDraft=next;
  }
+ // A change event after input must not discard the already prepared identical request.
+ if(queryPrepared&&JSON.stringify(queryBody())===queryPrepared.fingerprint){syncQueryConversation();return;}
  invalidateQuery();
 }
 document.querySelector('#queryBudgetCurrency').addEventListener('change',()=>{
@@ -228,7 +234,7 @@ for(const id of ['queryBudgetType','queryBudgetMin','queryBudgetMax']){
  const control=document.querySelector('#'+id);control.addEventListener('change',syncExploreBudget);
  if(id!=='queryBudgetType')control.addEventListener('input',syncExploreBudget);
 }
-function queryBody(){return {pais:country,ciudad:city,idioma:catalogLanguage(),ambito_id:Number(document.querySelector('#queryScope').value),categoria_id:Number(document.querySelector('#queryCategory').value),codigo_postal_id:Number(document.querySelector('#queryPostal').value),mode:queryMode,...(queryMode==='explorar'?{budget_currency:document.querySelector(isEmploymentQuery()?'#querySalaryCurrency':'#queryBudgetCurrency').value}:{}),user_message:document.querySelector('#promptText').value.trim(),attachments:media};}
+function queryBody(){return {pais:country,ciudad:city,idioma:catalogLanguage(),ambito_id:queryWithoutClassification()?null:Number(document.querySelector('#queryScope').value),categoria_id:queryWithoutClassification()?null:Number(document.querySelector('#queryCategory').value),...(queryWithoutClassification()?{situation:queryJourney}:{}),codigo_postal_id:Number(document.querySelector('#queryPostal').value),mode:queryMode,...(queryMode==='explorar'?{budget_currency:document.querySelector(isEmploymentQuery()?'#querySalaryCurrency':'#queryBudgetCurrency').value}:{}),user_message:document.querySelector('#promptText').value.trim(),attachments:media};}
 function startHomeQuery(){
  document.querySelector('#promptText').value=document.querySelector('#searchText').value.trim();queryMode='buscar';queryBudgetEdited=false;setupExploreBudget();invalidateQuery();show('consultPage');prepareDPIAQuery();
 }
@@ -250,7 +256,7 @@ async function prepareDPIAQuery({automatic=false}={}){
   if(!min.reportValidity()||!max.reportValidity()){setQueryArtState('warning');return;}
  }
  const owner=currentEmail,status=document.querySelector('#queryStatus'),body=structuredClone(queryBody());
- if(!body.ambito_id||!body.categoria_id){setQueryArtState('warning');status.textContent='Elegí un ámbito y una categoría para continuar.';document.querySelector(body.ambito_id?'#queryCategory':'#queryScope').focus();return;}
+ if(!queryWithoutClassification()&&(!body.ambito_id||!body.categoria_id)){setQueryArtState('warning');status.textContent='Elegí un ámbito y una categoría para continuar.';document.querySelector(body.ambito_id?'#queryCategory':'#queryScope').focus();return;}
  if(!body.user_message&&!body.attachments.length){setQueryArtState('warning');status.textContent='Escribí tu pedido o adjuntá una imagen o video.';return;}
  invalidateQuery(false);queryBusy=true;syncQueryConversation();status.textContent='Preparando tu consulta…';
  try{
