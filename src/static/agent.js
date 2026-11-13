@@ -420,7 +420,7 @@
       form.onsubmit=async event=>{event.preventDefault();if(save.disabled)return;error.textContent='';if(frequency.value==='WEEKLY'&&!checks.some(check=>check.checked)){error.textContent=tr('Seleccioná al menos un día.');checks[0].focus();return;}save.disabled=true;cancel.disabled=true;
        const command={enabled:timing.enabled??configuredState==='active',expected_revision:timing.revision||0,frequency:frequency.value,
         weekdays:frequency.value==='DAILY'?[1,2,3,4,5,6,7]:frequency.value==='WEEKLY'?checks.filter(check=>check.checked).map(check=>Number(check.value)):[],
-        execution_time:time.value,delivery_time:time.value,timezone:zone.value.trim(),dst_policy:'REJECT_AMBIGUOUS_OR_NONEXISTENT'};
+        execution_time:time.value,delivery_time:timing.delivery_time||time.value,timezone:zone.value.trim(),dst_policy:'REJECT_AMBIGUOUS_OR_NONEXISTENT'};
        if(frequency.value==='ONCE')command.execution_date=date.value;
        try{const response=await fetch('/api/agentes/'+agentId+'/tareas/'+task.id+'/programar',{method:'PATCH',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'manage-task'},body:JSON.stringify(command),signal:AbortSignal.timeout(20000)});
         const data=await response.json();if(!current())return;
