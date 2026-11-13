@@ -41,7 +41,12 @@
  }
  function pointIndicator(){
   const wrap=node('div',undefined,'agent-point-summary');wrap.setAttribute('aria-live','polite');
-  const p=agentPoints;
+  const p=record?agentPoints:null;
+  if(!record&&Number.isSafeInteger(availablePoints)){
+   const status=node('span',undefined,'agent-point-status'),dot=node('span',undefined,'agent-point-dot');
+   dot.dataset.color=availablePoints>0?'green':'red';dot.setAttribute('aria-hidden','true');
+   status.append(dot,raw('span',availablePoints+' '+tr('puntos restantes')));wrap.append(status);return wrap;
+  }
   if(!p||!Number.isSafeInteger(p.effective_remaining)||!Number.isSafeInteger(p.budget)||!Number.isSafeInteger(p.budget_consumed)||!Number.isSafeInteger(p.budget_reserved)){wrap.append(node('span','Puntos no disponibles'));return wrap;}
   const status=node('span',undefined,'agent-point-status'),dot=node('span',undefined,'agent-point-dot');
   dot.dataset.color=p.color;dot.setAttribute('aria-hidden','true');status.append(dot,raw('span',p.effective_remaining+' '+tr('puntos restantes')));
@@ -53,29 +58,31 @@
  }
  function dashboard(){
   root.replaceChildren();refreshTaskList=null;wizard=false;queryContext=null;
-  const panel=node('div',undefined,record?'agent-summary':'agent-intro');
+  const panel=node('div',undefined,who()?'agent-summary':'agent-intro');
   if(who()&&!serverReady){
    if(serverBusy)panel.append(node('p','Cargando configuración del agente…','hint'));
    else panel.append(button('Reintentar',open));
    feedback(panel);root.append(panel);return;
   }
-  if(!record)panel.append(statusBadge('unconfigured'));
-  if(!record){
+  if(!who()){
+   panel.append(statusBadge('unconfigured'));
    panel.append(node('h3','DPIA busca por vos'),node('p','Encontrá productos nuevos, cambios de precios, proveedores y oportunidades sin buscar todos los días'),button('Configurar mi agente',()=>who()?start():openAuth(),'primary'));
    if(who()&&readLocalDraft())panel.append(button('Recuperar borrador local',()=>start(readLocalDraft())));
    if(!who())panel.append(node('p','Iniciá sesión para guardar tu agente.','agent-notice'));
   }
   else{
    const header=node('div',undefined,'agent-identity'),logo=node('div',undefined,'consult-art agent-logo'),symbol=document.createElement('img');
-   logo.dataset.active=String(['active','running'].includes(serverState));
+   logo.dataset.active=String(!!record&&['active','running'].includes(serverState));
    symbol.className='dpia-symbol';symbol.src='/static/branding/favicon.png';symbol.alt='';symbol.setAttribute('aria-hidden','true');logo.append(symbol);
-   const info=node('div',undefined,'agent-identity-info');info.append(raw('h3',who()),statusBadge(serverState),pointIndicator());header.append(logo,info);panel.append(header);
+   const info=node('div',undefined,'agent-identity-info');info.append(raw('h3',who()),statusBadge(record?serverState:'unconfigured'),pointIndicator());header.append(logo,info);panel.append(header);
    panel.append(button('＋ Crear tarea',()=>window.DPIACrearTarea?.open(),'primary'));
     panel.append(taskPanel());
+   if(record){
    const actions=node('div',undefined,'agent-actions');if(serverState==='inactive')actions.append(button('Editar configuración',()=>start()));
    actions.append(executionControl(serverState));const remove=button('Eliminar agente',deleteAgent,'agent-delete');remove.disabled=serverBusy||!!record.engine_binding&&!pauseReady;actions.append(remove);if(record.engine_binding)actions.append(button('Actualizar estado',()=>refreshPause()));panel.append(actions);
+   }
   }
-  if(!record)panel.append(engineNotice(),storageNotice());feedback(panel);root.append(panel);window.DPIAI18N?.refresh();
+  if(!who())panel.append(engineNotice(),storageNotice());feedback(panel);root.append(panel);window.DPIAI18N?.refresh();
  }
  async function activate(){
   if(serverBusy||!record||serverState!=='inactive'||wizard)return;
@@ -208,7 +215,10 @@
    if(!response.ok||data.success!==true||!Number.isSafeInteger(data.credits?.available)||data.credits.available<0)throw Error('credits');
    availablePoints=data.credits.available;
   }catch(e){if(owner===who()&&serial===budgetReadSerial)availablePoints=null;}
-  finally{if(owner===who()&&serial===budgetReadSerial&&wizard&&index===3)renderStep();}
+  finally{if(owner===who()&&serial===budgetReadSerial){
+   if(wizard&&index===3)renderStep();
+   else if(!record&&serverReady&&!serverBusy&&!document.getElementById('agentPage').hidden&&!wizard)dashboard();
+  }}
  }
  function stepLimits(panel){
   const maximum=availablePoints===null?0:Math.min(1000000,availablePoints);
@@ -267,7 +277,7 @@
   feedback(panel);const actions=node('div',undefined,'agent-actions');
   actions.append(button('Cancelar',()=>{loadSerial++;controller?.abort();dashboard();}));
   if(index>(queryContext?2:0))actions.append(button('Anterior',()=>{index--;error='';renderStep();}));
-  const next=button(index===4?(queryContext&&record?'Agregar tarea a mi agente':'Crear agente'):'Siguiente',()=>{if(index===4){save();return;}const issue=check(index);if(issue){error=issue;renderStep();return;}error='';index++;renderStep();root.querySelector('h3').focus();},'primary');next.disabled=(index===1&&loading);actions.append(next);
+  const next=button(index===4?(queryContext?(record?'Agregar tarea a mi agente':'Crear tarea'):'Crear agente'):'Siguiente',()=>{if(index===4){save();return;}const issue=check(index);if(issue){error=issue;renderStep();return;}error='';index++;renderStep();root.querySelector('h3').focus();},'primary');next.disabled=(index===1&&loading);actions.append(next);
   if(index===4)actions.append(executionControl('inactive'));
   if(error&&index===4)actions.append(button('Volver a cargar configuración',open));
   panel.append(actions);if(serverBusy)panel.querySelectorAll('button,input,select').forEach(el=>el.disabled=true);root.append(panel);window.DPIAI18N?.refresh();
@@ -308,7 +318,7 @@
    }
    agentPoints=data.points||null;serverReady=true;
   }catch(e){if(owner===who()&&serial===readSerial)error=e.name==='Error'?e.message:'No se pudo cargar la configuración del agente.';}
-  finally{if(owner===who()&&serial===readSerial){serverBusy=false;dashboard();const context=pendingQueryContext;pendingQueryContext=null;if(serverReady&&context?.owner===owner)startQueryContext(context);else if(record?.engine_binding)refreshPause();}}
+  finally{if(owner===who()&&serial===readSerial){serverBusy=false;dashboard();const context=pendingQueryContext;pendingQueryContext=null;if(serverReady&&context?.owner===owner)startQueryContext(context);else if(record?.engine_binding)refreshPause();else if(serverReady&&!record&&owner)refreshBudgetLimit();}}
  }
  setInterval(()=>{if(!document.hidden&&!document.getElementById('agentPage').hidden)refreshPause();},15000);
  new MutationObserver(()=>{if(identity!==who()){
@@ -316,12 +326,13 @@
   pendingQueryContext=null;queryContext=null;identity=who();agentPoints=null;availablePoints=null;budgetReadSerial++;engineRevision=0;pauseReady=false;pendingPause=null;pendingDelete=null;record=null;draft=null;wizard=false;root.replaceChildren();
   if(!document.getElementById('agentPage').hidden)open();
  }}).observe(document.getElementById('userBtn'),{childList:true,subtree:true,characterData:true});
- window.addEventListener('dpia:credits-updated',()=>{if(wizard)refreshBudgetLimit();else if(!document.getElementById('agentPage').hidden)refreshPause();else agentPoints=null;});
+ window.addEventListener('dpia:credits-updated',()=>{if(wizard)refreshBudgetLimit();else if(!document.getElementById('agentPage').hidden){if(record)refreshPause();else if(who()&&serverReady)refreshBudgetLimit();}else agentPoints=null;});
  document.getElementById('languageSelect').addEventListener('change',()=>setTimeout(()=>{if(wizard){renderStep();if(draft.country&&draft.city)loadLocation(false);}else if(!document.getElementById('agentPage').hidden)dashboard();},0));
  function taskPanel(){
   const details=node('details',undefined,'agent-task-list'),heading=node('summary'),body=node('div');
   details.open=taskExpanded;details.ontoggle=()=>{taskExpanded=details.open;};
-  heading.append(node('span','Mis tareas'),raw('span',' (…) ▾'));details.append(heading,body);
+  heading.append(node('span','Mis tareas'),raw('span',record?' (…) ▾':' (0) ▾'));details.append(heading,body);
+  if(!record){body.append(node('p','No hay tareas configuradas.'));return details;}
   const owner=who(),agentId=taskAgentId;
   let busy=false,editing=false,lastTasks=null;
   const current=()=>owner===who()&&agentId===taskAgentId&&details.isConnected;
