@@ -357,6 +357,7 @@
     for(const task of tasks){
      const pausedByAgent=task.paused_by_agent||['paused','admin_paused','disabled'].includes(serverState),configuredState=task.configured_state||task.state;
      const card=node('article',undefined,'agent-task-card');
+     if(pausedByAgent||configuredState==='paused')card.classList.add('agent-task-is-paused');
      const title=raw('h4',task.name||tr(TASKS[types[task.type]]||task.type)),titleRow=node('div',undefined,'agent-task-title');
      const pencil=button('✎',()=>{
       if(editing||busy)return;editing=true;
@@ -386,7 +387,14 @@
       editor.append(input,counter,done,error);titleRow.hidden=true;titleRow.after(editor);input.focus();input.select();
      });
      pencil.setAttribute('aria-label',tr('Cambiar nombre de la tarea'));pencil.title=tr('Cambiar nombre de la tarea');
-     titleRow.append(title,pencil);card.append(titleRow,node('p',TASKS[types[task.type]]||task.type),statusBadge(pausedByAgent?'paused':task.state));
+     const menu=node('details',undefined,'agent-task-menu'),menuButton=node('summary','⋯'),menuItems=node('div',undefined,'agent-task-menu-items');
+     menuButton.setAttribute('aria-label',tr('Opciones de la tarea'));
+     const rename=button('Cambiar nombre',()=>{menu.open=false;pencil.click();});
+     const scheduleAction=button('Editar programación',()=>{menu.open=false;editSchedule();});
+     scheduleAction.dataset.editSchedule='';
+     const removeAction=button('Eliminar tarea',()=>{menu.open=false;if(window.confirm(tr('¿Eliminar esta tarea? Se conservará el historial.')))load(task.id,'eliminar');},'agent-task-danger');
+     menuItems.append(rename,scheduleAction,removeAction);menu.append(menuButton,menuItems);
+     titleRow.append(title,menu);card.append(titleRow,node('p',TASKS[types[task.type]]||task.type,'agent-task-type'),statusBadge(pausedByAgent?'paused':task.state));
      if(pausedByAgent&&configuredState==='active')card.append(node('p','Se reanudará cuando actives el agente.','agent-notice'));
      const editSchedule=()=>{
       if(editing||busy)return;
@@ -421,23 +429,37 @@
        }catch(e){if(current())error.textContent=e.message;}finally{save.disabled=false;cancel.disabled=false;}
       };
      };
-     const dl=document.createElement('dl');
-     for(const timing of task.schedules){
-      const rows=[['Frecuencia',tr(frequencies[timing.frequency]||timing.frequency||'Sin datos')],['Días',(timing.days||[]).map(day=>weekday(day%7)).join(', ')||tr('Sin datos')],['Horario',timing.time||tr('Sin datos')],['Zona horaria',timing.timezone||tr('Sin datos')],['Próxima ejecución',date(pausedByAgent?null:timing.next_run_at)]];
-      if(timing.frequency==='ONCE')rows.splice(1,0,['Fecha de ejecución',timing.execution_date||tr('Sin datos')]);
-      for(const [label,value] of rows){const dd=raw('dd',value);
-       if(label==='Frecuencia'){const pencil=button('✎',editSchedule);pencil.setAttribute('aria-label',tr('Editar programación de la tarea'));pencil.dataset.editSchedule='';dd.append(pencil);}
-       dl.append(node('dt',label),dd);
+     const schedules=task.schedules||[];
+     const summary=node('div',undefined,'agent-task-schedule-summary');
+     const daysShort=['D','L','M','X','J','V','S'];
+     const displayDate=value=>{if(!value)return null;const parsed=new Date(value.endsWith('Z')||/[+-]\\d\\d:\\d\\d$/.test(value)?value:value+'Z');return Number.isNaN(parsed.getTime())?null:new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{dateStyle:'medium',timeStyle:'short'}).format(parsed);};
+     for(const timing of schedules){
+      const freq=tr(frequencies[timing.frequency]||timing.frequency||'Sin programación');
+      const timingLine=[freq,timing.time,timing.timezone].filter(Boolean).join(' · ');
+      summary.append(node('p',timingLine));
+      if(timing.frequency==='WEEKLY'&&timing.days?.length){
+       const chips=node('div',undefined,'agent-task-day-chips');
+       for(let day=1;day<=7;day++){const chip=node('span',daysShort[day%7]);if(timing.days.includes(day))chip.classList.add('selected');chips.append(chip);}
+       summary.append(chips);
       }
      }
-     dl.append(node('dt','Última ejecución'),raw('dd',date(task.last_run_at)));
-     if(task.points_consumed!==null)dl.append(node('dt','Puntos consumidos'),raw('dd',String(task.points_consumed)));
-     const actions=node('div',undefined,'agent-actions');
-     for(const [action,label] of [['activar','Activar'],['pausar','Pausar'],['eliminar','Eliminar']]){
-      const control=button(label,()=>{if(action==='eliminar'&&!window.confirm(tr('¿Eliminar esta tarea? Se conservará el historial.')))return;load(task.id,action);});
-      control.disabled=action==='activar'&&(pausedByAgent||configuredState==='active')||action==='pausar'&&configuredState==='paused';actions.append(control);
-     }
-     card.append(dl,actions);body.append(card);
+     if(!schedules.length)summary.append(node('p','Sin programación'));
+     const info=node('div',undefined,'agent-task-highlights');
+     const nextTimestamp=schedules.map(t=>!pausedByAgent&&configuredState==='active'?t.next_run_at:null).filter(Boolean).sort()[0];
+     const next=displayDate(nextTimestamp);
+     const last=displayDate(task.last_run_at);
+     const nextBox=node('div',undefined,'agent-task-highlight'),lastBox=node('div',undefined,'agent-task-highlight');
+     nextBox.append(node('span','Próxima ejecución'),node('strong',next||(pausedByAgent||configuredState==='paused'?'Programación pausada':'Aún no programada')));
+     lastBox.append(node('span','Última ejecución'),node('strong',last||'Aún no se ejecutó'));
+     info.append(nextBox,lastBox);
+     if(task.points_consumed!==null)info.append(node('p','Puntos consumidos: '+String(task.points_consumed),'agent-task-points'));
+     const actions=node('div',undefined,'agent-task-controls');
+     const toggle=button(configuredState==='active'?'Pausar tarea':'Activar tarea',()=>load(task.id,configuredState==='active'?'pausar':'activar'),'agent-task-toggle');
+     toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked',configuredState==='active'?'true':'false');
+     toggle.disabled=pausedByAgent&&configuredState!=='active';
+     if(toggle.disabled)toggle.title='Primero activá el agente';
+     actions.append(toggle);
+     card.append(summary,info,actions);body.append(card);
     }
    }catch(e){if(current()&&!silent){const message=node('p',e.message||'No se confirmó el cambio de tareas. Reintentá.');message.setAttribute('role','alert');body.append(message,button('Reintentar',()=>load()));}}
    finally{busy=false;status.remove();for(const [el,value] of disabled)if(el.isConnected)el.disabled=value;body.removeAttribute('aria-busy');}

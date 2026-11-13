@@ -676,3 +676,28 @@ html[data-theme="dark"] .agent-field input,html[data-theme="dark"] .agent-field 
 
 .agent-owner-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.agent-owner-actions>.agent-delete{margin-inline-start:auto;border:1px solid #cf465b70;color:#b83248;background:transparent}html[data-theme="dark"] .agent-owner-actions>.agent-delete{color:#ff9bac;border-color:#ff9bac60}.agent-owner-actions>.agent-delete:hover{background:#cf465b18}
 @media(max-width:520px){.agent-owner-actions>.primary{width:auto}.agent-owner-actions>.agent-delete{margin-inline-start:auto}}
+
+/* Tarjetas de tareas: presentación solamente; endpoints existentes intactos. */
+.agent-task-card{position:relative;padding:1rem 1.1rem;display:grid;gap:.65rem;background:var(--card-bg,var(--surface,transparent));color:var(--text-color,inherit)}
+.agent-task-card.agent-task-is-paused{opacity:.78}
+.agent-task-title{align-items:center;justify-content:space-between;gap:.75rem}
+.agent-task-title h4{margin:0;font-size:1.05rem;line-height:1.4}
+.agent-task-type{margin:0;color:var(--muted,#6b7280);font-size:.9rem}
+.agent-task-schedule-summary p{margin:.15rem 0;font-size:.9rem}
+.agent-task-highlights{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem;margin:.2rem 0}
+.agent-task-highlight{border:1px solid var(--border,#8886);border-radius:9px;padding:.7rem;min-width:0}
+.agent-task-highlight span{display:block;font-size:.78rem;color:var(--muted,#6b7280);margin-bottom:.3rem}
+.agent-task-highlight strong{display:block;font-size:.92rem;overflow-wrap:anywhere}
+.agent-task-points{grid-column:1/-1;font-size:.8rem;margin:0}
+.agent-task-day-chips{display:flex;gap:.3rem;margin:.5rem 0;flex-wrap:wrap}
+.agent-task-day-chips span{width:1.7rem;height:1.7rem;display:grid;place-items:center;border:1px solid var(--border,#8886);border-radius:6px;font-size:.8rem}
+.agent-task-day-chips .selected{background:var(--primary,#7752c9);color:white;border-color:transparent}
+.agent-task-controls{display:flex;justify-content:flex-end}
+.agent-task-menu{position:relative;flex-shrink:0}
+.agent-task-menu summary{cursor:pointer;list-style:none;font-size:1.4rem;line-height:1;padding:.2rem .5rem;border-radius:7px}
+.agent-task-menu summary::-webkit-details-marker{display:none}
+.agent-task-menu summary:focus-visible{outline:2px solid currentColor}
+.agent-task-menu-items{position:absolute;right:0;top:100%;z-index:5;min-width:12rem;background:var(--card-bg,var(--surface,transparent));color:inherit;border:1px solid var(--border,#8886);box-shadow:0 5px 18px #0002;border-radius:9px;padding:.35rem;display:grid;gap:.2rem}
+.agent-task-menu-items button{width:100%;text-align:left}
+.agent-task-menu-items .agent-task-danger{color:#bd3535}
+@media(max-width:520px){.agent-task-highlights{grid-template-columns:1fr}}
