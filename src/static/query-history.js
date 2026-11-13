@@ -52,9 +52,26 @@
    if(data.last_checked_at){const checked=new Date(data.last_checked_at);if(!Number.isNaN(checked.getTime()))text('p',tr('Actualizado automáticamente')+' · '+new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{dateStyle:'medium',timeStyle:'short'}).format(checked)).className='query-history-refresh';}
    if(data.evidence_status==='UNVERIFIED')text('p','Información no verificada.');
    text('p',data.result.summary);out.append(...productCards);
+   if(Array.isArray(data.result.items)&&data.result.items.length){
+    const grid=document.createElement('div');grid.className='scraped-products agent-result-grid';
+    for(const item of data.result.items){
+     if(!item||typeof item.title!=='string')continue;
+     const card=document.createElement('article');card.className='scraped-product agent-result-card';
+     const image=safeQueryUrl(item.image);if(image){const visual=document.createElement('div');visual.className='scraped-product-visual';const img=document.createElement('img');img.src=image;img.alt='';img.loading='lazy';img.onerror=()=>visual.remove();visual.append(img);card.append(visual);}
+     const heading=document.createElement('h4');heading.textContent=item.title;card.append(heading);
+     for(const [key,label] of [['company','Empresa'],['location','Ubicación'],['published_at','Fecha en la fuente']]){
+      if(typeof item[key]==='string'&&item[key]){const line=document.createElement('p');line.className='hint';let value=item[key];if(key==='published_at'){const stamp=new Date(value);if(!Number.isNaN(stamp.getTime()))value=new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{dateStyle:'medium',...(/^\d{4}-\d{2}-\d{2}$/.test(value)?{timeZone:'UTC'}:{})}).format(stamp);}line.textContent=tr(label)+': '+value;card.append(line);}
+     }
+     if(typeof item.description==='string'&&item.description){const preview=document.createElement('p');preview.className='agent-result-excerpt';preview.textContent=item.description.length>240?item.description.slice(0,239).replace(/\s+\S*$/,'')+'…':item.description;card.append(preview);if(item.description.length>240){const details=document.createElement('details'),summary=document.createElement('summary'),description=document.createElement('p');summary.textContent=tr('Ver descripción');description.textContent=item.description;details.append(summary,description);card.append(details);}}
+     const url=safeQueryUrl(item.url);if(url){const link=document.createElement('a');link.href=url;link.target='_blank';link.rel='noopener noreferrer';link.className='action-button';link.textContent=tr('Ver fuente');card.append(link);}
+     grid.append(card);
+    }
+    out.append(grid);
+   }
+
    for(const finding of presentation.text){const card=document.createElement('article');card.className='prompt-result';const paragraph=document.createElement('p');paragraph.textContent=finding;card.append(paragraph);out.append(card);}
    for(const warning of data.result.warnings||[])text('p',warning).className='hint';
-   for(const source of data.result.sources||[]){const url=safeQueryUrl(source.url);if(!url)continue;const link=text('a',source.title||url);link.href=url;link.target='_blank';link.rel='noopener noreferrer';}
+   for(const source of data.result.sources||[]){const url=safeQueryUrl(source.url);if(!url||(data.result.items||[]).some(item=>item.url===url))continue;const link=text('a',source.title||url);link.href=url;link.target='_blank';link.rel='noopener noreferrer';}
    showQuery();$('queryStatus').textContent='Respuesta guardada de Agente · '+data.agent_name;
   }catch(error){if(serial===generation&&email===currentEmail)$('queryHistoryStatus').textContent=error.message;}
  }
