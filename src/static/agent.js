@@ -347,20 +347,22 @@
     const data=await response.json();if(!current())return;
     if(!response.ok||data.success!==true)throw Error(data.error||'No se confirmó el cambio de tareas. Reintentá.');
     const tasks=[...data.tasks].sort((a,b)=>Number(b.state==='active')-Number(a.state==='active')||(b.created_at||'').localeCompare(a.created_at||'')||b.id-a.id);
-    const fingerprint=JSON.stringify(tasks);if(fingerprint===lastTasks)return;
+    const fingerprint=JSON.stringify([serverState,tasks]);if(fingerprint===lastTasks)return;
     lastTasks=fingerprint;
     heading.replaceChildren(node('span','Mis tareas'),raw('span',' ('+data.count+') ▾'));body.replaceChildren();
     if(!data.tasks.length)body.append(node('p','No hay tareas configuradas.'));
     const date=value=>value?new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{dateStyle:'short',timeStyle:'short'}).format(new Date(value+'Z')):tr('Sin datos');
     const activeGroup=node('section',undefined,'agent-task-group'),pausedGroup=node('section',undefined,'agent-task-group');
     const groupHeading=(label,count)=>{const head=node('div',undefined,'agent-task-group-heading');head.append(node('h3',label),node('span',String(count)));return head;};
-    activeGroup.append(groupHeading('Activas',tasks.filter(t=>(t.configured_state||t.state)==='active').length));
-    pausedGroup.append(groupHeading('Pausadas',tasks.filter(t=>(t.configured_state||t.state)!=='active').length));
+    const effectiveActive=task=>!task.paused_by_agent&&!['paused','admin_paused','disabled'].includes(serverState)&&(task.configured_state||task.state)==='active';
+    activeGroup.append(groupHeading('Activas',tasks.filter(effectiveActive).length));
+    pausedGroup.append(groupHeading('Pausadas',tasks.filter(t=>!effectiveActive(t)).length));
     body.append(activeGroup,pausedGroup);
     const types={PRODUCTOS_NUEVOS:'products',PRECIOS:'prices',PROVEEDORES:'suppliers',OPORTUNIDADES_LOCALES:'local',EMPLEOS:'jobs',TENDENCIAS:'trends'};
     const frequencies={DIARIA:'Diario',DAILY:'Diario',SEMANAL:'Semanal',WEEKLY:'Semanal',ONCE:'Una vez',DOS_POR_SEMANA:'Dos veces por semana'};
     for(const task of tasks){
      const pausedByAgent=task.paused_by_agent||['paused','admin_paused','disabled'].includes(serverState),configuredState=task.configured_state||task.state;
+     const effectiveState=effectiveActive(task)?'active':'paused';
      const card=node('article',undefined,'agent-task-card');
      if(pausedByAgent||configuredState==='paused')card.classList.add('agent-task-is-paused');
      const title=raw('h4',task.name||tr(TASKS[types[task.type]]||task.type)),titleRow=node('div',undefined,'agent-task-title');
@@ -400,8 +402,8 @@
      const removeAction=button('Eliminar tarea',()=>{menu.open=false;if(window.confirm(tr('¿Eliminar esta tarea? Se conservará el historial.')))load(task.id,'eliminar');},'agent-task-danger');
      menuItems.append(rename,scheduleAction,removeAction);menu.append(menuButton,menuItems);
      titleRow.append(title,menu);
-     const meta=node('div',undefined,'agent-task-meta'),kind=node('span',TASKS[types[task.type]]||task.type,'agent-task-type'),badge=node('span',configuredState==='active'?'Activa':'Pausada','agent-task-state');
-     badge.classList.add(configuredState==='active'?'is-active':'is-paused');meta.append(kind,badge);card.append(titleRow,meta);
+     const meta=node('div',undefined,'agent-task-meta'),kind=node('span',TASKS[types[task.type]]||task.type,'agent-task-type'),badge=node('span',effectiveState==='active'?'Activa':'Pausada','agent-task-state');
+     badge.classList.add(effectiveState==='active'?'is-active':'is-paused');meta.append(kind,badge);card.append(titleRow,meta);
      if(pausedByAgent&&configuredState==='active')card.append(node('p','Se reanudará cuando actives el agente.','agent-notice'));
      const editSchedule=()=>{
       if(editing||busy)return;
@@ -486,13 +488,13 @@
      if(task.points_consumed!==null)info.append(node('p','Puntos consumidos: '+String(task.points_consumed),'agent-task-points'));
      const actions=node('div',undefined,'agent-task-controls');
      const toggle=button('',()=>load(task.id,configuredState==='active'?'pausar':'activar'),'agent-task-toggle');
-     toggle.append(node('span',undefined,'agent-task-switch-track'),node('span',configuredState==='active'?'Activa':'Pausada','agent-task-switch-label'));
-     toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked',configuredState==='active'?'true':'false');
-     toggle.disabled=pausedByAgent&&configuredState!=='active';
+     toggle.append(node('span',undefined,'agent-task-switch-track'),node('span',effectiveState==='active'?'Activa':'Pausada','agent-task-switch-label'));
+     toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked',effectiveState==='active'?'true':'false');
+     toggle.disabled=Boolean(pausedByAgent);
      if(toggle.disabled)toggle.title='Primero activá el agente';
      const editButton=button('Editar',()=>editSchedule(),'agent-task-edit');editButton.dataset.editSchedule='';
      actions.append(toggle,editButton);
-     card.append(summary,info,actions);(configuredState==='active'?activeGroup:pausedGroup).append(card);
+     card.append(summary,info,actions);(effectiveState==='active'?activeGroup:pausedGroup).append(card);
     }
    }catch(e){if(current()&&!silent){const message=node('p',e.message||'No se confirmó el cambio de tareas. Reintentá.');message.setAttribute('role','alert');body.append(message,button('Reintentar',()=>load()));}}
    finally{busy=false;status.remove();for(const [el,value] of disabled)if(el.isConnected)el.disabled=value;body.removeAttribute('aria-busy');}
