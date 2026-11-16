@@ -179,7 +179,7 @@
   queryContext=context;identity=who();wizard=true;index=2;error='';
   draft={...defaults(),...(record||{}),version:1,tasks:[context.taskType||((context.category?.name?.toLowerCase().includes('laboral')||context.prompt?.toLowerCase().includes('empleo'))?'jobs':'products')],query_context:structuredClone(context.query_context),country:context.country,city:context.city,scopes:context.scope?[context.scope.id]:[],categories:context.category?[context.category.id]:[],language:context.language,scopeLabels:context.scope?[context.scope]:[],categoryLabels:context.category?[context.category]:[]};
   draft.execution_sources=structuredClone(context.query_context.execution_sources||{mode:'all',ids:[]});
-  draft.query_context.task_name=String(context.task_name||context.prompt||'Nueva tarea').split('\n')[0].trim().slice(0,120);
+  draft.query_context.task_name=String(context.task_name||(typeof suggestedTaskName==='function'?suggestedTaskName(context):'')).trim().slice(0,120);
   scopes=structuredClone(catalogAmbitos);categories=structuredClone(catalogCategorias);cities=[context.city];
 
   refreshBudgetLimit();renderStep();root.querySelector('h3')?.focus();

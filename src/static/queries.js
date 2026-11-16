@@ -78,6 +78,41 @@ function preparedAgentContext(){
  else if(body.user_message.length>3500||queryPrepared.summary.length>3500)issue='El pedido o resumen supera el límite de 3500 caracteres para configurar el agente.';
  return {taskType:isEmploymentQuery(body)?'jobs':'products',owner:currentEmail,country:body.pais,city:body.ciudad,language:body.idioma,scope:scope?{id:scope.ambito_id,name:scope.nombre}:null,category:category?{id:category.categoria_id,name:category.nombre}:null,prompt:body.user_message,summary:queryPrepared.summary,query_context:{execution_sources:window.DPIATaskSources?.preference()||{mode:'all',ids:[]},prompt:body.user_message,summary:queryPrepared.summary,mode:body.mode,postal_id:body.codigo_postal_id,currency:body.budget_currency||''},issue};
 }
+function suggestedTaskName(context){
+ const category=context.category?.name||'';
+ const scope=context.scope?.name||'';
+ const location=[context.city,context.country].filter(Boolean).join(', ');
+ let subject=String(context.prompt||'').split(/\n|[.!?]\s/)[0].trim();
+ const generic=/^(sugerí productos útiles|buscá novedades y productos relevantes)/i.test(subject);
+ if(generic){
+  const match=subject.match(/(?:productos útiles|productos relevantes) de (.+?)(?:, en |, para | para |$)/i);
+  subject=category||match?.[1]||'';
+  if(!subject)return '';
+  subject=(context.query_context?.mode==='novedades'?'Novedades de ':'Productos de ')+subject+(scope?' · '+scope:'');
+ }else subject=subject.replace(/^(busc[aá]r?|busque|búsqueda de)\s+/i,'').trim();
+ const suffix=location?' · '+location:'';
+ const room=120-suffix.length;
+ if(subject.length>room)subject=subject.slice(0,room).replace(/\s+\S*$/,'').trim();
+ return subject+suffix;
+}
+async function completeGenericProductContext(){
+ const input=document.querySelector('#promptText');
+ if(isEmploymentQuery()||document.querySelector('#queryCategory').value||
+   !/^(Sugerí productos útiles|Buscá novedades y productos relevantes) para /i.test(input.value))return true;
+ const owner=currentEmail,original=input.value;
+ const response=await fetch('/api/agente/configuracion',{signal:AbortSignal.timeout(15000)});
+ const data=await response.json();
+ if(owner!==currentEmail||input.value!==original)return false;
+ if(!response.ok||!data.success)throw new Error(data.error||'No se pudo recuperar el contexto del agente.');
+ const config=data.agent?.configuration;
+ const summary=config?.query_context?.summary||'';
+ const category=config?.categoryLabels?.map(x=>x.name).filter(Boolean).join(', ')||summary.match(/^Categoría: (.+)$/m)?.[1];
+ const scope=config?.scopeLabels?.map(x=>x.name).filter(Boolean).join(', ')||summary.match(/^Ámbito: (.+)$/m)?.[1];
+ if(!category)throw new Error('Indicá qué productos buscás o elegí una categoría antes de continuar.');
+ input.value=original.replace(/^(Sugerí productos útiles|Buscá novedades y productos relevantes) para /i,
+   (_,prefix)=>prefix+' de '+category+(scope?', en '+scope:'')+', para ');
+ return true;
+}
 function consultAgentVisible(){
  if(currentEmail)return !!preparedAgentContext();
  const body=queryBody(),scope=catalogAmbitos.find(row=>row.ambito_id===body.ambito_id),category=catalogCategorias.find(row=>row.categoria_id===body.categoria_id);
@@ -162,7 +197,7 @@ async function submitImmediateTask(retry=false){
    scopes:context.scope?[context.scope.id]:[],categories:context.category?[context.category.id]:[],
    frequency:'daily',days:[],time:now.toTimeString().slice(0,5),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC',
    points:0,period:'month',notifications:false,language:context.language,execution_sources:sources,
-   query_context:{...context.query_context,task_name:context.prompt.split('\n')[0].trim().slice(0,120),execution_sources:sources}};
+   query_context:{...context.query_context,task_name:suggestedTaskName(context),execution_sources:sources}};
   immediateSubmission={owner,fingerprint,body:{configuration:config,request_id:crypto.randomUUID()}};
  }
  const submission=immediateSubmission,status=document.getElementById('queryStatus');
@@ -312,6 +347,7 @@ async function prepareDPIAQuery({automatic=false}={}){
  if(queryBusy)return;show('consultPage');
  if(!currentEmail){openAuth();return;}
  await queryMediaPending;if(queryBusy)return;
+ try{if(!await completeGenericProductContext())return;}catch(error){document.querySelector('#queryStatus').textContent=error.message;setQueryArtState('warning');return;}
  if(isEmploymentQuery()){
   const min=document.getElementById('querySalaryMin'),max=document.getElementById('querySalaryMax');
   max.setCustomValidity('');
