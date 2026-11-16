@@ -187,9 +187,11 @@ def provider_error(response, secrets=()):
     return PreparationError(message,502)
 
 
-def generate(prepared, config, *, max_output_tokens=12000, on_usage=None):
+def generate(prepared, config, *, max_output_tokens=12000, on_usage=None, timeout_seconds=90):
     if type(max_output_tokens) is not int or not 16<=max_output_tokens<=12000:
         raise PreparationError('Presupuesto de generación inválido.')
+    if type(timeout_seconds) is not int or not 5<=timeout_seconds<=90:
+        raise PreparationError('Tiempo de generación inválido.')
     key=config.get('OPENAI_API_KEY','')
     if not key:raise PreparationError('La generación de consultas no está configurada todavía.',503)
     schema=result_schema(prepared)
@@ -199,7 +201,7 @@ def generate(prepared, config, *, max_output_tokens=12000, on_usage=None):
                 json={'model':config.get('OPENAI_MODEL','gpt-4o-mini'),'store':False,'instructions':prompt,
                       'input':model_input(prepared),'max_output_tokens':max_output_tokens,
                       'text':{'format':{'type':'json_schema','name':'dpia_results_v2','strict':True,'schema':schema}}},
-                timeout=(3.05,90),allow_redirects=False) as response:
+                timeout=(3.05,timeout_seconds),allow_redirects=False) as response:
             if response.status_code!=200:
                 provider_error(response,secrets=(key,config.get('SCRAPEADOR_SERVICE_KEY','')))
                 # Diagnostics must not change the public error contract.
@@ -209,7 +211,8 @@ def generate(prepared, config, *, max_output_tokens=12000, on_usage=None):
             usage=payload.get('usage')
             reference=payload.get('id')
             if (not isinstance(usage,dict) or not isinstance(reference,str) or
-                not re.fullmatch(r'resp_[A-Za-z0-9_-]{1,150}',reference) or
+                not re.fullmatch(r'resp_[A-Za-z0-9_-]{1,150}',reference) or key in reference or
+                (bool(config.get('SCRAPEADOR_SERVICE_KEY')) and config['SCRAPEADOR_SERVICE_KEY'] in reference) or
                 any(type(usage.get(k)) is not int or usage[k]<0 for k in ('input_tokens','output_tokens'))):
                 raise PreparationError('Consumo del proveedor no confirmado.',502)
             on_usage({'response_id':reference,'model':config.get('OPENAI_MODEL','gpt-4o-mini'),

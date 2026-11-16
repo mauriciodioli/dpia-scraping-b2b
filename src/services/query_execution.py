@@ -112,7 +112,7 @@ def dispatch_external(source,result,config,*,quota=None,operation_id=None,base44
         return finish('pending',{'status':'pending','error':message,'provider_job_id':job_id,'products':[]})
     try:
         with requests.post(DPIAClient.BASE_URL+('/base44/scraping' if base44 else '/scraping/'+source),headers=headers,json=payload,
-                           timeout=(3.05,180),allow_redirects=False) as response:
+                           timeout=(3.05,config.get('_INTERNAL_SCRAPER_TIMEOUT_SECONDS',180)),allow_redirects=False) as response:
             if response.status_code in (401,403,404,405):return rejected('El servicio rechazó la solicitud antes de iniciar scraping.')
             if response.status_code!=200:return uncertain('El servicio no confirmó si inició el scraping. La ejecución queda reservada.')
             data=response.json()

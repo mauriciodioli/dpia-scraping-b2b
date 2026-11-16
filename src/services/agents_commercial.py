@@ -61,6 +61,8 @@ class AdoptedQuota(MySQLScrapingQuota):
 
 
 def execute():
+    if not request.content_length or request.content_length>65536:
+        return jsonify(error='invalid_internal_request'),413
     raw=request.get_data(cache=True)
     key=current_app.config.get('PWA_ACTIVATION_SECRET','')
     stamp=request.headers.get('X-DPIA-Timestamp','')
@@ -72,8 +74,8 @@ def execute():
         return jsonify(error='invalid_service_credentials'),401
     try:
         body=request.get_json(silent=True)
-        required={'owner_id','agent_id','job_id','task_id','operation_id','request','max_output_tokens','model'}
-        if not isinstance(body,dict) or set(body)!=required or type(body['owner_id']) is not int or body['owner_id']<1:
+        required={'owner_id','agent_id','job_id','task_id','operation_id','request','max_output_tokens','model','generation_timeout_seconds','scraping_timeout_seconds'}
+        if not isinstance(body,dict) or set(body)-{'research_evidence'}!=required or type(body['owner_id']) is not int or body['owner_id']<1:
             raise PreparationError('Solicitud interna inválida.')
         for k in ('agent_id','job_id','task_id','operation_id'):
             if str(UUID(body[k]))!=body[k]: raise ValueError
@@ -81,6 +83,9 @@ def execute():
         if body['operation_id']!=expected: raise PreparationError('Reserva inválida.',403)
         if type(body['max_output_tokens']) is not int or not 16<=body['max_output_tokens']<=12000:
             raise PreparationError('Presupuesto de generación inválido.')
+        if (type(body['generation_timeout_seconds']) is not int or not 5<=body['generation_timeout_seconds']<=90
+                or type(body['scraping_timeout_seconds']) is not int or not 90<=body['scraping_timeout_seconds']<=180):
+            raise PreparationError('Tiempo de proveedor inválido.')
         if body['model']!=current_app.config.get('OPENAI_MODEL','gpt-4o-mini'):
             raise PreparationError('El modelo autorizado no coincide con B2B.',409)
         payload=body['request']
@@ -92,12 +97,19 @@ def execute():
         require_enabled_marketplaces(['amazon'])
         prepared=prepare_context({**payload,'sources':['amazon'],'mode':'novedades'},body['owner_id'])
         prepared['image_pipeline']='base44'
+        if 'research_evidence' in body:
+            evidence=body['research_evidence']
+            if not isinstance(evidence,dict) or len(json.dumps(evidence,ensure_ascii=False).encode())>24000:
+                raise PreparationError('Evidencia interna inválida.')
+            prepared['research_evidence']=evidence
         digest=hashlib.sha256(json.dumps(body,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
         adopted=AdoptedQuota(quota,{k:body[k] for k in ('agent_id','job_id','task_id')},digest)
         usage={}
         def generate_once(prepared,config):
-            return generate(prepared,config,max_output_tokens=body['max_output_tokens'],on_usage=usage.update)
-        run_novelties(prepared,current_app.config,adopted,body['operation_id'],generate_once,
+            return generate(prepared,config,max_output_tokens=body['max_output_tokens'],
+                timeout_seconds=body['generation_timeout_seconds'],on_usage=usage.update)
+        internal_config={**current_app.config,'_INTERNAL_SCRAPER_TIMEOUT_SECONDS':body['scraping_timeout_seconds']}
+        run_novelties(prepared,internal_config,adopted,body['operation_id'],generate_once,
             generation_usage=lambda:dict(usage))
         operation=adopted.operation(body['operation_id'],body['owner_id'])
         outcome=json.loads(operation['outcome']) if operation.get('outcome') else {}
