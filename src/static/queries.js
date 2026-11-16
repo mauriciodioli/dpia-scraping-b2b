@@ -99,19 +99,7 @@ async function completeGenericProductContext(){
  const input=document.querySelector('#promptText');
  if(isEmploymentQuery()||document.querySelector('#queryCategory').value||
    !/^(Sugerí productos útiles|Buscá novedades y productos relevantes) para /i.test(input.value))return true;
- const owner=currentEmail,original=input.value;
- const response=await fetch('/api/agente/configuracion',{signal:AbortSignal.timeout(15000)});
- const data=await response.json();
- if(owner!==currentEmail||input.value!==original)return false;
- if(!response.ok||!data.success)throw new Error(data.error||'No se pudo recuperar el contexto del agente.');
- const config=data.agent?.configuration;
- const summary=config?.query_context?.summary||'';
- const category=config?.categoryLabels?.map(x=>x.name).filter(Boolean).join(', ')||summary.match(/^Categoría: (.+)$/m)?.[1];
- const scope=config?.scopeLabels?.map(x=>x.name).filter(Boolean).join(', ')||summary.match(/^Ámbito: (.+)$/m)?.[1];
- if(!category)throw new Error('Indicá qué productos buscás o elegí una categoría antes de continuar.');
- input.value=original.replace(/^(Sugerí productos útiles|Buscá novedades y productos relevantes) para /i,
-   (_,prefix)=>prefix+' de '+category+(scope?', en '+scope:'')+', para ');
- return true;
+ throw new Error('Indicá qué productos buscás o elegí una categoría antes de continuar. No se reutiliza automáticamente la categoría del agente.');
 }
 function consultAgentVisible(){
  if(currentEmail)return !!preparedAgentContext();
