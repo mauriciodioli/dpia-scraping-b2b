@@ -402,3 +402,9 @@ def agent_response_history(job_id=None):
     except SQLAlchemyError:
         db.session.rollback()
         return jsonify(success=False,error='No se pudo verificar el acceso al historial.'),503
+
+
+@query_bp.post('/internal/agents-commercial')
+def agents_commercial():
+    from services.agents_commercial import execute
+    return execute()

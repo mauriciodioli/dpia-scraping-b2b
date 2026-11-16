@@ -18,7 +18,7 @@ def validate_configuration(config):
         raise not_started('Falta SCRAPEADOR_SERVICE_KEY.')
 
 
-def run_novelties(prepared, config, quota, operation_id, generate_fn):
+def run_novelties(prepared, config, quota, operation_id, generate_fn, *, generation_usage=None):
     external=[source for source in prepared['sources'] if source in EXTERNAL]
     if len(external)!=1:
         raise PreparationError('Elegí un marketplace para buscar novedades.')
@@ -57,10 +57,12 @@ def run_novelties(prepared, config, quota, operation_id, generate_fn):
                             raise PreparationError('OpenAI no devolvió una búsqueda válida para el scraper.',502)
                         plan['search_query']=query
             except PreparationError as exc:
-                quota.novel_generation(operation_id,user_id,token=token,error=str(exc))
+                quota.novel_generation(operation_id,user_id,token=token,error=str(exc),
+                    **({'usage':generation_usage()} if generation_usage is not None else {}))
                 exc.not_started=True
                 raise
-            quota.novel_generation(operation_id,user_id,token=token,result=generated)
+            quota.novel_generation(operation_id,user_id,token=token,result=generated,
+                **({'usage':generation_usage()} if generation_usage is not None else {}))
     if generated['needs_clarification']:
         outcomes={source:{'status':'clarification_required','products':[]} for source in prepared['sources']}
     else:

@@ -297,7 +297,7 @@ class MySQLScrapingQuota:
                 operaciones.c.usuario_id==user_id).values(resultado_json=json.dumps(outcome,ensure_ascii=False)))
             return stage
 
-    def novel_generation(self, operation_id, user_id, *, token=None, result=None, error=None):
+    def novel_generation(self, operation_id, user_id, *, token=None, result=None, error=None, usage=None):
         """Durable OpenAI claim/result inside the existing reservation, without DDL."""
         import uuid
         with self._engine().begin() as conn:
@@ -327,6 +327,7 @@ class MySQLScrapingQuota:
                     outcome={'status':'clarification_required' if clarification else 'pending','products':[],
                              'generation':{'status':'complete'},'generation_result':result}
                     state='released' if clarification else 'reserved'
+                if usage is not None:outcome['generation_usage']=usage
             conn.execute(update(operaciones).where(operaciones.c.operacion_id==operation_id,
                 operaciones.c.usuario_id==user_id).values(estado=state,resultado_json=json.dumps(outcome,ensure_ascii=False)))
             return {'token':token} if claiming else {'result':result}

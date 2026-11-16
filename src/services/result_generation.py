@@ -187,7 +187,9 @@ def provider_error(response, secrets=()):
     return PreparationError(message,502)
 
 
-def generate(prepared, config):
+def generate(prepared, config, *, max_output_tokens=12000, on_usage=None):
+    if type(max_output_tokens) is not int or not 16<=max_output_tokens<=12000:
+        raise PreparationError('Presupuesto de generación inválido.')
     key=config.get('OPENAI_API_KEY','')
     if not key:raise PreparationError('La generación de consultas no está configurada todavía.',503)
     schema=result_schema(prepared)
@@ -195,7 +197,7 @@ def generate(prepared, config):
     try:
         with requests.post('https://api.openai.com/v1/responses',headers={'Authorization':f'Bearer {key}'},
                 json={'model':config.get('OPENAI_MODEL','gpt-4o-mini'),'store':False,'instructions':prompt,
-                      'input':model_input(prepared),'max_output_tokens':12000,
+                      'input':model_input(prepared),'max_output_tokens':max_output_tokens,
                       'text':{'format':{'type':'json_schema','name':'dpia_results_v2','strict':True,'schema':schema}}},
                 timeout=(3.05,90),allow_redirects=False) as response:
             if response.status_code!=200:
@@ -203,6 +205,15 @@ def generate(prepared, config):
                 # Diagnostics must not change the public error contract.
                 raise PreparationError('No se pudo generar la consulta. Reintentá más tarde.',502)
             payload=response.json()
+        if on_usage is not None:
+            usage=payload.get('usage')
+            reference=payload.get('id')
+            if (not isinstance(usage,dict) or not isinstance(reference,str) or
+                not re.fullmatch(r'resp_[A-Za-z0-9_-]{1,150}',reference) or
+                any(type(usage.get(k)) is not int or usage[k]<0 for k in ('input_tokens','output_tokens'))):
+                raise PreparationError('Consumo del proveedor no confirmado.',502)
+            on_usage({'response_id':reference,'model':config.get('OPENAI_MODEL','gpt-4o-mini'),
+                'input_tokens':usage['input_tokens'],'output_tokens':usage['output_tokens']})
         if payload.get('status')!='completed':raise PreparationError('La generación no se completó.',502)
         outputs=[part['text'] for output in payload.get('output',[]) if output.get('type')=='message'
                  for part in output.get('content',[]) if part.get('type')=='output_text']
