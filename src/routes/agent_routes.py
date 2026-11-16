@@ -122,3 +122,33 @@ def task_sources():
         return jsonify(success=True,items=available_sources(user_id))
     except PreparationError as exc:
         return jsonify(success=False,error=str(exc)),exc.status
+
+
+@agent_bp.post('/tareas/ejecutar-ahora')
+def immediate_task():
+    from uuid import UUID
+    user_id=session.get('user_id')
+    if type(user_id) is not int:return jsonify(success=False,error='Iniciá sesión.'),401
+    try:
+        origin=request.headers.get('Origin')
+        if (request.headers.get('X-DPIA-Action')!='execute-task' or request.headers.get('Sec-Fetch-Site')=='cross-site'
+                or (origin and urlsplit(origin).netloc!=request.host)):
+            return jsonify(success=False,error='Solicitud no autorizada.'),403
+        if not request.is_json or (request.content_length or 0)>65536 or len(request.get_data(cache=True))>65536:
+            return jsonify(success=False,error='Pedido inválido.'),400
+        body=request.get_json(silent=True)
+        if not isinstance(body,dict) or set(body)!={'configuration','request_id'} or str(UUID(body['request_id']))!=body['request_id']:
+            return jsonify(success=False,error='Pedido inválido.'),400
+        config=verify_catalog(validate_config(body['configuration']))
+        if len(config['tasks'])!=1 or not config.get('query_context'):
+            return jsonify(success=False,error='El envío necesita una única tarea y su pedido completo.'),422
+        from services.immediate_task import ImmediateTaskService
+        store=current_app.extensions.get('agent_configuration_store') or AgentConfigurationStore()
+        result=ImmediateTaskService(store).submit(user_id,config,body['request_id'])
+        return jsonify(success=True,**result),202
+    except (ValueError,TypeError,AttributeError):return jsonify(success=False,error='Identificador de envío inválido.'),400
+    except PreparationError as exc:return jsonify(success=False,error=str(exc)),exc.status
+    except (CatalogError,CatalogFiltersError):return jsonify(success=False,error='No se pudo verificar el catálogo. Reintentá.'),502
+    except SQLAlchemyError:
+        current_app.logger.warning('Immediate task persistence unavailable')
+        return jsonify(success=False,error='No se confirmó el envío. Reintentá el mismo pedido para evitar duplicados.'),503

@@ -175,7 +175,7 @@ class AgentConfigurationStore:
             bad('La configuración guardada no es compatible. Revisala antes de guardar.',409)
         task_rows=conn.execute(select(tareas).where(tareas.c.agente_id==row['id'])).mappings().all()
         enabled=[task['tipo'] for task in task_rows if (task['parametros'] or {}).get('schema_version')==1 and task['tipo'] in {TASKS[t] for t in config.get('tasks',[]) if t in TASKS}]
-        if any({k:v for k,v in (task['parametros'] or {}).items() if k not in ('_deleted_at','_agent_configuration','_configuration_revision','schedule','query_context','country','city','language','execution_sources')}!={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']} for task in task_rows if (task['parametros'] or {}).get('schema_version')==1 and task['tipo'] in enabled):
+        if any({k:v for k,v in (task['parametros'] or {}).items() if k not in ('_deleted_at','_agent_configuration','_configuration_revision','schedule','query_context','country','city','language','execution_sources','immediate_request_id')}!={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']} for task in task_rows if (task['parametros'] or {}).get('schema_version')==1 and task['tipo'] in enabled):
             bad('Los parámetros de las tareas no coinciden con la configuración guardada.',409)
         for task in task_rows:
             params=task['parametros'] or {}
@@ -210,7 +210,7 @@ class AgentConfigurationStore:
             row=self._existing(conn,user_id)
             return self._serialize(conn,row,allow_active=True) if row and not (row['configuracion'] or {}).get('_deleted_at') else None
 
-    def save(self,user_id,config,expected_revision):
+    def save(self,user_id,config,expected_revision,*,initial_request_id=None):
         now=datetime.now(timezone.utc).replace(tzinfo=None)
         with self._engine().begin() as conn:
             self._user(conn,user_id,lock=True)
@@ -253,7 +253,9 @@ class AgentConfigurationStore:
             for kind,row in current.items():
                 if kind not in desired:conn.execute(update(tareas).where(tareas.c.id==row['id']).values(habilitada=False,actualizado_en=now))
             for kind in sorted(desired):
-                fields=dict(habilitada=True,parametros={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']},actualizado_en=now)
+                fields=dict(habilitada=initial_request_id is None,parametros={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']},actualizado_en=now)
+                if initial_request_id:
+                    fields['parametros']['immediate_request_id']=initial_request_id
                 if config.get('query_context'):
                     fields['parametros'].update(query_context=config['query_context'],country=config['country'],city=config['city'],language=config['language'])
                 if 'execution_sources' in config:
@@ -276,7 +278,7 @@ class AgentConfigurationStore:
             else:conn.execute(insert(programaciones).values(agente_id=agent_id,creado_en=now,**fields))
             return {'id':agent_id,'revision':revision,'state':'inactive','configuration':config}
 
-    def add_task_to_existing_agent(self, user_id, config):
+    def add_task_to_existing_agent(self, user_id, config, *, immediate_request_id=None):
         """Append one task without changing the existing agent, its budget or other tasks."""
         import hashlib
         import json
@@ -293,6 +295,8 @@ class AgentConfigurationStore:
                     'country': config['country'], 'city': config['city'].casefold(),
                     'scopes': config['scopes'], 'categories': config['categories'],
                     'mode': context['mode'], 'execution_sources': config.get('execution_sources', context.get('execution_sources', {'mode':'all','ids':[]}))}
+        if immediate_request_id:
+            identity['immediate_request_id']=immediate_request_id
         digest = hashlib.sha256(json.dumps(identity, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         from model.agent_tasks import AgentTaskRepository
         repo = AgentTaskRepository()
@@ -326,6 +330,8 @@ class AgentConfigurationStore:
                       'city': config['city'], 'language': config['language'],
                       'schedule': {'frequency': config['frequency'], 'days': config['days'],
                                    'time': config['time'], 'timezone': config['timezone']}}
+            if immediate_request_id:
+                params['immediate_request_id']=immediate_request_id
             values = {'agente_id': agent['id'], 'tipo': kind,
                       'nombre': context.get('task_name') or task_name(context['prompt'], city=config['city']), 'habilitada': False,
                       'parametros': params, 'creado_en': now, 'actualizado_en': now}

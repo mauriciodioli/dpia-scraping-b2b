@@ -141,3 +141,33 @@ def task_sources(user_id):
         return [{'id':item['id'],'name':item['name'],'kind':item['kind']} for item in items]
     except (requests.RequestException,ValueError,KeyError,TypeError):
         bad('No se pudieron cargar las conexiones disponibles de Agents. Reintentá.',502)
+
+
+def schedule_immediate_task(user_id, agent_id, task_id, request_id):
+    payload=dict(operation='schedule_task_now',owner_id=user_id,source_agent_id=agent_id,task_id=task_id,request_id=request_id)
+    base=current_app.config.get('AGENTS_INTERNAL_URL','').rstrip('/')
+    secret=current_app.config.get('PWA_ACTIVATION_SECRET','')
+    parsed=urlsplit(base)
+    if (not secret or parsed.scheme not in ('http','https') or not parsed.hostname or parsed.username
+            or parsed.password or parsed.path or parsed.query or parsed.fragment):
+        bad('La conexión interna del agente no está configurada. La tarea quedó guardada; podés reintentar.',503)
+    raw=json.dumps(payload,sort_keys=True,separators=(',',':')).encode();stamp=str(int(time.time()))
+    signature=hmac.new(secret.encode(),stamp.encode()+b'\n'+PATH.encode()+b'\n'+raw,hashlib.sha256).hexdigest()
+    try:
+        response=requests.post(base+PATH,data=raw,headers={'Content-Type':'application/json',
+            'X-DPIA-Timestamp':stamp,'X-DPIA-Signature':signature},timeout=(3.05,20),allow_redirects=False)
+        data=response.json()
+        if response.status_code!=200:
+            code=data.get('error',{});code=code.get('code') if isinstance(code,dict) else code
+            message={'agent_paused':'La tarea quedó guardada. Reanudá el agente y reintentá este envío.',
+                     'agent_disabled':'La tarea quedó guardada. Habilitá el agente y reintentá este envío.',
+                     'selected_sources_unavailable':'La tarea quedó guardada, pero una conexión elegida no está disponible.'}.get(code,'No se confirmó la ejecución. La tarea quedó guardada; reintentá el mismo envío.')
+            bad(message,409 if response.status_code==409 else 502)
+        if (data.get('api_version')!='agents.v1' or data.get('owner_id')!=user_id
+                or data.get('source_agent_id')!=agent_id or data.get('task_id')!=task_id
+                or data.get('request_id')!=request_id or data['schedule']['legacy_task_id']!=task_id
+                or data['agent']['configuration_state']!='ENABLED'):
+            raise ValueError()
+        return data
+    except (requests.RequestException,ValueError,KeyError,TypeError):
+        bad('No se confirmó la ejecución. La tarea quedó guardada; reintentá el mismo envío para evitar duplicados.',502)

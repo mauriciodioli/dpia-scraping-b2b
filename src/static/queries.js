@@ -129,7 +129,7 @@ function openQuerySubmitChoice(){
   const hide=()=>{overlay.hidden=true;document.getElementById('preparePrompt').focus();};
   close.onclick=hide;overlay.onclick=e=>{if(e.target===overlay)hide();};
   overlay.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();hide();}if(e.key==='Tab'){const controls=[close,direct,...(task.disabled?[]:[task])],at=controls.indexOf(document.activeElement);if(e.shiftKey&&at===0){e.preventDefault();controls.at(-1).focus();}else if(!e.shiftKey&&at===controls.length-1){e.preventDefault();close.focus();}}});
-  direct.onclick=()=>{hide();if(querySubmitChoice.owner===currentEmail&&queryPrepared?.owner===currentEmail&&queryPrepared.fingerprint===querySubmitChoice.fingerprint&&JSON.stringify(queryBody())===queryPrepared.fingerprint&&!queryPrepared.sent&&!queryPrepared.pending)generateDPIAQuery();};
+  direct.onclick=()=>{hide();if(querySubmitChoice.owner===currentEmail&&queryPrepared?.owner===currentEmail&&queryPrepared.fingerprint===querySubmitChoice.fingerprint&&JSON.stringify(queryBody())===queryPrepared.fingerprint&&!queryPrepared.sent&&!queryPrepared.pending)openImmediateTaskSources();};
   task.onclick=()=>{hide();if(querySubmitChoice.owner===currentEmail&&queryPrepared?.fingerprint===querySubmitChoice.fingerprint)consultAgentButton.click();};
   choices.append(direct,task);dialog.append(close,title,choices);overlay.append(dialog);document.body.append(overlay);
   querySubmitChoice={overlay,direct,task};
@@ -137,6 +137,51 @@ function openQuerySubmitChoice(){
  querySubmitChoice.owner=currentEmail;querySubmitChoice.fingerprint=queryPrepared.fingerprint;
  querySubmitChoice.task.disabled=!preparedAgentContext()||!!preparedAgentContext()?.issue;
  querySubmitChoice.overlay.hidden=false;querySubmitChoice.direct.focus();
+}
+let immediateTaskSourceMode=false,immediateSubmission=null;
+function openImmediateTaskSources(){
+ const context=preparedAgentContext();
+ if(!context||context.issue){document.getElementById('queryStatus').textContent=context?.issue||'Prepará nuevamente el pedido.';return;}
+ openSourceModal(false);immediateTaskSourceMode=true;
+ document.getElementById('queryAIOrigin').hidden=true;
+ document.getElementById('allQuerySources').closest('label').hidden=true;
+ document.querySelector('.query-source-options').hidden=true;
+ const hint=document.getElementById('querySourcesHint');hint.hidden=false;hint.textContent='Se guardará una tarea de una sola ejecución para ahora, utilizando las conexiones que elijas.';
+ const confirm=document.getElementById('confirmQuerySources');confirm.removeAttribute('data-i18n');confirm.textContent='Crear tarea y ejecutar ahora';
+}
+async function submitImmediateTask(retry=false){
+ if(queryBusy||!currentEmail)return;
+ const context=preparedAgentContext(),owner=currentEmail;
+ if(!context||context.issue){document.getElementById('queryStatus').textContent=context?.issue||'Prepará nuevamente el pedido.';return;}
+ const fingerprint=queryPrepared.fingerprint;
+ const pendingKey='dpia-immediate-task:'+owner;
+ if(!retry){try{const saved=JSON.parse(sessionStorage.getItem(pendingKey)||'null');if(saved?.owner===owner&&saved.fingerprint===fingerprint&&typeof saved.body?.request_id==='string'&&saved.body?.configuration){immediateSubmission=saved;retry=true;}}catch(_){}}
+ if(!retry||!immediateSubmission||immediateSubmission.owner!==owner||immediateSubmission.fingerprint!==fingerprint){
+  const sources=window.DPIATaskSources.preference(),now=new Date();
+  const config={version:1,tasks:[context.taskType],country:context.country,city:context.city,
+   scopes:context.scope?[context.scope.id]:[],categories:context.category?[context.category.id]:[],
+   frequency:'daily',days:[],time:now.toTimeString().slice(0,5),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC',
+   points:0,period:'month',notifications:false,language:context.language,execution_sources:sources,
+   query_context:{...context.query_context,task_name:context.prompt.split('\n')[0].trim().slice(0,120),execution_sources:sources}};
+  immediateSubmission={owner,fingerprint,body:{configuration:config,request_id:crypto.randomUUID()}};
+ }
+ const submission=immediateSubmission,status=document.getElementById('queryStatus');
+ try{sessionStorage.setItem(pendingKey,JSON.stringify(submission));}catch(_){}
+ queryBusy=true;syncQueryConversation();status.textContent='Guardando tarea y programando su ejecución…';
+ try{
+  const response=await fetch('/api/agente/tareas/ejecutar-ahora',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'execute-task'},body:JSON.stringify(submission.body),signal:AbortSignal.timeout(60000)});
+  const data=await response.json();if(owner!==currentEmail||queryPrepared?.fingerprint!==fingerprint)return;
+  if(!response.ok||data.success!==true)throw Error(data.error||'No se confirmó el envío de la tarea.');
+  queryPrepared.sent=true;queryPrepared.pending=false;
+  try{sessionStorage.removeItem(pendingKey);}catch(_){}
+  status.textContent=data.replayed?'El envío de la tarea '+data.task_id+' ya estaba registrado. Consultá su estado en Mis tareas y el resultado en el historial.':'Tarea '+data.task_id+' guardada para ejecutar ahora. El resultado aparecerá en tu historial cuando termine.';
+  const actions=document.getElementById('queryResults');actions.replaceChildren();
+  const tasks=document.createElement('button');tasks.type='button';tasks.className='action-button';tasks.textContent='Ver mis tareas';tasks.onclick=()=>show('agentPage');
+  const history=document.createElement('button');history.type='button';history.className='action-button';history.textContent='Ver historial';history.onclick=()=>window.DPIAHistory?.showHistory();actions.append(tasks,history);
+ }catch(error){if(owner===currentEmail&&queryPrepared?.fingerprint===fingerprint){
+  queryPrepared.pending=true;status.textContent=error.name==='TimeoutError'?'El envío está pendiente de confirmación. Reintentá el mismo envío para consultar su estado sin duplicarlo.':error.message;
+  const retryButton=document.createElement('button');retryButton.type='button';retryButton.className='action-button';retryButton.textContent='Reintentar el mismo envío';retryButton.onclick=()=>submitImmediateTask(true);document.getElementById('queryResults').replaceChildren(retryButton);
+ }}finally{queryBusy=false;syncQueryConversation();}
 }
 function queueQueryPreparation(){
  clearTimeout(queryPreparationTimer);
@@ -301,6 +346,8 @@ function savedQuerySources(){
 }
 function openSourceModal(generateAfter=false){
  if(queryBusy)return;
+ immediateTaskSourceMode=false;
+ const hint=document.getElementById('querySourcesHint');hint.textContent='Elegí un marketplace por ejecución y los orígenes internos que quieras.';
  pendingSourcesGeneration=generateAfter;
  const exploring=queryMode==='explorar',novel=queryMode==='novedades';
  document.querySelector('#queryAIOrigin').hidden=!exploring&&!novel;
@@ -329,7 +376,7 @@ function openSourceModal(generateAfter=false){
  document.querySelector('#confirmQuerySources').focus();
  window.DPIATaskSources?.load();
 }
-function closeSourceModal(){document.querySelector('#querySourcesModal').hidden=true;pendingSourcesGeneration=false;}
+function closeSourceModal(){document.querySelector('#querySourcesModal').hidden=true;pendingSourcesGeneration=false;immediateTaskSourceMode=false;}
 let lastQueryOperationId=null;
 function safeQueryUrl(value){
  try{const url=new URL(value);return ['https:','http:'].includes(url.protocol)&&!url.username?url.href:null;}catch(_){return null;}
@@ -491,6 +538,7 @@ document.querySelector('#querySourcesModal').onclick=e=>{if(e.target.id==='query
 document.querySelector('#allQuerySources').onchange=e=>{for(const box of document.querySelectorAll('[name="querySource"]'))if(['local','dpia','historial'].includes(box.value))box.checked=e.target.checked;};
 document.querySelector('#confirmQuerySources').onclick=()=>{
  if(window.DPIATaskSources&&!window.DPIATaskSources.save())return;
+ if(immediateTaskSourceMode){closeSourceModal();submitImmediateTask();return;}
  if(queryMode==='explorar'){
   const generate=pendingSourcesGeneration;closeSourceModal();if(generate)generateDPIAQuery(true);return;
  }
