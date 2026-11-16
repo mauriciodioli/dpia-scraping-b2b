@@ -116,3 +116,28 @@ def synchronize_task(user_id, agent_id, task_id, schedule=None):
         return data['schedule']
     except (requests.RequestException,ValueError,KeyError,TypeError):
         bad('No se confirmó la programación de la tarea. Reintentá.',502)
+
+
+def task_sources(user_id):
+    """Read the live catalog through the existing signed Agents service boundary."""
+    payload={'operation':'task_sources','owner_id':user_id}
+    base=current_app.config.get('AGENTS_INTERNAL_URL','').rstrip('/')
+    secret=current_app.config.get('PWA_ACTIVATION_SECRET','')
+    parsed=urlsplit(base)
+    if (not secret or parsed.scheme not in ('http','https') or not parsed.hostname or parsed.username
+            or parsed.password or parsed.path or parsed.query or parsed.fragment):
+        bad('La conexión interna del agente no está configurada.',503)
+    raw=json.dumps(payload,sort_keys=True,separators=(',',':')).encode()
+    stamp=str(int(time.time()))
+    signature=hmac.new(secret.encode(),stamp.encode()+b'\n'+PATH.encode()+b'\n'+raw,hashlib.sha256).hexdigest()
+    try:
+        response=requests.post(base+PATH,data=raw,headers={'Content-Type':'application/json',
+            'X-DPIA-Timestamp':stamp,'X-DPIA-Signature':signature},timeout=(3.05,15),allow_redirects=False)
+        data=response.json()
+        if response.status_code!=200 or data.get('api_version')!='agents.v1' or data.get('owner_id')!=user_id:
+            raise ValueError()
+        items=data['items']
+        if not isinstance(items,list) or any(not isinstance(item,dict) or not all(isinstance(item.get(key),str) for key in ('id','name','kind')) for item in items):raise ValueError()
+        return [{'id':item['id'],'name':item['name'],'kind':item['kind']} for item in items]
+    except (requests.RequestException,ValueError,KeyError,TypeError):
+        bad('No se pudieron cargar las conexiones disponibles de Agents. Reintentá.',502)

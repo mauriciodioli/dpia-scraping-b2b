@@ -12,7 +12,7 @@ from services.locations import postal_ids_for_city
 from services.dpia_client import DPIAClient, catalog_filters
 from services.query_preparation import PreparationError, COUNTRIES
 from utils.db import db
-from services.task_names import task_name
+from services.task_names import task_name, validate_task_name
 from services.task_name_backfill import fill_missing_v1_names
 
 # Independent metadata: importing these tables never creates them through db.create_all().
@@ -55,9 +55,20 @@ def positive_ids(value):
             and len(set(value)) == len(value))
 
 
+def validate_execution_sources(sources):
+    if (not isinstance(sources, dict) or set(sources) != {'mode', 'ids'}
+            or sources['mode'] not in ('all', 'selected') or not isinstance(sources['ids'], list)
+            or len(sources['ids']) > 100
+            or any(not isinstance(x, str) or len(x) > 80 or not x.startswith(('mcp:', 'provider:')) for x in sources['ids'])
+            or len(set(sources['ids'])) != len(sources['ids'])
+            or (sources['mode'] == 'all' and sources['ids'])
+            or (sources['mode'] == 'selected' and not sources['ids'])):
+        bad('Seleccioná conexiones válidas para la tarea.', 422)
+
+
 def validate_config(data):
     """Validate before network calls or opening the write transaction. Client labels are not trusted."""
-    if not isinstance(data,dict) or set(data) not in (FIELDS, FIELDS | {'query_context'}) or type(data['version']) is not int or data['version'] != 1:
+    if not isinstance(data,dict) or (not FIELDS.issubset(data) or set(data) - FIELDS - {'query_context', 'execution_sources'}) or type(data['version']) is not int or data['version'] != 1:
         bad()
     if not isinstance(data['tasks'],list) or not 1<=len(data['tasks'])<=len(TASKS) or any(not isinstance(t,str) or t not in TASKS for t in data['tasks']) or len(set(data['tasks']))!=len(data['tasks']):
         bad('Seleccioná al menos una tarea.')
@@ -84,14 +95,21 @@ def validate_config(data):
         bad('Ingresá un límite de puntos entero y no negativo.')
     if type(data['notifications']) is not bool or not isinstance(data['language'],str) or data['language'] not in ('es','en','pl','it'):
         bad()
+    if 'execution_sources' in data:
+        validate_execution_sources(data['execution_sources'])
     if 'query_context' in data:
         context = data['query_context']
-        if (not isinstance(context, dict) or set(context) != {'prompt', 'summary', 'mode', 'postal_id', 'currency'}
+        if (not isinstance(context, dict) or (not {'prompt', 'summary', 'mode', 'postal_id', 'currency'}.issubset(context) or set(context) - {'prompt', 'summary', 'mode', 'postal_id', 'currency', 'task_name', 'execution_sources'})
                 or any(not isinstance(context[k], str) or not context[k].strip() or len(context[k]) > 3500 for k in ('prompt', 'summary'))
                 or context['mode'] not in ('buscar', 'novedades', 'explorar')
                 or type(context['postal_id']) is not int or not 0 <= context['postal_id'] <= 2147483647
                 or not isinstance(context['currency'], str) or len(context['currency']) > 10):
             bad('La consulta del agente no es válida.', 422)
+        if 'execution_sources' in context:
+            validate_execution_sources(context['execution_sources'])
+        if 'task_name' in context:
+            try: validate_task_name(context['task_name'])
+            except ValueError as exc: bad(str(exc), 422)
     return {**data,'city':data['city'].strip(),'tasks':sorted(data['tasks']),
             'scopes':sorted(data['scopes']),'categories':sorted(data['categories']),
             'days':[] if frequency=='daily' else sorted(days)}
@@ -104,7 +122,7 @@ def verify_catalog(config):
     if config.get('query_context', {}).get('postal_id', 0) not in (0, *ids):
         bad('El código postal de la consulta no corresponde a la ubicación.', 422)
     postal=db.session.get(CodigoPostal,ids[0])
-    if config.get('query_context') and config['scopes']==[] and config['categories']==[]:
+    if config.get('query_context'):
         if postal is None:bad('Elegí una ubicación disponible.')
         return {**config,'city':postal.ciudad.strip(),'scopeLabels':[],'categoryLabels':[]}
     params=catalog_filters(MultiDict({'idioma':config['language']}),'ambitos')
@@ -152,12 +170,12 @@ class AgentConfigurationStore:
         if not isinstance(config,dict) or config.get('version')!=1:
             bad('La configuración guardada no es compatible. Revisala antes de guardar.',409)
         try:
-            validate_config({key:config[key] for key in FIELDS | ({'query_context'} if 'query_context' in config else set())})
+            validate_config({key:config[key] for key in FIELDS | (set(config) & {'query_context', 'execution_sources'})})
         except (KeyError,PreparationError):
             bad('La configuración guardada no es compatible. Revisala antes de guardar.',409)
         task_rows=conn.execute(select(tareas).where(tareas.c.agente_id==row['id'])).mappings().all()
         enabled=[task['tipo'] for task in task_rows if (task['parametros'] or {}).get('schema_version')==1 and task['tipo'] in {TASKS[t] for t in config.get('tasks',[]) if t in TASKS}]
-        if any({k:v for k,v in (task['parametros'] or {}).items() if k not in ('_deleted_at','_agent_configuration','_configuration_revision','schedule','query_context','country','city','language')}!={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']} for task in task_rows if (task['parametros'] or {}).get('schema_version')==1 and task['tipo'] in enabled):
+        if any({k:v for k,v in (task['parametros'] or {}).items() if k not in ('_deleted_at','_agent_configuration','_configuration_revision','schedule','query_context','country','city','language','execution_sources')}!={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']} for task in task_rows if (task['parametros'] or {}).get('schema_version')==1 and task['tipo'] in enabled):
             bad('Los parámetros de las tareas no coinciden con la configuración guardada.',409)
         for task in task_rows:
             params=task['parametros'] or {}
@@ -236,17 +254,19 @@ class AgentConfigurationStore:
                 if kind not in desired:conn.execute(update(tareas).where(tareas.c.id==row['id']).values(habilitada=False,actualizado_en=now))
             for kind in sorted(desired):
                 fields=dict(habilitada=True,parametros={'schema_version':1,'scope_ids':config['scopes'],'category_ids':config['categories']},actualizado_en=now)
-                if config.get('query_context') and config['scopes']==[] and config['categories']==[]:
+                if config.get('query_context'):
                     fields['parametros'].update(query_context=config['query_context'],country=config['country'],city=config['city'],language=config['language'])
+                if 'execution_sources' in config:
+                    fields['parametros']['execution_sources']=config['execution_sources']
                 fields['parametros']['schedule']={key:config[key] for key in ('frequency','days','time','timezone')}
                 if kind in current:
                     # Keep independent task editor settings when saving agent defaults.
                     previous_params=current[kind]['parametros'] or {}
                     fields['parametros'].update({key:previous_params[key] for key in
-                        ('_agent_configuration','_configuration_revision') if key in previous_params})
+                        ('_agent_configuration','_configuration_revision','execution_sources') if key in previous_params and key not in fields['parametros']})
                     conn.execute(update(tareas).where(tareas.c.id==current[kind]['id']).values(**fields))
                 else:conn.execute(insert(tareas).values(agente_id=agent_id,tipo=kind,
-                    nombre=task_name(kind.replace('_', ' ').lower(), city=config['city']),creado_en=now,**fields))
+                    nombre=(config.get('query_context') or {}).get('task_name') or task_name(kind.replace('_', ' ').lower(), city=config['city']),creado_en=now,**fields))
             schedule=conn.execute(select(programaciones.c.id).where(programaciones.c.agente_id==agent_id)).first()
             fields=dict(activa=False,frecuencia=FREQUENCIES[config['frequency']],
                         dias_semana=list(range(1,8)) if config['frequency']=='daily' else sorted(day or 7 for day in config['days']),
@@ -272,7 +292,7 @@ class AgentConfigurationStore:
         identity = {'type': kind, 'prompt': ' '.join(context['prompt'].casefold().split()),
                     'country': config['country'], 'city': config['city'].casefold(),
                     'scopes': config['scopes'], 'categories': config['categories'],
-                    'mode': context['mode']}
+                    'mode': context['mode'], 'execution_sources': config.get('execution_sources', context.get('execution_sources', {'mode':'all','ids':[]}))}
         digest = hashlib.sha256(json.dumps(identity, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         from model.agent_tasks import AgentTaskRepository
         repo = AgentTaskRepository()
@@ -286,6 +306,8 @@ class AgentConfigurationStore:
             for task in existing:
                 params = task['parametros'] or {}
                 if not params.get('_deleted_at') and params.get('identity_hash') == digest:
+                    if context.get('task_name') and task['nombre'] != context['task_name']:
+                        conn.execute(update(task_table).where(task_table.c.id==task['id'],task_table.c.agente_id==agent['id']).values(nombre=context['task_name'],actualizado_en=now))
                     timing={key:config[key] for key in ('frequency','days','time','timezone')}
                     if params.get('schedule')!=timing:
                         conn.execute(update(task_table).where(task_table.c.id==task['id'],
@@ -299,12 +321,13 @@ class AgentConfigurationStore:
             engine_id = engines[0]['id'] if engines else None
             params = {'schema_version': 2, 'scope_ids': config['scopes'],
                       'category_ids': config['categories'], 'identity_hash': digest,
+                      'execution_sources': config.get('execution_sources', context.get('execution_sources', {'mode':'all','ids':[]})),
                       'query_context': context, 'country': config['country'],
                       'city': config['city'], 'language': config['language'],
                       'schedule': {'frequency': config['frequency'], 'days': config['days'],
                                    'time': config['time'], 'timezone': config['timezone']}}
             values = {'agente_id': agent['id'], 'tipo': kind,
-                      'nombre': task_name(context['prompt'], city=config['city']), 'habilitada': False,
+                      'nombre': context.get('task_name') or task_name(context['prompt'], city=config['city']), 'habilitada': False,
                       'parametros': params, 'creado_en': now, 'actualizado_en': now}
             if 'ae_agent_id' in task_table.c:
                 values['ae_agent_id'] = engine_id

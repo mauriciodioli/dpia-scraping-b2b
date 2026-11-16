@@ -76,7 +76,7 @@ function preparedAgentContext(){
  if(!['buscar','novedades','explorar'].includes(body.mode))issue='Esta modalidad de consulta todavía no es compatible con Agents.';
  else if(body.attachments?.length)issue='Agents todavía no admite los adjuntos de esta consulta.';
  else if(body.user_message.length>3500||queryPrepared.summary.length>3500)issue='El pedido o resumen supera el límite de 3500 caracteres para configurar el agente.';
- return {taskType:isEmploymentQuery(body)?'jobs':'products',owner:currentEmail,country:body.pais,city:body.ciudad,language:body.idioma,scope:scope?{id:scope.ambito_id,name:scope.nombre}:null,category:category?{id:category.categoria_id,name:category.nombre}:null,prompt:body.user_message,summary:queryPrepared.summary,query_context:{prompt:body.user_message,summary:queryPrepared.summary,mode:body.mode,postal_id:body.codigo_postal_id,currency:body.budget_currency||''},issue};
+ return {taskType:isEmploymentQuery(body)?'jobs':'products',owner:currentEmail,country:body.pais,city:body.ciudad,language:body.idioma,scope:scope?{id:scope.ambito_id,name:scope.nombre}:null,category:category?{id:category.categoria_id,name:category.nombre}:null,prompt:body.user_message,summary:queryPrepared.summary,query_context:{execution_sources:window.DPIATaskSources?.preference()||{mode:'all',ids:[]},prompt:body.user_message,summary:queryPrepared.summary,mode:body.mode,postal_id:body.codigo_postal_id,currency:body.budget_currency||''},issue};
 }
 function consultAgentVisible(){
  if(currentEmail)return !!preparedAgentContext();
@@ -112,7 +112,31 @@ function submitConsultQuery(){
  if(queryBusy)return;
  if(!currentEmail){openAuth();return;}
  if(!queryPrepared||JSON.stringify(queryBody())!==queryPrepared.fingerprint)return;
- return generateDPIAQuery();
+ if(queryPrepared.sent||queryPrepared.pending)return;
+ openQuerySubmitChoice();
+}
+let querySubmitChoice=null;
+function openQuerySubmitChoice(){
+ if(!querySubmitChoice){
+  const overlay=document.createElement('div');overlay.className='auth-overlay';overlay.hidden=true;
+  const dialog=document.createElement('div');dialog.className='auth-dialog query-submit-dialog';dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-labelledby','querySubmitTitle');
+  const title=document.createElement('h2');title.id='querySubmitTitle';title.textContent='¿Cómo querés continuar?';
+  const close=document.createElement('button');close.type='button';close.className='auth-close';close.textContent='×';close.setAttribute('aria-label','Cerrar');
+  const choices=document.createElement('div');choices.className='query-submit-choices';
+  const direct=document.createElement('button');direct.type='button';direct.className='primary';direct.textContent='Enviar directamente';
+  const task=document.createElement('button');task.type='button';task.className='action-button query-create-task';
+  task.innerHTML=consultAgentButton.innerHTML;const label=document.createElement('span');label.textContent='Crear tarea';task.append(label);
+  const hide=()=>{overlay.hidden=true;document.getElementById('preparePrompt').focus();};
+  close.onclick=hide;overlay.onclick=e=>{if(e.target===overlay)hide();};
+  overlay.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();hide();}if(e.key==='Tab'){const controls=[close,direct,...(task.disabled?[]:[task])],at=controls.indexOf(document.activeElement);if(e.shiftKey&&at===0){e.preventDefault();controls.at(-1).focus();}else if(!e.shiftKey&&at===controls.length-1){e.preventDefault();close.focus();}}});
+  direct.onclick=()=>{hide();if(querySubmitChoice.owner===currentEmail&&queryPrepared?.owner===currentEmail&&queryPrepared.fingerprint===querySubmitChoice.fingerprint&&JSON.stringify(queryBody())===queryPrepared.fingerprint&&!queryPrepared.sent&&!queryPrepared.pending)generateDPIAQuery();};
+  task.onclick=()=>{hide();if(querySubmitChoice.owner===currentEmail&&queryPrepared?.fingerprint===querySubmitChoice.fingerprint)consultAgentButton.click();};
+  choices.append(direct,task);dialog.append(close,title,choices);overlay.append(dialog);document.body.append(overlay);
+  querySubmitChoice={overlay,direct,task};
+ }
+ querySubmitChoice.owner=currentEmail;querySubmitChoice.fingerprint=queryPrepared.fingerprint;
+ querySubmitChoice.task.disabled=!preparedAgentContext()||!!preparedAgentContext()?.issue;
+ querySubmitChoice.overlay.hidden=false;querySubmitChoice.direct.focus();
 }
 function queueQueryPreparation(){
  clearTimeout(queryPreparationTimer);
@@ -303,6 +327,7 @@ function openSourceModal(generateAfter=false){
  }
  document.querySelector('#querySourceError').textContent='';document.querySelector('#querySourcesModal').hidden=false;
  document.querySelector('#confirmQuerySources').focus();
+ window.DPIATaskSources?.load();
 }
 function closeSourceModal(){document.querySelector('#querySourcesModal').hidden=true;pendingSourcesGeneration=false;}
 let lastQueryOperationId=null;
@@ -465,6 +490,7 @@ document.querySelector('#closeQuerySources').onclick=closeSourceModal;
 document.querySelector('#querySourcesModal').onclick=e=>{if(e.target.id==='querySourcesModal')closeSourceModal();};
 document.querySelector('#allQuerySources').onchange=e=>{for(const box of document.querySelectorAll('[name="querySource"]'))if(['local','dpia','historial'].includes(box.value))box.checked=e.target.checked;};
 document.querySelector('#confirmQuerySources').onclick=()=>{
+ if(window.DPIATaskSources&&!window.DPIATaskSources.save())return;
  if(queryMode==='explorar'){
   const generate=pendingSourcesGeneration;closeSourceModal();if(generate)generateDPIAQuery(true);return;
  }

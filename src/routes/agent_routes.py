@@ -110,3 +110,15 @@ def activate():
     except SQLAlchemyError:
         current_app.logger.warning('Agent activation database unavailable')
         return jsonify(success=False,error='No se confirmó la activación. Reintentá; no se creará un duplicado.'),503
+
+
+@agent_bp.get('/conexiones')
+def task_sources():
+    user_id=session.get('user_id')
+    if type(user_id) is not int:
+        return jsonify(success=False,error='Iniciá sesión.'),401
+    try:
+        from services.agent_activation import task_sources as available_sources
+        return jsonify(success=True,items=available_sources(user_id))
+    except PreparationError as exc:
+        return jsonify(success=False,error=str(exc)),exc.status

@@ -5,8 +5,9 @@
  const TASKS={products:'Productos nuevos',prices:'Cambios de precios',suppliers:'Proveedores',local:'Oportunidades locales',jobs:'Oportunidades laborales',trends:'Tendencias'};
  const FREQUENCIES={daily:'Diario',twice:'Dos veces por semana',weekly:'Semanal'};
  const STATES={unconfigured:'No configurado',inactive:'Configurado e inactivo',active:'Activo',running:'Ejecutando',paused:'Pausado',admin_paused:'Pausado por administrador',disabled:'Deshabilitado',insufficient:'Créditos insuficientes',error:'Error'};
- const STEPS=['Qué monitorear','Dónde y sobre qué','Cuándo','Límites y notificaciones','Confirmación'];
+ const STEPS=['Qué monitorear','Dónde y sobre qué','Conexiones','Cuándo','Límites y notificaciones','Confirmación'];
  let waitingForSession=null;
+ let sourceSelector=null;
  let pendingQueryContext=null,queryContext=null,wizard=false,index=0,draft=null,record=null,identity=null,scopes=[],categories=[],cities=[],loading=false,loadSerial=0,controller=null,error='',engineRevision=0,pauseReady=false,pendingPause=null,pendingDelete=null,agentPoints=null,availablePoints=null,budgetReadSerial=0,serverState='inactive',serverRevision=0,serverReady=false,serverBusy=false,readSerial=0;
  function pauseOperationId(){
   if(typeof crypto.randomUUID==='function')return crypto.randomUUID();
@@ -37,6 +38,7 @@
   const dl=document.createElement('dl');
   const names=(ids,list,field,saved)=>ids.map(id=>list.find(row=>row[field]===id)?.nombre||(saved||[]).find(row=>row.id===id)?.name||String(id)).join(', ');
   const rows=[['Tareas configuradas',config.tasks.map(id=>tr(TASKS[id])).join(', ')],['Ubicación',[config.city,config.country].filter(Boolean).join(', ')],['Ámbitos',names(config.scopes,scopes,'ambito_id',config.scopeLabels)],['Categorías',names(config.categories,categories,'categoria_id',config.categoryLabels)],['Frecuencia',tr(FREQUENCIES[config.frequency])],['Días',config.frequency==='daily'?tr('Todos los días'):config.days.map(weekday).join(', ')],['Horario',config.time+' · '+config.timezone],['Límite de puntos',String(config.points)+' / '+tr(config.period==='week'?'Por semana':'Por mes')],['Avisos de novedades',tr(config.notifications?'Solicitados, aún no disponibles':'Desactivados')]];
+  const sources=config.execution_sources||config.query_context?.execution_sources;if(sources)rows.push(['Conexiones',sources.mode==='all'?'Todos los disponibles':sources.ids.length+' conexiones seleccionadas']);
   for(const [label,value] of rows.filter(([label])=>!config.query_context||!['Ámbitos','Categorías'].includes(label)||config.scopes.length))dl.append(node('dt',label),raw('dd',value));return dl;
  }
  function pointIndicator(){
@@ -176,6 +178,8 @@
  function startQueryContext(context){
   queryContext=context;identity=who();wizard=true;index=2;error='';
   draft={...defaults(),...(record||{}),version:1,tasks:[context.taskType||((context.category?.name?.toLowerCase().includes('laboral')||context.prompt?.toLowerCase().includes('empleo'))?'jobs':'products')],query_context:structuredClone(context.query_context),country:context.country,city:context.city,scopes:context.scope?[context.scope.id]:[],categories:context.category?[context.category.id]:[],language:context.language,scopeLabels:context.scope?[context.scope]:[],categoryLabels:context.category?[context.category]:[]};
+  draft.execution_sources=structuredClone(context.query_context.execution_sources||{mode:'all',ids:[]});
+  draft.query_context.task_name=String(context.task_name||context.prompt||'Nueva tarea').split('\n')[0].trim().slice(0,120);
   scopes=structuredClone(catalogAmbitos);categories=structuredClone(catalogCategorias);cities=[context.city];
 
   refreshBudgetLimit();renderStep();root.querySelector('h3')?.focus();
@@ -208,7 +212,7 @@
  }
  async function refreshBudgetLimit(){
   const owner=who(),serial=++budgetReadSerial;availablePoints=null;
-  if(wizard&&index===3)renderStep();
+  if(wizard&&index===4)renderStep();
   try{
    const response=await fetch('/api/consultas/creditos',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});
    const data=await response.json();if(owner!==who()||serial!==budgetReadSerial)return;
@@ -216,7 +220,7 @@
    availablePoints=data.credits.available;
   }catch(e){if(owner===who()&&serial===budgetReadSerial)availablePoints=null;}
   finally{if(owner===who()&&serial===budgetReadSerial){
-   if(wizard&&index===3)renderStep();
+   if(wizard&&index===4)renderStep();
    else if(!record&&serverReady&&!serverBusy&&!document.getElementById('agentPage').hidden&&!wizard)dashboard();
   }}
  }
@@ -233,21 +237,23 @@
  }
  function check(step){
 
+  if(queryContext&&(!draft.query_context.task_name?.trim()||draft.query_context.task_name.length>120))return 'Ingresá un nombre para la tarea de hasta 120 caracteres.';
+  if(step===2){try{const preference=sourceSelector.read();draft.execution_sources=preference;if(draft.query_context)draft.query_context.execution_sources=structuredClone(preference);}catch(e){return e.message||'Elegí las conexiones de la tarea.';}}
   if(step===0&&!draft.tasks.length)return 'Seleccioná al menos una tarea.';
   if(step===1&&(loading||(!queryContext&&error)||!draft.country||!draft.city||(!queryContext&&(!draft.scopes.length||!draft.categories.length))))return 'Elegí ubicación, ámbitos y categorías disponibles.';
-  if(step===2&&(!/^\d{2}:\d{2}$/.test(draft.time)||!validZone(draft.timezone)||(draft.frequency!=='daily'&&draft.days.length!==(draft.frequency==='twice'?2:1))))return 'Revisá el horario y los días seleccionados.';
-  if(step===3&&!(queryContext&&record)&&availablePoints===null)return 'No se pudo consultar tu saldo. Reintentá antes de guardar.';
-  if(step===3&&!(queryContext&&record)&&draft.points>availablePoints)return 'El presupuesto supera tus puntos disponibles.';
-  if(step===3&&(!Number.isSafeInteger(draft.points)||draft.points<0||draft.points>1000000))return 'Ingresá un límite de puntos entero y no negativo.';
+  if(step===3&&(!/^\d{2}:\d{2}$/.test(draft.time)||!validZone(draft.timezone)||(draft.frequency!=='daily'&&draft.days.length!==(draft.frequency==='twice'?2:1))))return 'Revisá el horario y los días seleccionados.';
+  if(step===4&&!(queryContext&&record)&&availablePoints===null)return 'No se pudo consultar tu saldo. Reintentá antes de guardar.';
+  if(step===4&&!(queryContext&&record)&&draft.points>availablePoints)return 'El presupuesto supera tus puntos disponibles.';
+  if(step===4&&(!Number.isSafeInteger(draft.points)||draft.points<0||draft.points>1000000))return 'Ingresá un límite de puntos entero y no negativo.';
   return '';
  }
  async function save(){
   if(serverBusy)return;
   if(identity!==who()){error='La cuenta cambió. Volvé a abrir la configuración.';renderStep();return;}
   if(!who()){openAuth();return;}
-  for(let step=0;step<4;step++){const issue=check(step);if(issue){index=step;error=issue;renderStep();return;}}
+  for(let step=0;step<5;step++){const issue=check(step);if(issue){index=step;error=issue;renderStep();return;}}
   const value={...structuredClone(draft),version:1,language:window.DPIAI18N?.language||'es'};
-  const fields=new Set(['version','tasks','country','city','scopes','categories','frequency','days','time','timezone','points','period','notifications','language','query_context']);
+  const fields=new Set(['version','tasks','country','city','scopes','categories','frequency','days','time','timezone','points','period','notifications','language','query_context','execution_sources']);
   for(const field of Object.keys(value))if(!fields.has(field))delete value[field];
   if(!valid(value)){error='La configuración guardada no es válida. Revisala antes de guardar.';renderStep();return;}
   const owner=who(),serial=++readSerial;serverBusy=true;error='';renderStep();
@@ -268,18 +274,18 @@
  }
  function renderStep(){
   root.replaceChildren();const panel=node('div',undefined,'agent-wizard'),progress=document.createElement('ol');progress.className='agent-progress';progress.setAttribute('aria-label',tr('Pasos'));
-  for(let i=0;i<5;i++){const li=document.createElement('li');li.setAttribute('aria-label',(i+1)+' · '+tr(STEPS[i]));if(i===index)li.setAttribute('aria-current','step');if(i<index)li.className='agent-complete';progress.append(li);}panel.append(progress,raw('small',(index+1)+' / 5'));const heading=node('h3',STEPS[index]);heading.tabIndex=-1;panel.append(heading);
-  if(queryContext){const context=node('details',undefined,'agent-query-context');context.open=true;context.append(node('summary','Consulta preparada'),raw('pre',queryContext.summary));if(queryContext.issue)context.append(node('p',queryContext.issue,'agent-feedback'));panel.append(context);}
+  for(let i=0;i<STEPS.length;i++){const li=document.createElement('li');li.setAttribute('aria-label',(i+1)+' · '+tr(STEPS[i]));if(i===index)li.setAttribute('aria-current','step');if(i<index)li.className='agent-complete';progress.append(li);}panel.append(progress,raw('small',(index+1)+' / '+STEPS.length));const heading=node('h3',STEPS[index]);heading.tabIndex=-1;panel.append(heading);
+  if(queryContext){const name=document.createElement('input');name.type='text';name.maxLength=120;name.required=true;name.value=draft.query_context.task_name||'';name.oninput=()=>{draft.query_context.task_name=name.value;};panel.append(inputLabel('Nombre de la tarea',name));if(queryContext.issue)panel.append(node('p',queryContext.issue,'agent-feedback'));}
   if(index===0){const tasks=node('div',undefined,'agent-choices');for(const [id,text] of Object.entries(TASKS))choice(tasks,text,draft.tasks.includes(id),checked=>toggle(draft.tasks,id,checked));panel.append(tasks);}
-  if(index===1)stepLocation(panel);if(index===2)stepWhen(panel);if(index===3)stepLimits(panel);
-  if(index===4){panel.classList.add('agent-summary');panel.append(summary(draft),engineNotice(),storageNotice());}
+  if(index===1)stepLocation(panel);if(index===2){sourceSelector=window.DPIATaskSources.createSelector(draft.execution_sources||draft.query_context?.execution_sources||{mode:'all',ids:[]},value=>{draft.execution_sources=value;if(draft.query_context)draft.query_context.execution_sources=structuredClone(value);});panel.append(sourceSelector.element);sourceSelector.load();}if(index===3)stepWhen(panel);if(index===4)stepLimits(panel);
+  if(index===5){panel.classList.add('agent-summary');panel.append(summary(draft),engineNotice(),storageNotice());}
   if(serverBusy){const status=node('p','Guardando configuración…','hint');status.setAttribute('role','status');panel.append(status);}
   feedback(panel);const actions=node('div',undefined,'agent-actions');
   actions.append(button('Cancelar',()=>{loadSerial++;controller?.abort();dashboard();}));
   if(index>(queryContext?2:0))actions.append(button('Anterior',()=>{index--;error='';renderStep();}));
-  const next=button(index===4?(queryContext?(record?'Agregar tarea a mi agente':'Crear tarea'):'Crear agente'):'Siguiente',()=>{if(index===4){save();return;}const issue=check(index);if(issue){error=issue;renderStep();return;}error='';index++;renderStep();root.querySelector('h3').focus();},'primary');next.disabled=(index===1&&loading);actions.append(next);
-  if(index===4)actions.append(executionControl('inactive'));
-  if(error&&index===4)actions.append(button('Volver a cargar configuración',open));
+  const next=button(index===5?(queryContext?(record?'Agregar tarea a mi agente':'Crear tarea'):'Crear agente'):'Siguiente',()=>{if(index===5){save();return;}const issue=check(index);if(issue){error=issue;renderStep();return;}error='';index++;renderStep();root.querySelector('h3').focus();},'primary');next.disabled=(index===1&&loading);actions.append(next);
+  if(index===5)actions.append(executionControl('inactive'));
+  if(error&&index===5)actions.append(button('Volver a cargar configuración',open));
   panel.append(actions);if(serverBusy)panel.querySelectorAll('button,input,select').forEach(el=>el.disabled=true);root.append(panel);window.DPIAI18N?.refresh();
  }
  async function open(){
