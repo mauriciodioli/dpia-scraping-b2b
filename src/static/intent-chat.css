@@ -1,0 +1,11 @@
+/* Clarification uses the existing textarea and existing arrow; preview stays below it. */
+.intent-chat-messages{display:flex;flex-direction:column;gap:10px;max-height:300px;overflow-y:auto;padding:10px 0;margin:8px 0}
+.intent-chat-messages[hidden],.intent-task-preview[hidden]{display:none!important}
+.intent-bubble{max-width:88%;padding:11px 14px;border-radius:15px;line-height:1.5;white-space:pre-wrap;font-size:14px;overflow-wrap:anywhere}
+.intent-assistant{align-self:flex-start;background:rgba(139,92,246,.14);border:1px solid rgba(167,139,250,.38);color:inherit}
+.intent-user{align-self:flex-end;background:rgba(115,76,220,.32);border:1px solid rgba(167,139,250,.48);color:inherit}
+.intent-task-preview{position:relative;display:grid;gap:8px;margin:14px 0;padding:16px;border-radius:15px;border:1px solid rgba(147,112,219,.48);background:rgba(110,83,165,.10);color:inherit}
+.intent-task-preview strong{font-size:15px}.intent-task-preview p{margin:0;line-height:1.5;overflow-wrap:anywhere;font-size:13px}
+.intent-preview-state{font-size:12px;font-weight:700;color:#b69aff}
+.intent-preview-pending{opacity:.83}
+@media(prefers-color-scheme:light){.intent-assistant{background:#f2ebff;border-color:#bda6ef;color:#251944}.intent-user{background:#e5d7ff;color:#251944}.intent-task-preview{background:#faf7ff;border-color:#c8b6ed;color:#251944}.intent-preview-state{color:#5b30aa}}

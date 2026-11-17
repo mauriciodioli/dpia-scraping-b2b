@@ -120,7 +120,7 @@ function syncQueryConversation(){
  consultAgentButton.hidden=!consultAgentVisible();
  document.querySelector('#promptResult').hidden=!prepared;
  document.querySelector('#preparePrompt').hidden=false;
- document.querySelector('#preparePrompt').disabled=queryBusy||sent||(!prepared&&!!currentEmail);
+ document.querySelector('#preparePrompt').disabled=queryBusy||sent||(!prepared&&!!currentEmail&&!['start','jobs'].includes(queryJourney));
  document.querySelector('#preparePrompt').setAttribute('data-i18n-aria-label',queryPrepared?.pending?'Consulta pendiente de confirmación':sent?'Consulta enviada':'Enviar consulta →');
  document.querySelector('#preparePrompt').setAttribute('data-i18n-title',document.querySelector('#preparePrompt').getAttribute('data-i18n-aria-label'));
  document.querySelector('#queryReadyPanel').hidden=!prepared;
@@ -154,11 +154,13 @@ function openQuerySubmitChoice(){
   overlay.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();hide();}if(e.key==='Tab'){const controls=[close,direct,...(task.disabled?[]:[task])],at=controls.indexOf(document.activeElement);if(e.shiftKey&&at===0){e.preventDefault();controls.at(-1).focus();}else if(!e.shiftKey&&at===controls.length-1){e.preventDefault();close.focus();}}});
   direct.onclick=()=>{hide();if(querySubmitChoice.owner===currentEmail&&queryPrepared?.owner===currentEmail&&queryPrepared.fingerprint===querySubmitChoice.fingerprint&&JSON.stringify(queryBody())===queryPrepared.fingerprint&&!queryPrepared.sent&&!queryPrepared.pending)openImmediateTaskSources();};
   task.onclick=()=>{hide();if(querySubmitChoice.owner===currentEmail&&queryPrepared?.fingerprint===querySubmitChoice.fingerprint)consultAgentButton.click();};
-  choices.append(direct,task);dialog.append(close,title,choices);overlay.append(dialog);document.body.append(overlay);
-  querySubmitChoice={overlay,direct,task};
+  const chat=document.createElement('button');chat.type='button';chat.className='action-button query-continue-chat';chat.textContent='Seguir conversando';chat.onclick=()=>{hide();document.getElementById('promptText').focus();};
+  choices.append(chat,direct,task);dialog.append(close,title,choices);overlay.append(dialog);document.body.append(overlay);
+  querySubmitChoice={overlay,direct,task,chat};
  }
  querySubmitChoice.owner=currentEmail;querySubmitChoice.fingerprint=queryPrepared.fingerprint;
- querySubmitChoice.task.disabled=!preparedAgentContext()||!!preparedAgentContext()?.issue;
+ const blocked=['start','jobs'].includes(queryJourney)&&window.DPIAIntentGateState?.()!=='CONFIRMED';
+ querySubmitChoice.direct.disabled=blocked;querySubmitChoice.task.disabled=blocked||!preparedAgentContext()||!!preparedAgentContext()?.issue;
  querySubmitChoice.overlay.hidden=false;querySubmitChoice.direct.focus();
 }
 let immediateTaskSourceMode=false,immediateSubmission=null;
@@ -210,6 +212,7 @@ function queueQueryPreparation(){
  clearTimeout(queryPreparationTimer);
  queryPreparationTimer=setTimeout(()=>{
   if(page!=='consultPage'||!currentEmail||!['ready','empty'].includes(catalogState.ambitos)||!['ready','empty'].includes(catalogState.categorias))return;
+  if(['start','jobs'].includes(queryJourney)&&window.DPIAIntentGateState?.()!=='CONFIRMED')return;
   if(queryBusy){queryPreparationQueued=true;return;}
   const body=queryBody();
   if(queryPrepared&&JSON.stringify(body)===queryPrepared.fingerprint)return;
@@ -326,13 +329,14 @@ for(const id of ['queryBudgetType','queryBudgetMin','queryBudgetMax']){
  const control=document.querySelector('#'+id);control.addEventListener('change',syncExploreBudget);
  if(id!=='queryBudgetType')control.addEventListener('input',syncExploreBudget);
 }
-function queryBody(){return {pais:country,ciudad:city,idioma:catalogLanguage(),ambito_id:queryWithoutClassification()?null:Number(document.querySelector('#queryScope').value),categoria_id:queryWithoutClassification()?null:Number(document.querySelector('#queryCategory').value),...(queryWithoutClassification()?{situation:queryJourney}:{}),codigo_postal_id:Number(document.querySelector('#queryPostal').value),mode:queryMode,...(queryMode==='explorar'?{budget_currency:document.querySelector(isEmploymentQuery()?'#querySalaryCurrency':'#queryBudgetCurrency').value}:{}),user_message:document.querySelector('#promptText').value.trim(),attachments:media};}
+function queryBody(){return {pais:country,ciudad:city,idioma:catalogLanguage(),ambito_id:queryWithoutClassification()?null:Number(document.querySelector('#queryScope').value),categoria_id:queryWithoutClassification()?null:Number(document.querySelector('#queryCategory').value),...(queryWithoutClassification()?{situation:queryJourney}:{}),codigo_postal_id:Number(document.querySelector('#queryPostal').value),mode:queryMode,...(queryMode==='explorar'?{budget_currency:document.querySelector(isEmploymentQuery()?'#querySalaryCurrency':'#queryBudgetCurrency').value}:{}),user_message:(['start','jobs'].includes(queryJourney)&&window.DPIAIntentGateState?.()==='CONFIRMED'?window.DPIAConfirmedObjective:document.querySelector('#promptText').value.trim())||'',attachments:media};}
 function startHomeQuery(){
  document.querySelector('#promptText').value=document.querySelector('#searchText').value.trim();queryMode='buscar';queryBudgetEdited=false;setupExploreBudget();invalidateQuery();show('consultPage');prepareDPIAQuery();
 }
 async function prepareDPIAQuery({automatic=false}={}){
  clearTimeout(queryPreparationTimer);
  if(queryBusy)return;show('consultPage');
+ if(['start','jobs'].includes(queryJourney)&&window.DPIAIntentGateState?.()!=='CONFIRMED'){syncQueryConversation();return;}
  if(!currentEmail){openAuth();return;}
  await queryMediaPending;if(queryBusy)return;
  try{if(!await completeGenericProductContext())return;}catch(error){document.querySelector('#queryStatus').textContent=error.message;setQueryArtState('warning');return;}

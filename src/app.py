@@ -23,6 +23,8 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(catalog_bp)
     app.register_blueprint(query_bp)
+    from routes.intent_routes import intent_bp
+    app.register_blueprint(intent_bp)
     from routes.agent_routes import agent_bp
     app.register_blueprint(agent_bp)
     from routes.agent_pause_routes import pause_bp
