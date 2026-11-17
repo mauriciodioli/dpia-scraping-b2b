@@ -37,13 +37,13 @@
   }
   return {sources,text};
  }
- async function loadAgentResult(jobId){
+ async function loadAgentResult(jobId,taskAction){
   const email=currentEmail,serial=++generation;$('queryHistoryStatus').textContent='Consultando respuesta de Agente…';
   try{
    const response=await fetch('/api/consultas/historial/agentes/'+encodeURIComponent(jobId),{cache:'no-store'}),data=await response.json();
    if(serial!==generation||email!==currentEmail)return;
    if(!response.ok||!data.success)throw Error(data.error||'No se pudo recuperar la respuesta del agente.');
-   if(data.result===null){window.DPIAAgentResultUI.open(data,[],()=>loadAgentResult(jobId));return;}
+   if(data.result===null){window.DPIAAgentResultUI.open(data,[],()=>loadAgentResult(jobId),taskAction);return;}
    const presentation=agentPresentation(data.result);
    // Use the established product-card renderer; agent results have no PWA charge ID.
    renderQueryResult({origin:'agents',sources:presentation.sources});
@@ -73,7 +73,7 @@
    for(const finding of presentation.text){const card=document.createElement('article');card.className='prompt-result';const paragraph=document.createElement('p');paragraph.textContent=finding;card.append(paragraph);out.append(card);}
    for(const warning of data.result.warnings||[])text('p',warning).className='hint';
    for(const source of data.result.sources||[]){const url=safeQueryUrl(source.url);if(!url||(data.result.items||[]).some(item=>item.url===url))continue;const link=text('a',source.title||url);link.href=url;link.target='_blank';link.rel='noopener noreferrer';}
-   window.DPIAAgentResultUI.open(data,[...out.childNodes],()=>loadAgentResult(jobId));
+   window.DPIAAgentResultUI.open(data,[...out.childNodes],()=>loadAgentResult(jobId),taskAction);
   }catch(error){if(serial===generation&&email===currentEmail)$('queryHistoryStatus').textContent=error.message;}
  }
 
@@ -82,7 +82,17 @@
  const agentFilter=document.createElement('select');agentFilter.id='queryHistoryAgent';agentFilter.setAttribute('aria-label','Agente');
  agentFilterLabel.append(agentFilter);$('queryHistoryOrigin').closest('.query-history-controls').append(agentFilterLabel);
  agentFilter.onchange=renderHistory;
+ const controls=agentFilterLabel.parentElement;
+ function filter(id,label,options){const host=document.createElement('label');host.textContent=label;const select=document.createElement('select');select.id=id;select.setAttribute('aria-label',label);for(const [value,text] of options)select.add(new Option(text,value));host.append(select);controls.append(host);select.onchange=renderHistory;return select;}
+ const outcome=filter('historyOutcome','Resultados',[['','Todos'],['success','Satisfactorios'],['other','No satisfactorios'],['hidden','Ocultos en este navegador']]);
+ const category=filter('historyClassification','Estado',[['','Todos los estados'],['PARTIAL','Parciales'],['DIVERGENT','Divergentes'],['INSUFFICIENT_EVIDENCE','Evidencia insuficiente'],['NO_MATCH','Sin coincidencias'],['TECHNICAL_ERROR','Errores técnicos']]);
+ const reviewFilter=filter('historyReview','Revisión',[['','Todas'],['PENDING_REVIEW','Pendientes'],['ACCEPTED','Aceptados'],['REJECTED','Rechazados']]);
+ const hiddenKey=()=> 'dpia:hidden-history:'+String(currentEmail||'');
+ function hiddenIds(){try{return new Set(JSON.parse(localStorage.getItem(hiddenKey())||'[]'));}catch(_){return new Set();}}
+ function setHidden(id,hide){const ids=hiddenIds();hide?ids.add(id):ids.delete(id);try{localStorage.setItem(hiddenKey(),JSON.stringify([...ids]));renderHistory();}catch(_){$('queryHistoryStatus').textContent='No se pudo guardar la preferencia en este navegador.';}}
+
  function renderHistory(){
+  category.parentElement.hidden=outcome.value!=='other';
   const selected=agentFilter.value;
   agentFilter.replaceChildren(new Option('Todos los agentes',''));
   const names=new Map(agentHistoryRows.map(({row})=>[row.agent_id||row.agent_name,row.agent_name]));
@@ -93,6 +103,11 @@
   const states={reserved:'Reservada',dispatching:'En curso',pending:'Pendiente de confirmación',consumed:'Finalizada',released:'No iniciada',stored:'Trabajo guardado'};
   for(const {row,place} of [...historyRows,...agentHistoryRows].sort((a,b)=>(Date.parse(b.row.created_at)||0)-(Date.parse(a.row.created_at)||0))){
    if(agentFilter.value&&(row.source!=='agents'||(row.agent_id||row.agent_name)!==agentFilter.value))continue;
+   const isAgent=row.source==='agents',success=isAgent?row.result_classification==='SATISFIED':row.state==='consumed',hidden=hiddenIds().has(row.operation_id);
+   if(outcome.value==='hidden'?!hidden:hidden)continue;
+   if(outcome.value==='success'&&!success)continue;
+   if(outcome.value==='other'&&(success||(category.value&&row.result_classification!==category.value)))continue;
+   if(reviewFilter.value&&row.review_status!==reviewFilter.value)continue;
    const raw=String(row.query||'').replace(/\s+/g,' ').trim();
    const shorten=(text,max)=>text.length>max?text.slice(0,max-1).trimEnd()+'…':text;
    const card=document.createElement('button');card.type='button';card.className='query-history-card';if(row.source==='agents'){card.classList.add('query-history-agent');card.dataset.classification=row.result_classification||'UNCLASSIFIED';}
@@ -126,7 +141,15 @@
    if(row.source==='agents'){const label=document.createElement('span');label.className='query-history-agent-label';label.textContent='Respuesta de Agente · '+row.agent_name;card.append(label);}
    card.append(title,date);if(refresh)card.append(refresh);if(summary.textContent&&raw!==title.textContent)card.append(summary);card.append(meta,action);
    card.onclick=()=>row.source==='agents'?loadAgentResult(row.operation_id):row.remote?loadRemote(row.operation_id,place):loadQueryOperation(row.operation_id);
-   $('queryHistoryList').append(card);
+   const wrapper=document.createElement('div');wrapper.className='history-card-wrapper';wrapper.append(card);
+   if(isAgent&&!success){const menu=document.createElement('details');menu.className='history-card-menu';const toggle=document.createElement('summary');toggle.textContent='⋮';toggle.setAttribute('aria-label','Opciones de esta corrida');menu.append(toggle);const list=document.createElement('div');
+    function item(text,action){const b=document.createElement('button');b.type='button';b.textContent=text;b.onclick=()=>{menu.open=false;action();};list.append(b);}
+    item('Ver detalle',()=>loadAgentResult(row.operation_id));
+    if(row.task_id){item('Modificar tarea',()=>loadAgentResult(row.operation_id,'edit'));item('Eliminar tarea…',()=>loadAgentResult(row.operation_id,'remove'));}
+    item(hidden?'Volver a mostrar':'Ocultar esta corrida',()=>setHidden(row.operation_id,!hidden));
+    const hint=document.createElement('small');hint.textContent='Ocultar solo cambia este navegador. Eliminar tarea detiene sus próximas corridas.';list.append(hint);menu.append(list);wrapper.append(menu);
+   }
+   $('queryHistoryList').append(wrapper);
   }
  }
  window.addEventListener('dpia:agent-result-reviewed',event=>{for(const entry of agentHistoryRows)if(entry.row.operation_id===event.detail.job_id)for(const key of ['result_classification','classification_reason','review_status','review_required','reviewed_at','reviewed_by','review_reason','job_status'])entry.row[key]=event.detail[key];renderHistory();});
