@@ -93,3 +93,7 @@ ACTIVITY_TRUSTED_PROXIES = os.getenv('ACTIVITY_TRUSTED_PROXIES', '')
 # Dedicated server-to-server PWA provisioning credential; never exposed to the browser.
 PWA_ACTIVATION_SECRET = os.environ.get('PWA_ACTIVATION_SECRET', '')
 AGENTS_INTERNAL_URL = os.environ.get('AGENTS_INTERNAL_URL', '')
+
+# Local development login: explicit opt-in and an existing, fixed account.
+LOCAL_DEV_LOGIN_ENABLED = os.getenv('LOCAL_DEV_LOGIN_ENABLED', 'false').lower() == 'true'
+LOCAL_DEV_LOGIN_EMAIL = os.getenv('LOCAL_DEV_LOGIN_EMAIL', '').strip().lower()

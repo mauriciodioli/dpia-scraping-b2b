@@ -1,5 +1,5 @@
-"""Independent resolver endpoint; never creates jobs or spends points."""
-from flask import Blueprint, jsonify, request, current_app
+"""Deterministic-first intent resolution; model fallback after three vague replies."""
+from flask import Blueprint, current_app, jsonify, request
 from services.intent_resolver import resolve
 from services.intent_openai import interpret, IntentProviderError
 
@@ -7,27 +7,53 @@ intent_bp = Blueprint('intent_resolver', __name__, url_prefix='/api/consultas')
 
 @intent_bp.post('/resolver-intencion')
 def resolve_intention():
-    payload=request.get_json(silent=True)
     try:
-        # Deterministic checks and explicit-confirmation guard remain authoritative.
-        baseline=resolve(payload)
-        interpreted=interpret(payload,current_app.config)
-        sufficient=interpreted['sufficient'] and bool(interpreted['objective'].strip())
-        if payload['situation']=='jobs' and not sufficient:
-            state='NEEDS_CLARIFICATION'
-        elif not sufficient:
-            state='NEEDS_CLARIFICATION'
+        payload = request.get_json(silent=True)
+        result = resolve(payload)
+        # Confirmation of a previously interpreted objective must not call the model again.
+        proposed = payload.get('proposed_objective') if isinstance(payload, dict) else None
+        if payload.get('confirmed') is True and isinstance(proposed, str) and proposed.strip() and len(proposed) <= 2000:
+            result['objective'] = proposed.strip()
+            result['state'] = 'CONFIRMED'
+            result['execution_allowed'] = True
+            result['needs_ai_interpretation'] = False
+            result['question'] = None
+            result['confirmation'] = None
+            return jsonify(success=True, **result)
+        if not result['needs_ai_interpretation']:
+            return jsonify(success=True, **result)
+
+        # OpenAI is only a fallback for a third consecutive unresolved answer.
+        # Never let a provider outage erase the conversation or block the chat.
+        try:
+            interpretation = interpret(payload, current_app.config)
+        except (IntentProviderError, ValueError) as exc:
+            current_app.logger.warning('Intent interpretation fallback unavailable: %s', type(exc).__name__)
+            result['question'] = 'Todavía no pude precisar qué querés buscar. ¿Podés describir un ejemplo concreto?'
+            result['needs_ai_interpretation'] = False
+            result['ai_fallback_unavailable'] = True
+            return jsonify(success=True, **result)
+
+        if interpretation['sufficient'] and interpretation['objective'].strip():
+            result['state'] = 'READY_TO_CONFIRM'
+            result['objective'] = interpretation['objective']
+            result['question'] = None
+            result['confirmation'] = interpretation['objective'] + ' ¿La tarea está lista o querés agregar algo más?'
+            result['task_preview'].update({
+                'task_title': interpretation['task_title'],
+                'search_type': interpretation['search_type'],
+                'search_market': interpretation['search_market'],
+                'product_category': interpretation['product_category'],
+                'budget': interpretation['budget'],
+                'expected_result': interpretation['expected_result'],
+                'missing_required': []
+            })
         else:
-            state='CONFIRMED' if payload.get('confirmed') is True and baseline['state']!='NEEDS_CLARIFICATION' else 'READY_TO_CONFIRM'
-        # The deterministic gate must not override the model's decision to ask.
-        objective=interpreted['objective'].strip() if sufficient else None
-        question=(interpreted['question'].strip() or baseline['question'] or '¿Podés aclarar qué necesitás buscar?') if not sufficient else None
-        return jsonify(success=True,state=state,domain=baseline['domain'],
-            intent=interpreted['intent'].strip() or baseline['intent'],
-            objective=objective,question=question,
-            confirmation=(f'{objective} ¿Querés que empiece?' if state=='READY_TO_CONFIRM' else None),
-            context=baseline['context'],execution_allowed=state=='CONFIRMED')
+            result['question'] = interpretation['question'].strip() or result['question']
+            result['task_preview']['missing_required'] = interpretation['missing_required']
+        result['needs_ai_interpretation'] = False
+        result['ai_fallback_used'] = True
+        result['execution_allowed'] = False
+        return jsonify(success=True, **result)
     except ValueError as exc:
-        return jsonify(success=False,error=str(exc)),400
-    except IntentProviderError as exc:
-        return jsonify(success=False,error=str(exc)),503
+        return jsonify(success=False, error=str(exc)), 400

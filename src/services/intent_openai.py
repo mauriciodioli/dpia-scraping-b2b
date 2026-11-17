@@ -1,14 +1,18 @@
 """OpenAI interpretation only; B2B retains authority over state transitions."""
 import json
 import requests
+import logging
+import os
+
+logger = logging.getLogger(__name__)
 
 SCHEMA = {
     'type':'object','additionalProperties':False,
     'properties':{
         'intent':{'type':'string'},'objective':{'type':'string'},
         'sufficient':{'type':'boolean'},'question':{'type':'string'},
-        'summary':{'type':'string'}},
-    'required':['intent','objective','sufficient','question','summary']
+        'summary':{'type':'string'},'task_title':{'type':'string'},'search_type':{'type':'string'},'search_market':{'type':'string'},'product_category':{'type':'string'},'budget':{'type':'string'},'expected_result':{'type':'string'},'missing_required':{'type':'array','items':{'type':'string'}}},
+    'required':['intent','objective','sufficient','question','summary','task_title','search_type','search_market','product_category','budget','expected_result','missing_required']
 }
 
 INSTRUCTIONS = '''Sos el intérprete de intenciones de DPIA. Devolvé SOLO el JSON del esquema.
@@ -23,6 +27,8 @@ Si hay una corrección posterior, prevalece sobre la información anterior.
 No afirmes que el usuario confirmó. La confirmación la controla el servidor.
 El objetivo es una instrucción breve y ejecutable. Si falta algo imprescindible, sufficient=false y question es una pregunta natural.
 Si sufficient=true, question debe ser cadena vacía.
+Devolvé además una vista estructurada de la tarea: task_title breve, search_type, search_market, product_category, budget, expected_result y missing_required (lista de campos INDISPENSABLES que impiden ejecutar).
+Los campos desconocidos deben ser cadenas vacías. NO copies el prompt entero a esos campos. NO conviertas el país/ciudad de la interfaz en search_market; solamente completalo si el usuario lo indicó explícitamente como mercado de investigación. NO conviertas presupuestos sugeridos por el sistema en presupuesto confirmado por el usuario. Categoría y presupuesto suelen ser opcionales. missing_required debe estar vacío si sufficient=true; si falta algo indispensable, incluí su nombre concreto. task_title debe describir la tarea, no ser una copia del prompt.
 '''
 
 class IntentProviderError(Exception):
@@ -30,8 +36,12 @@ class IntentProviderError(Exception):
 
 
 def interpret(payload, config):
-    key=config.get('OPENAI_API_KEY')
+    # Reuse the application configuration; do not create a second OpenAI client or key.
+    # Flask config normally imports config.py, but some deployments inject credentials
+    # through the process environment after configuration initialization.
+    key=(config.get('OPENAI_API_KEY') or os.environ.get('OPENAI_API_KEY') or '').strip()
     if not key:
+        logger.error('DPIA intent resolver: OPENAI_API_KEY absent from Flask config (existing provider configuration)')
         raise IntentProviderError('openai_not_configured')
     messages=payload.get('messages')
     if not isinstance(messages,list) or len(messages)>24:
@@ -45,13 +55,19 @@ def interpret(payload, config):
     try:
         with requests.post('https://api.openai.com/v1/responses',
             headers={'Authorization':'Bearer '+key},
-            json={'model':config.get('OPENAI_MODEL','gpt-4o-mini'),'store':False,
+            json={'model':config.get('OPENAI_MODEL') or os.environ.get('OPENAI_MODEL') or 'gpt-4o-mini','store':False,
                   'instructions':INSTRUCTIONS,
                   'input':json.dumps(data,ensure_ascii=False),
                   'max_output_tokens':650,
                   'text':{'format':{'type':'json_schema','name':'dpia_intent_v1','strict':True,'schema':SCHEMA}}},
             timeout=(3.05,25),allow_redirects=False) as response:
             if response.status_code!=200:
+                # Keep provider diagnostics server-side; never log the API key or request payload.
+                logger.error('DPIA intent resolver: OpenAI HTTP %s; request_id=%s', response.status_code, response.headers.get('x-request-id', 'unknown'))
+                if response.status_code == 401:
+                    raise IntentProviderError('openai_auth_failed')
+                if response.status_code == 429:
+                    raise IntentProviderError('openai_rate_limited')
                 raise IntentProviderError('openai_unavailable')
             body=response.json()
         if body.get('status')!='completed':
@@ -61,8 +77,13 @@ def interpret(payload, config):
         if len(outputs)!=1:raise IntentProviderError('openai_invalid_response')
         result=json.loads(outputs[0]);
         if not isinstance(result,dict) or set(result)!=set(SCHEMA['required']):raise ValueError()
-        if any(not isinstance(result[k],str) for k in ('intent','objective','question','summary')) or type(result['sufficient']) is not bool:raise ValueError()
-        if any(len(result[k])>2000 for k in ('intent','objective','question','summary')):raise ValueError()
+        if any(not isinstance(result[k],str) for k in ('intent','objective','question','summary','task_title','search_type','search_market','product_category','budget','expected_result')) or type(result['sufficient']) is not bool:raise ValueError()
+        if any(len(result[k])>2000 for k in ('intent','objective','question','summary','task_title','search_type','search_market','product_category','budget','expected_result')):raise ValueError()
+        if not isinstance(result['missing_required'],list) or any(not isinstance(v,str) or len(v)>100 for v in result['missing_required']):raise ValueError()
         return result
-    except requests.Timeout as exc:raise IntentProviderError('openai_timeout') from exc
-    except (requests.RequestException,ValueError,TypeError,KeyError) as exc:raise IntentProviderError('openai_invalid_response') from exc
+    except requests.Timeout as exc:
+        logger.warning('DPIA intent resolver: OpenAI request timed out')
+        raise IntentProviderError('openai_timeout') from exc
+    except (requests.RequestException,ValueError,TypeError,KeyError) as exc:
+        logger.error('DPIA intent resolver: provider transport or parsing error (%s)', type(exc).__name__)
+        raise IntentProviderError('openai_invalid_response') from exc

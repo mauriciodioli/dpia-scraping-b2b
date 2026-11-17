@@ -92,6 +92,15 @@ async function initAuth(){
    const me=await response.json();updateUser(me.email);return me;
   });
   const [,cfg]=await Promise.all([window.DPIAAuthReady,fetch('/api/auth/config',{signal:AbortSignal.timeout(10000)}).then(r=>{if(!r.ok)throw Error('auth config');return r.json();})]);
+  if(cfg.local_dev_login&&!document.getElementById('localDevLogin')){
+   const local=document.createElement('button');local.id='localDevLogin';local.type='button';local.className='action-button';local.textContent='Ingresar en desarrollo local';
+   local.onclick=async()=>{
+    if(!$('#authCookieConsent').checked){$('#authHelp').textContent='Aceptá las cookies de sesión para continuar.';return;}
+    local.disabled=true;
+    try{const response=await fetch('/api/auth/local',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:'{}'});const result=await response.json();if(!response.ok)throw Error(result.error||'No se pudo ingresar');updateUser(result.email);closeAuth();notify('Sesión local iniciada');}
+    catch(error){$('#authHelp').textContent=error.message;}finally{local.disabled=false;}
+   };$('#authHelp').before(local);
+  }
   googleClientId=cfg.client_id||'';
   if(!googleClientId){$('#authHelp').textContent='Configurá GOOGLE_CLIENT_ID para habilitar el acceso real con Google.';return;}
   const render=()=>{if(!window.google?.accounts?.id){setTimeout(render,200);return;}

@@ -9,3 +9,52 @@
 .intent-preview-state{font-size:12px;font-weight:700;color:#b69aff}
 .intent-preview-pending{opacity:.83}
 @media(prefers-color-scheme:light){.intent-assistant{background:#f2ebff;border-color:#bda6ef;color:#251944}.intent-user{background:#e5d7ff;color:#251944}.intent-task-preview{background:#faf7ff;border-color:#c8b6ed;color:#251944}.intent-preview-state{color:#5b30aa}}
+/* Suggested prompt stays above the conversation; answers use a separate input. */
+.intent-suggested-heading{margin:12px 0 6px;font-size:12px;font-weight:700;letter-spacing:.025em;opacity:.85}
+.intent-suggested-heading[hidden],.intent-chat-input[hidden]{display:none!important}
+#promptText[readonly]{min-height:105px;resize:vertical;opacity:1;cursor:default;background:rgba(150,115,220,.07);border-radius:10px}
+.intent-chat-input{display:block;width:100%;box-sizing:border-box;min-height:66px;margin:10px 0 8px;padding:12px;border:1px solid rgba(167,139,250,.55);border-radius:12px;background:rgba(150,115,220,.09);color:inherit;font:inherit;resize:vertical}
+.intent-chat-input:focus{outline:2px solid #a78bfa;outline-offset:1px}
+
+.intent-prompt-section{display:block;margin:12px 0;padding:14px;border:1px solid rgba(167,139,250,.55);border-radius:12px;background:rgba(139,92,246,.10)}
+.intent-prompt-section[hidden],.intent-chat-input-label[hidden]{display:none!important}
+.intent-prompt-section label,.intent-chat-input-label{display:block;font-weight:700;font-size:13px;margin-bottom:9px}
+.intent-prompt-display{white-space:pre-wrap;line-height:1.55;font-size:14px;overflow-wrap:anywhere}
+#queryConversation #promptText[hidden]{display:none!important}
+.intent-chat-input-label{margin-top:16px}
+#intentChatInput{margin:0 0 10px;min-height:80px}
+
+.intent-preview-fields{display:grid;gap:0;margin-top:6px}
+.intent-preview-row{padding:10px 0;border-top:1px solid rgba(167,139,250,.25)}
+.intent-preview-row-head{display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:650;font-size:13px}
+.intent-preview-flag{font-size:11px;font-weight:600;opacity:.85;white-space:nowrap}
+.intent-preview-value{margin-top:5px;font-size:13px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.intent-preview-pending{padding-top:10px;border-top:1px solid rgba(167,139,250,.3)}
+
+/* Progressive clarification */
+.intent-preview-content{display:grid;gap:8px}
+.intent-preview-question{font-size:15px!important;font-weight:600;line-height:1.55!important;margin:8px 0 4px!important}
+.intent-preview-content .intent-preview-row{padding:9px 0;border-top:1px solid rgba(167,139,250,.25)}
+.intent-preview-content .intent-preview-row strong{font-size:12px}
+
+/* Async resolver feedback: compact, accessible and non-blocking. */
+.intent-loading{display:flex;align-items:center;gap:7px;font-size:12px;opacity:.9}
+.intent-small-spinner{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:intent-spin .75s linear infinite;flex:none}
+@keyframes intent-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.intent-small-spinner{animation:none;border-right-color:currentColor}}
+.intent-retry-button{margin-left:8px;padding:4px 9px;border-radius:8px;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer;font:inherit;font-weight:650}
+
+/* High-contrast chat bubbles in both explicit DPIA themes. */
+.intent-chat-messages .intent-bubble.intent-assistant{background:#33264e!important;color:#fff!important;border:1px solid #8d70c7!important;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.intent-chat-messages .intent-bubble.intent-user{background:#6840ce!important;color:#fff!important;border:1px solid #aa91fa!important;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+[data-theme="light"] .intent-chat-messages .intent-bubble.intent-assistant{background:#fff!important;color:#24183d!important;border:1px solid #9c87c6!important}
+[data-theme="light"] .intent-chat-messages .intent-bubble.intent-user{background:#5e35bf!important;color:#fff!important;border:1px solid #4a259b!important}
+
+/* Explicit high-contrast palettes: dark/light theme independent of OS preference. */
+.intent-chat-messages .intent-bubble.intent-assistant {background:#25213d!important;color:#fff!important;border:2px solid #a18ae4!important;}
+.intent-chat-messages .intent-bubble.intent-user {background:#7750ef!important;color:#fff!important;border:2px solid #d0bfff!important;}
+html[data-theme="light"] .intent-chat-messages .intent-bubble.intent-assistant,
+body[data-theme="light"] .intent-chat-messages .intent-bubble.intent-assistant {background:#fff!important;color:#1b1530!important;border:2px solid #7d62bc!important;}
+html[data-theme="light"] .intent-chat-messages .intent-bubble.intent-user,
+body[data-theme="light"] .intent-chat-messages .intent-bubble.intent-user {background:#5428b8!important;color:#fff!important;border:2px solid #351474!important;}
+.intent-chat-messages .intent-bubble {max-width:82%;box-shadow:0 2px 8px rgba(0,0,0,.16);}

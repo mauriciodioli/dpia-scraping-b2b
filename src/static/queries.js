@@ -16,7 +16,7 @@ function journeyScopes(){
 }
 function queryWithoutClassification(){return !!queryJourney&&['explorar','novedades'].includes(queryMode)&&['ready','empty'].includes(catalogState.ambitos)&&['ready','empty'].includes(catalogState.categorias)&&!journeyScopes().length;}
 function setQueryJourney(value){
- queryJourney=value;
+ queryJourney=value==='shop'?'online':value;
  document.querySelector('#queryScope').value='';document.querySelector('#queryCategory').value='';
  const prompt=document.querySelector('#promptText');
  if(prompt.value===exploreAutoDraft||prompt.value===novelAutoDraft)prompt.value='';
@@ -138,6 +138,24 @@ function submitConsultQuery(){
  if(queryPrepared.sent||queryPrepared.pending)return;
  openQuerySubmitChoice();
 }
+// Single entry point for the existing submit dialog after intent confirmation.
+// Preparation is required before direct execution or creating an agent task.
+let confirmedSubmitOpening=false;
+window.DPIAOpenConfirmedSubmit=async()=>{
+ if(window.DPIAIntentGateState?.()!=='CONFIRMED'||confirmedSubmitOpening)return;
+ confirmedSubmitOpening=true;
+ try{
+  if(!currentEmail){openAuth();return;}
+  const fingerprint=JSON.stringify(queryBody());
+  if(!queryPrepared||queryPrepared.fingerprint!==fingerprint){
+   await prepareDPIAQuery({automatic:true});
+  }
+  if(window.DPIAIntentGateState?.()!=='CONFIRMED')return;
+  if(queryPrepared&&queryPrepared.fingerprint===JSON.stringify(queryBody())&&!queryPrepared.sent&&!queryPrepared.pending){
+   openQuerySubmitChoice();
+  }
+ }finally{confirmedSubmitOpening=false;}
+};
 let querySubmitChoice=null;
 function openQuerySubmitChoice(){
  if(!querySubmitChoice){
@@ -154,7 +172,7 @@ function openQuerySubmitChoice(){
   overlay.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();hide();}if(e.key==='Tab'){const controls=[close,direct,...(task.disabled?[]:[task])],at=controls.indexOf(document.activeElement);if(e.shiftKey&&at===0){e.preventDefault();controls.at(-1).focus();}else if(!e.shiftKey&&at===controls.length-1){e.preventDefault();close.focus();}}});
   direct.onclick=()=>{hide();if(querySubmitChoice.owner===currentEmail&&queryPrepared?.owner===currentEmail&&queryPrepared.fingerprint===querySubmitChoice.fingerprint&&JSON.stringify(queryBody())===queryPrepared.fingerprint&&!queryPrepared.sent&&!queryPrepared.pending)openImmediateTaskSources();};
   task.onclick=()=>{hide();if(querySubmitChoice.owner===currentEmail&&queryPrepared?.fingerprint===querySubmitChoice.fingerprint)consultAgentButton.click();};
-  const chat=document.createElement('button');chat.type='button';chat.className='action-button query-continue-chat';chat.textContent='Seguir conversando';chat.onclick=()=>{hide();document.getElementById('promptText').focus();};
+  const chat=document.createElement('button');chat.type='button';chat.className='action-button query-continue-chat';chat.textContent='Seguir conversando';chat.onclick=()=>{hide();const field=['start','jobs'].includes(queryJourney)?document.getElementById('intentChatInput'):document.getElementById('promptText');field?.focus();};
   choices.append(chat,direct,task);dialog.append(close,title,choices);overlay.append(dialog);document.body.append(overlay);
   querySubmitChoice={overlay,direct,task,chat};
  }
@@ -250,7 +268,7 @@ function updateNovelDraft(force=false){
   it:`Cerca novità e prodotti rilevanti di ${c}, nell'ambito ${a}, per ${city}, ${country}. Prepara una ricerca concreta di prodotti utili, evitando duplicati. Non inventare prezzi o presentare tendenze come verificate senza prove.`,
   pl:`Znajdź nowości i przydatne produkty w kategorii ${c}, w obszarze ${a}, dla ${city}, ${country}. Przygotuj konkretne wyszukiwanie i unikaj duplikatów. Nie wymyślaj cen ani nie przedstawiaj trendów jako potwierdzonych bez dowodów.`};
  if(isEmploymentQuery()){queryMode='explorar';setupExploreBudget();updateExploreDraft(true);return;}
- novelAutoDraft=templates[catalogLanguage()]||templates.es;prompt.value=novelAutoDraft;syncQueryConversation();
+ novelAutoDraft=queryJourney==='online'?`Ya vendo productos de ${c}, en ${a}, para ${city}, ${country}. Buscá novedades para ampliar mi catálogo y reponer productos, con proveedores y referencias verificables. ${window.DPIASellerContext?.()||''}`:templates[catalogLanguage()]||templates.es;prompt.value=novelAutoDraft;syncQueryConversation();
 }
 async function openNovelQuery(){
  if(queryBusy)return;
@@ -282,7 +300,7 @@ function updateExploreDraft(force=false){
  if(!scopeSelect.value||!categorySelect.value){if(queryWithoutClassification()){const drafts={es:queryMode==='novedades'?`Buscá novedades y productos relevantes para ${city}, ${country}. Proponé una búsqueda concreta de productos útiles y evitá duplicados. No inventes precios ni presentes tendencias como verificadas sin evidencia.`:`Sugerí productos útiles para ${city}, ${country}. Explicá sus ventajas y proponé precios de venta orientativos cuando puedas fundamentarlos. Indicá sitios donde pueda comparar opciones.`,en:`Suggest useful products and new developments for ${city}, ${country}. Explain benefits and indicative selling prices only when justified. Do not invent prices or verified trends.`,it:`Suggerisci prodotti utili e novità per ${city}, ${country}. Spiega i vantaggi e prezzi indicativi solo se motivati. Non inventare prezzi o tendenze verificate.`,pl:`Zaproponuj przydatne produkty i nowości dla ${city}, ${country}. Wyjaśnij zalety i uzasadnione ceny orientacyjne. Nie wymyślaj cen ani potwierdzonych trendów.`};exploreBudgetDraft=exploreBudgetText();exploreAutoDraft=(isEmploymentQuery()?employmentDraft():drafts[catalogLanguage()]||drafts.es)+'\n'+exploreBudgetDraft;novelAutoDraft=queryMode==='novedades'?exploreAutoDraft:novelAutoDraft;prompt.value=exploreAutoDraft;syncQueryConversation();return;}exploreAutoDraft='';prompt.value='';return;}
  const scope=scopeSelect.selectedOptions[0].textContent,category=categorySelect.selectedOptions[0].textContent;
  const drafts={es:`Sugerí productos útiles de ${category}, en ${scope}, para ${city}, ${country}. Explicá sus ventajas y proponé precios de venta orientativos cuando puedas fundamentarlos. Indicá sitios donde pueda comparar opciones.`,en:`Suggest useful products in ${category}, within ${scope}, for ${city}, ${country}. Explain their benefits and suggest indicative selling prices when justified. Include sites where I can compare options.`,it:`Suggerisci prodotti utili di ${category}, nell'ambito ${scope}, per ${city}, ${country}. Spiega i vantaggi e proponi prezzi indicativi quando motivati. Indica siti dove confrontare le opzioni.`,pl:`Zaproponuj przydatne produkty w kategorii ${category}, w obszarze ${scope}, dla ${city}, ${country}. Wyjaśnij zalety i zaproponuj uzasadnione ceny orientacyjne. Wskaż serwisy do porównania ofert.`};
- exploreBudgetDraft=exploreBudgetText();exploreAutoDraft=(isEmploymentQuery()?employmentDraft():drafts[catalogLanguage()]||drafts.es)+'\n'+exploreBudgetDraft;prompt.value=exploreAutoDraft;syncQueryConversation();
+ exploreBudgetDraft=exploreBudgetText();const sellerDraft=`Ya vendo productos de ${category}, en el ámbito ${scope}, para ${city}, ${country}. Buscá opciones para ampliar mi catálogo, proveedores y oportunidades de reposición. Compará precios y diferenciación con referencias verificables. No inventes márgenes ni ventas. ${window.DPIASellerContext?.()||''}`;exploreAutoDraft=(isEmploymentQuery()?employmentDraft():queryJourney==='online'?sellerDraft:drafts[catalogLanguage()]||drafts.es)+'\n'+exploreBudgetDraft;prompt.value=exploreAutoDraft;syncQueryConversation();
 }
 function setupExploreBudget(){
  syncEmploymentFilters();
