@@ -408,3 +408,42 @@ def agent_response_history(job_id=None):
 def agents_commercial():
     from services.agents_commercial import execute
     return execute()
+
+
+@query_bp.post('/historial/agentes/<job_id>/revision')
+@query_bp.route('/historial/agentes/<job_id>/tarea',methods=['GET','PATCH','DELETE'])
+def agent_result_interaction(job_id):
+    from urllib.parse import urlsplit
+    from uuid import UUID
+    from services.agent_history import read_agent_history
+    from model.usuario import Usuario
+    owner=session.get('user_id')
+    if type(owner) is not int:return jsonify(success=False,error='Iniciá sesión.'),401
+    try:
+        if str(UUID(job_id))!=job_id:raise ValueError()
+        if request.args:raise ValueError()
+    except (ValueError,TypeError):return jsonify(success=False,error='Trabajo inválido.'),400
+    if request.method!='GET':
+        origin=request.headers.get('Origin')
+        try:same=not origin or (urlsplit(origin).scheme==request.scheme and urlsplit(origin).netloc==request.host)
+        except ValueError:same=False
+        if not same or request.headers.get('Sec-Fetch-Site')=='cross-site' or request.headers.get('X-DPIA-Action')!='review-agent-result':
+            return jsonify(success=False,error='Solicitud no autorizada.'),403
+        if not request.is_json or (request.content_length or 0)>65536 or len(request.get_data(cache=True))>65536:return jsonify(success=False,error='Solicitud inválida.'),400
+    try:
+        user=db.session.get(Usuario,owner)
+        if not user or not user.activo:return jsonify(success=False,error='Iniciá sesión.'),401
+        body=request.get_json(silent=True) if request.method!='GET' else {}
+        if not isinstance(body,dict):raise PreparationError('Solicitud inválida.')
+        if request.path.endswith('/revision'):
+            if set(body)-{'result_id','decision','reason'} or not {'result_id','decision'}<=set(body):raise PreparationError('Revisión inválida.')
+            data=read_agent_history(owner,job_id=job_id,review=body)
+        else:
+            action={'GET':'inspect','PATCH':'update','DELETE':'remove'}[request.method]
+            if action=='update' and set(body)!={'configuration'}:raise PreparationError('Configuración inválida.')
+            if action=='remove' and (set(body)!={'confirm'} or body['confirm'] is not True):raise PreparationError('Confirmá la eliminación.')
+            data=read_agent_history(owner,job_id=job_id,task_action=action,configuration=body.get('configuration'))
+        return jsonify(success=True,**{k:v for k,v in data.items() if k not in ('owner_id','api_version')})
+    except PreparationError as exc:return jsonify(success=False,error=str(exc)),exc.status
+    except SQLAlchemyError:
+        db.session.rollback();return jsonify(success=False,error='No se pudo verificar la sesión.'),503

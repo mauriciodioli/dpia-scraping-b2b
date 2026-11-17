@@ -43,6 +43,7 @@
    const response=await fetch('/api/consultas/historial/agentes/'+encodeURIComponent(jobId),{cache:'no-store'}),data=await response.json();
    if(serial!==generation||email!==currentEmail)return;
    if(!response.ok||!data.success)throw Error(data.error||'No se pudo recuperar la respuesta del agente.');
+   if(data.result===null){window.DPIAAgentResultUI.open(data,[],()=>loadAgentResult(jobId));return;}
    const presentation=agentPresentation(data.result);
    // Use the established product-card renderer; agent results have no PWA charge ID.
    renderQueryResult({origin:'agents',sources:presentation.sources});
@@ -72,7 +73,7 @@
    for(const finding of presentation.text){const card=document.createElement('article');card.className='prompt-result';const paragraph=document.createElement('p');paragraph.textContent=finding;card.append(paragraph);out.append(card);}
    for(const warning of data.result.warnings||[])text('p',warning).className='hint';
    for(const source of data.result.sources||[]){const url=safeQueryUrl(source.url);if(!url||(data.result.items||[]).some(item=>item.url===url))continue;const link=text('a',source.title||url);link.href=url;link.target='_blank';link.rel='noopener noreferrer';}
-   showQuery();$('queryStatus').textContent='Respuesta guardada de Agente · '+data.agent_name;
+   window.DPIAAgentResultUI.open(data,[...out.childNodes],()=>loadAgentResult(jobId));
   }catch(error){if(serial===generation&&email===currentEmail)$('queryHistoryStatus').textContent=error.message;}
  }
 
@@ -94,7 +95,7 @@
    if(agentFilter.value&&(row.source!=='agents'||(row.agent_id||row.agent_name)!==agentFilter.value))continue;
    const raw=String(row.query||'').replace(/\s+/g,' ').trim();
    const shorten=(text,max)=>text.length>max?text.slice(0,max-1).trimEnd()+'…':text;
-   const card=document.createElement('button');card.type='button';card.className='query-history-card';if(row.source==='agents')card.classList.add('query-history-agent');
+   const card=document.createElement('button');card.type='button';card.className='query-history-card';if(row.source==='agents'){card.classList.add('query-history-agent');card.dataset.classification=row.result_classification||'UNCLASSIFIED';}
    const title=document.createElement('strong');title.className='query-history-title';
    // Long saved prompts belong in the summary, not in the title.
    title.textContent=raw.length>100?(row.category||tr('Búsqueda guardada')):raw||row.category||tr('Búsqueda guardada');
@@ -117,8 +118,8 @@
    }
    const summary=document.createElement('span');summary.className='query-history-summary';summary.setAttribute('data-catalog-name','');summary.textContent=shorten(raw||row.category||'',180);
    const meta=document.createElement('span');meta.className='query-history-meta';
-   const state=document.createElement('span');state.className='query-history-state';state.dataset.state=row.state;state.textContent=tr(states[row.state]||'Estado sin confirmar');
-   const count=document.createElement('span');count.textContent=row.source==='agents'?'Respuesta entregada':row.product_count==null?tr('Productos por consultar'):String(row.product_count)+' '+tr('productos');
+   const state=document.createElement('span');state.className='query-history-state';state.dataset.state=row.state;state.textContent=row.source==='agents'?(window.DPIAAgentResultUI?.classificationLabel(row.result_classification)||'Sin clasificación registrada'):tr(states[row.state]||'Estado sin confirmar');
+   const count=document.createElement('span');count.textContent=row.source==='agents'?(window.DPIAAgentResultUI?.reviewLabel(row.review_status)||'Estado de revisión no disponible'):row.product_count==null?tr('Productos por consultar'):String(row.product_count)+' '+tr('productos');
    const context=document.createElement('span');context.setAttribute('data-catalog-name','');context.textContent=[row.source,row.city,row.category].filter(Boolean).join(' · ');
    meta.append(state,count,context);
    const action=document.createElement('span');action.className='query-history-open';action.textContent=tr('Consultar resultados')+' →';
@@ -128,6 +129,7 @@
    $('queryHistoryList').append(card);
   }
  }
+ window.addEventListener('dpia:agent-result-reviewed',event=>{for(const entry of agentHistoryRows)if(entry.row.operation_id===event.detail.job_id)for(const key of ['result_classification','classification_reason','review_status','review_required','reviewed_at','reviewed_by','review_reason','job_status'])entry.row[key]=event.detail[key];renderHistory();});
  $('languageSelect').addEventListener('change',()=>setTimeout(renderHistory,0));
  async function history(append=false){
   if(!currentEmail){openAuth();return;}
