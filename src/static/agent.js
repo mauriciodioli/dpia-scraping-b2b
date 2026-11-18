@@ -365,6 +365,7 @@
     pausedGroup.append(groupHeading('Pausadas',tasks.filter(t=>!effectiveActive(t)).length));
     body.append(activeGroup,pausedGroup);
     const types={PRODUCTOS_NUEVOS:'products',PRECIOS:'prices',PROVEEDORES:'suppliers',OPORTUNIDADES_LOCALES:'local',EMPLEOS:'jobs',TENDENCIAS:'trends',VIDEO_GENERAR:'video'};
+    const taskCards=new Map();
     const frequencies={DIARIA:'Diario',DAILY:'Diario',SEMANAL:'Semanal',WEEKLY:'Semanal',ONCE:'Una vez',DOS_POR_SEMANA:'Dos veces por semana'};
     for(const task of tasks){
      const pausedByAgent=task.paused_by_agent||['paused','admin_paused','disabled'].includes(serverState),configuredState=task.configured_state||task.state;
@@ -510,11 +511,17 @@
         form.append(button('Cerrar',()=>dialog.close()));}
       };
       menuItems.append(editVideo);
+     // Acceso directo a las dos configuraciones, visible en la propia tarjeta.
+     const videoSettings=node('div',undefined,'agent-video-settings');
+     const scriptSettings=button('1. Configuración del guion',()=>openVideoEditor('script'),'agent-video-setting-button');
+     const productionSettings=button('2. Configuración del video',()=>openVideoEditor('production'),'agent-video-setting-button');
+     videoSettings.append(scriptSettings,productionSettings);
+     card.append(videoSettings);
      }
      menuItems.append(rename,scheduleAction,removeAction);menu.append(menuButton,menuItems);
      titleRow.append(title,menu);
      const meta=node('div',undefined,'agent-task-meta'),kind=node('span',(task.type==='VIDEO_GENERAR'?'Generación de video':TASKS[types[task.type]]||task.type),'agent-task-type'),badge=node('span',effectiveState==='active'?'Activa':'Pausada','agent-task-state');
-     badge.classList.add(effectiveState==='active'?'is-active':'is-paused');meta.append(kind,badge);card.append(titleRow,meta);
+     badge.classList.add(effectiveState==='active'?'is-active':'is-paused');meta.append(kind,badge);card.prepend(titleRow,meta);
      if(pausedByAgent&&configuredState==='active')card.append(node('p','Se reanudará cuando actives el agente.','agent-notice'));
      const editSchedule=()=>{
       if(editing||busy)return;
@@ -606,7 +613,22 @@
      toggle.disabled=Boolean(pausedByAgent);
      if(toggle.disabled)toggle.title='Primero activá el agente';
      actions.append(toggle);
+     taskCards.set(String(task.id),card);
      card.append(summary,info,actions);(effectiveState==='active'?activeGroup:pausedGroup).append(card);
+    }
+    // Reorder only the DOM: task states, actions and scheduling stay independent.
+    const families=new Map();
+    for(const child of tasks){
+     if(child.type!=='VIDEO_GENERAR')continue;
+     const parentId=child.video_configuration?.parent_task_id||child.parent_task_id;
+     const parent=tasks.find(t=>String(t.id)===String(parentId)&&t.type!=='VIDEO_GENERAR');
+     if(!parent)continue; // Keep orphaned/filtered tasks visible as ordinary cards.
+     const parentCard=taskCards.get(String(parent.id)),childCard=taskCards.get(String(child.id));
+     let family=families.get(String(parent.id));
+     if(!family){family=node('div',undefined,'agent-task-family');parentCard.before(family);family.append(parentCard);families.set(String(parent.id),family);}
+     childCard.classList.add('agent-task-child');
+     childCard.prepend(raw('small','↳ Video de: '+parent.name,'agent-task-parent-label'));
+     family.append(childCard);
     }
    }catch(e){if(current()&&!silent){const message=node('p',e.message||'No se confirmó el cambio de tareas. Reintentá.');message.setAttribute('role','alert');body.append(message,button('Reintentar',()=>load()));}}
    finally{busy=false;status.remove();for(const [el,value] of disabled)if(el.isConnected)el.disabled=value;body.removeAttribute('aria-busy');}

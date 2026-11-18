@@ -792,3 +792,16 @@ html[data-theme="dark"] #agentPage .agent-task-card.agent-task-video .agent-task
 .agent-video-preferences-dialog input:not([type="checkbox"]),.agent-video-preferences-dialog select,.agent-video-preferences-dialog textarea{box-sizing:border-box;width:100%;max-width:100%}
 .agent-video-preferences-dialog textarea{resize:vertical}
 .agent-video-preferences-dialog>button{display:block;margin:.6rem 0}
+
+/* Visible controls for VIDEO_GENERAR only, not hidden in the overflow menu. */
+#agentPage .agent-task-card.agent-task-video .agent-video-settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:12px 0}
+#agentPage .agent-task-card.agent-task-video .agent-video-setting-button{display:block;width:100%;min-height:44px;padding:10px 12px;border-radius:12px;border:1px solid #0c829b;background:#d1f0f5;color:#06475a;font-weight:700;text-align:left;cursor:pointer}
+html[data-theme="dark"] #agentPage .agent-task-card.agent-task-video .agent-video-setting-button{background:#17475c;border-color:#54c8d9;color:#ecfcff}
+#agentPage .agent-task-card.agent-task-video .agent-video-setting-button:hover{filter:brightness(1.08)}
+@media(max-width:520px){#agentPage .agent-task-card.agent-task-video .agent-video-settings{grid-template-columns:1fr}}
+
+/* Keep video children directly below their parent, with a responsive hierarchy. */
+#agentPage .agent-task-family{display:grid;gap:.65rem;min-width:0}
+#agentPage .agent-task-card.agent-task-child{margin-inline-start:4rem;position:relative}
+#agentPage .agent-task-parent-label{color:var(--tc-muted);font-size:.78rem;overflow-wrap:anywhere}
+@media(max-width:600px){#agentPage .agent-task-card.agent-task-child{margin-inline-start:.75rem;padding:.85rem;gap:.75rem}}
