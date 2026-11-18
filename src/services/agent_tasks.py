@@ -48,6 +48,27 @@ class AgentTaskService:
     def __init__(self, repository=None):
         self.repository = repository or AgentTaskRepository()
 
+    def update_video_configuration(self, owner, agent_id, task_id, section, payload):
+        """Persist per-task video preferences; never trigger production."""
+        from services.video_task_preferences import validate_video_preferences
+        validated = validate_video_preferences(section, payload)
+        repo = self.repository
+        with repo.transaction(owner, agent_id) as (conn, tables, agent):
+            task = next((t for t in repo.tasks(conn, tables, agent_id) if t['id'] == task_id), None)
+            if task is None or deleted(task) or task['tipo'] != 'VIDEO_GENERAR':
+                bad('Tarea de video no disponible.', 404)
+            params = dict(task['parametros'] or {})
+            revision = params.get('_configuration_revision', 1)
+            if validated.pop('expected_revision') != revision:
+                bad('La tarea cambió. Actualizá antes de guardar.', 409)
+            video = dict(params.get('video') or {})
+            video[section] = validated
+            params['video'] = video
+            params['_configuration_revision'] = revision + 1
+            repo.change(conn, tables['agente_tareas'], task_id, parametros=params,
+                        actualizado_en=datetime.now(timezone.utc).replace(tzinfo=None))
+        return self.handle(owner, agent_id)
+
     def handle(self, owner, agent_id, task_id=None, action=None, command=None):
         repo = self.repository
         if action == 'programar':
@@ -150,6 +171,7 @@ class AgentTaskService:
                 configured_active=bool(task['habilitada'] and (not engine or any(s['enabled'] for s in linked)))
                 result.append(dict(id=task['id'], name=task['nombre'], type=task['tipo'],
                                    revision=(task['parametros'] or {}).get('_configuration_revision', 1),
+                                   video_configuration=(task['parametros'] or {}).get('video') if task['tipo']=='VIDEO_GENERAR' else None,
                                    created_at=iso(task.get('creado_en')), execution_history=history.get(task['id'],[]),
                                    state='active' if configured_active and not agent_paused else 'paused',
                                    configured_state='active' if configured_active else 'paused', paused_by_agent=agent_paused, schedules=timing,

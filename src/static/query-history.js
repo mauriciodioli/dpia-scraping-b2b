@@ -53,6 +53,16 @@
    if(data.last_checked_at){const checked=new Date(data.last_checked_at);if(!Number.isNaN(checked.getTime()))text('p',tr('Actualizado automáticamente')+' · '+new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{dateStyle:'medium',timeStyle:'short'}).format(checked)).className='query-history-refresh';}
    if(data.evidence_status==='UNVERIFIED')text('p','Información no verificada.');
    text('p',data.result.summary);out.append(...productCards);
+   // Agents may return a completed video URL in the result payload.
+   // Never display a placeholder video when no actual MP4 was returned.
+   const videoUrl=safeQueryUrl(data.result.video_url||data.result.video?.url||data.video_url);
+   if(videoUrl){
+    const section=document.createElement('section');section.className='agent-video-result';
+    const heading=document.createElement('h3');heading.textContent='Video generado';
+    const player=document.createElement('video');player.controls=true;player.preload='metadata';player.playsInline=true;player.src=videoUrl;
+    const download=document.createElement('a');download.href=videoUrl;download.target='_blank';download.rel='noopener noreferrer';download.className='action-button';download.textContent='Abrir video';
+    section.append(heading,player,download);out.append(section);
+   }
    if(Array.isArray(data.result.items)&&data.result.items.length){
     const grid=document.createElement('div');grid.className='scraped-products agent-result-grid';
     for(const item of data.result.items){
@@ -86,7 +96,8 @@
  function filter(id,label,options){const host=document.createElement('label');host.textContent=label;const select=document.createElement('select');select.id=id;select.setAttribute('aria-label',label);for(const [value,text] of options)select.add(new Option(text,value));host.append(select);controls.append(host);select.onchange=renderHistory;return select;}
  const outcome=filter('historyOutcome','Resultados',[['','Todos'],['success','Satisfactorios'],['other','No satisfactorios'],['hidden','Ocultos en este navegador']]);
  const category=filter('historyClassification','Estado',[['','Todos los estados'],['PARTIAL','Parciales'],['DIVERGENT','Divergentes'],['INSUFFICIENT_EVIDENCE','Evidencia insuficiente'],['NO_MATCH','Sin coincidencias'],['TECHNICAL_ERROR','Errores técnicos']]);
- const reviewFilter=filter('historyReview','Revisión',[['','Todas'],['PENDING_REVIEW','Pendientes'],['ACCEPTED','Aceptados'],['REJECTED','Rechazados']]);
+ const videoFilter=filter('historyVideo','Tipo de tarea',[['','Todas las tareas'],['video','Videos'],['other','Otras tareas']]);
+  const reviewFilter=filter('historyReview','Revisión',[['','Todas'],['PENDING_REVIEW','Pendientes'],['ACCEPTED','Aceptados'],['REJECTED','Rechazados']]);
  const hiddenKey=()=> 'dpia:hidden-history:'+String(currentEmail||'');
  function hiddenIds(){try{return new Set(JSON.parse(localStorage.getItem(hiddenKey())||'[]'));}catch(_){return new Set();}}
  function setHidden(id,hide){const ids=hiddenIds();hide?ids.add(id):ids.delete(id);try{localStorage.setItem(hiddenKey(),JSON.stringify([...ids]));renderHistory();}catch(_){$('queryHistoryStatus').textContent='No se pudo guardar la preferencia en este navegador.';}}
@@ -103,6 +114,9 @@
   const states={reserved:'Reservada',dispatching:'En curso',pending:'Pendiente de confirmación',consumed:'Finalizada',released:'No iniciada',stored:'Trabajo guardado'};
   for(const {row,place} of [...historyRows,...agentHistoryRows].sort((a,b)=>(Date.parse(b.row.created_at)||0)-(Date.parse(a.row.created_at)||0))){
    if(agentFilter.value&&(row.source!=='agents'||(row.agent_id||row.agent_name)!==agentFilter.value))continue;
+   const isVideo=row.task_type==='VIDEO_GENERAR'||row.tipo_tarea==='VIDEO_GENERAR'||row.type==='VIDEO_GENERAR';
+   if(videoFilter.value==='video'&&!isVideo)continue;
+   if(videoFilter.value==='other'&&isVideo)continue;
    const isAgent=row.source==='agents',success=isAgent?row.result_classification==='SATISFIED':row.state==='consumed',hidden=hiddenIds().has(row.operation_id);
    if(outcome.value==='hidden'?!hidden:hidden)continue;
    if(outcome.value==='success'&&!success)continue;
@@ -111,6 +125,7 @@
    const raw=String(row.query||'').replace(/\s+/g,' ').trim();
    const shorten=(text,max)=>text.length>max?text.slice(0,max-1).trimEnd()+'…':text;
    const card=document.createElement('button');card.type='button';card.className='query-history-card';if(row.source==='agents'){card.classList.add('query-history-agent');card.dataset.classification=row.result_classification||'UNCLASSIFIED';}
+   if(isVideo)card.classList.add('query-history-video');
    const title=document.createElement('strong');title.className='query-history-title';
    // Long saved prompts belong in the summary, not in the title.
    title.textContent=raw.length>100?(row.category||tr('Búsqueda guardada')):raw||row.category||tr('Búsqueda guardada');
@@ -139,6 +154,7 @@
    meta.append(state,count,context);
    const action=document.createElement('span');action.className='query-history-open';action.textContent=tr('Consultar resultados')+' →';
    if(row.source==='agents'){const label=document.createElement('span');label.className='query-history-agent-label';label.textContent='Respuesta de Agente · '+row.agent_name;card.append(label);}
+   if(isVideo){const label=document.createElement('span');label.className='query-history-agent-label';label.textContent='Video';card.append(label);}
    card.append(title,date);if(refresh)card.append(refresh);if(summary.textContent&&raw!==title.textContent)card.append(summary);card.append(meta,action);
    card.onclick=()=>row.source==='agents'?loadAgentResult(row.operation_id):row.remote?loadRemote(row.operation_id,place):loadQueryOperation(row.operation_id);
    const wrapper=document.createElement('div');wrapper.className='history-card-wrapper';wrapper.append(card);

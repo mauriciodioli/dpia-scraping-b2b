@@ -364,12 +364,13 @@
     activeGroup.append(groupHeading('Activas',tasks.filter(effectiveActive).length));
     pausedGroup.append(groupHeading('Pausadas',tasks.filter(t=>!effectiveActive(t)).length));
     body.append(activeGroup,pausedGroup);
-    const types={PRODUCTOS_NUEVOS:'products',PRECIOS:'prices',PROVEEDORES:'suppliers',OPORTUNIDADES_LOCALES:'local',EMPLEOS:'jobs',TENDENCIAS:'trends'};
+    const types={PRODUCTOS_NUEVOS:'products',PRECIOS:'prices',PROVEEDORES:'suppliers',OPORTUNIDADES_LOCALES:'local',EMPLEOS:'jobs',TENDENCIAS:'trends',VIDEO_GENERAR:'video'};
     const frequencies={DIARIA:'Diario',DAILY:'Diario',SEMANAL:'Semanal',WEEKLY:'Semanal',ONCE:'Una vez',DOS_POR_SEMANA:'Dos veces por semana'};
     for(const task of tasks){
      const pausedByAgent=task.paused_by_agent||['paused','admin_paused','disabled'].includes(serverState),configuredState=task.configured_state||task.state;
      const effectiveState=effectiveActive(task)?'active':'paused';
      const card=node('article',undefined,'agent-task-card');
+     if(task.type==='VIDEO_GENERAR')card.classList.add('agent-task-video');
      if(pausedByAgent||configuredState==='paused')card.classList.add('agent-task-is-paused');
      const title=raw('h4',task.name||tr(TASKS[types[task.type]]||task.type)),titleRow=node('div',undefined,'agent-task-title');
      const pencil=button('✎',()=>{
@@ -406,9 +407,92 @@
      const scheduleAction=button('Editar programación',()=>{menu.open=false;editSchedule();});
      scheduleAction.dataset.editSchedule='';
      const removeAction=button('Eliminar tarea',()=>{menu.open=false;if(window.confirm(tr('¿Eliminar esta tarea? Se conservará el historial.')))load(task.id,'eliminar');},'agent-task-danger');
+     // Video is a normal child task. Creation requires Agents confirmation; never fake a local task.
+     if(task.type!=='VIDEO_GENERAR'){
+      const videoAction=button('Crear video / stream',async()=>{
+       menu.open=false;
+       if(busy||editing)return;
+       const dialog=node('dialog',undefined,'auth-dialog agent-video-dialog');
+       const form=node('form');form.method='dialog';
+       const nameInput=document.createElement('input');nameInput.type='text';nameInput.maxLength=120;nameInput.required=true;
+       nameInput.value=('Video — '+(task.name||'Tarea')).slice(0,120);
+       const seconds=document.createElement('select');
+       for(const duration of [15,30,60])seconds.add(new Option(duration+' segundos',String(duration)));
+       const message=node('p',undefined,'agent-feedback');message.setAttribute('role','alert');
+       const cancel=button('Cancelar',()=>dialog.close());
+       const create=button('Crear tarea de video',async()=>{
+        const name=nameInput.value.trim();if(!name){message.textContent='Ingresá un nombre.';return;}
+        create.disabled=true;message.textContent='Creando tarea en B2B…';
+        try{
+         const response=await fetch('/api/agente/tareas/video',{
+          method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'create-task'},
+          body:JSON.stringify({parent_task_id:task.id,name,duration_seconds:Number(seconds.value)}),signal:AbortSignal.timeout(30000)
+         });
+         const data=await response.json();
+         if(!response.ok||data.success!==true)throw Error(data.error||'Agents todavía no permite crear tareas de video.');
+         if(data.warning)window.alert(data.warning);dialog.close();editing=false;lastTasks=null;load();
+        }catch(e){message.textContent=e.message||'No se pudo crear la tarea de video.';}
+        finally{create.disabled=false;}
+       },'primary');
+       form.append(inputLabel('Nombre de la nueva tarea',nameInput),inputLabel('Duración del anuncio',seconds),message,cancel,create);
+       dialog.append(node('h2','Crear tarea de video'),node('p','La nueva tarea dependerá de esta tarea y usará la planificación normal de Agents.'),form);
+       document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();
+      });
+      menuItems.append(videoAction);
+     }
+     if(task.type==='VIDEO_GENERAR'){
+      const openVideoEditor=section=>{
+       menu.open=false;if(editing||busy)return;editing=true;
+       const dialog=node('dialog',undefined,'auth-dialog agent-video-dialog');
+       const form=node('form'),fields=node('div',undefined,'agent-fields');
+       const message=node('p',undefined,'agent-feedback');message.setAttribute('role','alert');
+       const original=task.video_configuration||{},config=original[section]||{};
+       const controls={};
+       const field=(name,label,value,options=null,large=false)=>{
+        const el=options?document.createElement('select'):large?document.createElement('textarea'):document.createElement('input');
+        if(options)for(const [key,caption] of options)el.add(new Option(caption,key));
+        if(!options&&!large)el.type=name==='duration_seconds'||name==='budget_credits'?'number':'text';
+        el.value=value??'';if(large)el.rows=5;
+        controls[name]=el;fields.append(inputLabel(label,el));
+       };
+       if(section==='script'){
+        fields.append(node('p','OpenAI construye el guion automáticamente con el historial y los resultados disponibles. Las instrucciones complementan ese proceso; un guion completo tiene prioridad.'));
+        field('instructions','Instrucciones adicionales para el guion',config.instructions||'',null,true);
+        field('custom_script','Guion completo opcional',config.custom_script||'',null,true);
+       }else{
+        field('video_type','Tipo de video',config.video_type||'Noticiero', [['Noticiero','Noticiero'],['Explicativo','Explicativo'],['Promocional','Promocional'],['Resumen','Resumen']]);
+        field('duration_seconds','Duración objetivo (segundos)',config.duration_seconds||original.duration_seconds||60);
+        field('language','Idioma',config.language||document.getElementById('languageSelect')?.value||'es');
+        field('format','Formato',config.format||'16:9',[['16:9','Horizontal · 16:9'],['9:16','Vertical · 9:16'],['1:1','Cuadrado · 1:1']]);
+        field('provider','Proveedor',config.provider||'heygen');
+        field('avatar_id','Presentador (vacío = automático)',config.avatar_id||'');
+        field('voice_id','Voz (vacío = automática)',config.voice_id||'');
+        field('budget_credits','Máximo de créditos DPIA por ejecución',config.budget_credits??0);
+        field('automatic_production','Autorización de producción',String(config.automatic_production??false),[['false','Revisión antes de producir'],['true','Automática dentro del presupuesto']]);
+       }
+       const cancel=button('Cancelar',()=>dialog.close());
+       const save=button('Guardar configuración',async()=>{
+        const payload={expected_revision:task.revision||1};
+        for(const [name,el] of Object.entries(controls))payload[name]=name==='duration_seconds'||name==='budget_credits'?Number(el.value):name==='automatic_production'?el.value==='true':el.value;
+        save.disabled=true;message.textContent='Guardando…';
+        try{
+         const endpoint=section==='script'?'video-guion':'video-produccion';
+         const response=await fetch('/api/agentes/'+agentId+'/tareas/'+task.id+'/'+endpoint,{method:'PATCH',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'manage-task'},body:JSON.stringify(payload),signal:AbortSignal.timeout(20000)});
+         const data=await response.json();if(!response.ok||data.success!==true)throw Error(data.error||'No se guardó la configuración.');
+         dialog.close();editing=false;lastTasks=null;load();
+        }catch(e){message.textContent=e.message||'Error al guardar.';save.disabled=false;}
+       },'primary');
+       form.append(fields,message,cancel,save);form.onsubmit=e=>e.preventDefault();
+       dialog.append(node('h2',section==='script'?'Configuración del guion':'Configuración del video'),raw('p',task.name),form);
+       document.body.append(dialog);dialog.addEventListener('close',()=>{editing=false;dialog.remove();},{once:true});dialog.showModal();
+      };
+      const editMenu=node('details',undefined,'agent-video-edit-menu');
+      editMenu.append(node('summary','Editar'),button('1. Configuración del guion',()=>openVideoEditor('script')),button('2. Configuración del video',()=>openVideoEditor('production')));
+      menuItems.append(editMenu);
+     }
      menuItems.append(rename,scheduleAction,removeAction);menu.append(menuButton,menuItems);
      titleRow.append(title,menu);
-     const meta=node('div',undefined,'agent-task-meta'),kind=node('span',TASKS[types[task.type]]||task.type,'agent-task-type'),badge=node('span',effectiveState==='active'?'Activa':'Pausada','agent-task-state');
+     const meta=node('div',undefined,'agent-task-meta'),kind=node('span',(task.type==='VIDEO_GENERAR'?'Generación de video':TASKS[types[task.type]]||task.type),'agent-task-type'),badge=node('span',effectiveState==='active'?'Activa':'Pausada','agent-task-state');
      badge.classList.add(effectiveState==='active'?'is-active':'is-paused');meta.append(kind,badge);card.append(titleRow,meta);
      if(pausedByAgent&&configuredState==='active')card.append(node('p','Se reanudará cuando actives el agente.','agent-notice'));
      const editSchedule=()=>{
@@ -418,7 +502,7 @@
       const timing=task.schedules[0]||{},dialog=node('dialog',undefined,'auth-dialog agent-schedule-dialog'),form=node('form'),grid=node('div',undefined,'agent-fields'),error=node('p',undefined,'agent-feedback');error.setAttribute('role','alert');
       dialog.setAttribute('aria-label',tr('Editar programación'));dialog.append(node('h2','Editar programación'),raw('p',task.name),form);form.append(grid);
       dialog.addEventListener('cancel',event=>{if(save.disabled)event.preventDefault();});
-      dialog.addEventListener('close',()=>{editing=false;dialog.remove();if(current())card.querySelector('[data-edit-schedule]')?.focus();});
+      dialog.addEventListener('close',()=>{editing=false;dialog.remove();if(current())card.querySelector('.agent-task-highlight[data-edit-schedule]')?.focus();});
       const input=(label,type,value)=>{const wrap=node('label',undefined,'agent-field'),el=document.createElement(type==='select'?'select':'input');wrap.append(node('span',label));if(type!=='select')el.type=type;el.value=value||'';el.setAttribute('aria-label',tr(label));wrap.append(el);grid.append(wrap);return el;};
       const frequency=input('Frecuencia','select','');
       for(const [value,label] of [['ONCE','Una vez'],['DAILY','Diario'],['WEEKLY','Semanal']]){const option=node('option',label);option.value=value;frequency.append(option);}frequency.value=timing.frequency||'DAILY';
@@ -472,6 +556,8 @@
      if(nextTimestamp&&schedules[0]?.timezone)nextBox.append(node('small',schedules[0].timezone));
      else if(pausedByAgent||configuredState==='paused')nextBox.append(node('small','Activala para programarla'));
      lastBox.append(node('span','Última ejecución'),node('strong',last||'Aún no se ejecutó'));
+     lastBox.setAttribute('role','button');lastBox.tabIndex=0;lastBox.setAttribute('aria-label',tr('Editar programación de la tarea'));lastBox.dataset.editSchedule='';lastBox.style.cursor='pointer';
+     lastBox.onclick=()=>editSchedule();lastBox.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();editSchedule();}};
      info.append(nextBox,lastBox);
      const runs=task.execution_history||[];
      if(runs.length){
@@ -498,8 +584,7 @@
      toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked',effectiveState==='active'?'true':'false');
      toggle.disabled=Boolean(pausedByAgent);
      if(toggle.disabled)toggle.title='Primero activá el agente';
-     const editButton=button('Editar',()=>editSchedule(),'agent-task-edit');editButton.dataset.editSchedule='';
-     actions.append(toggle,editButton);
+     actions.append(toggle);
      card.append(summary,info,actions);(effectiveState==='active'?activeGroup:pausedGroup).append(card);
     }
    }catch(e){if(current()&&!silent){const message=node('p',e.message||'No se confirmó el cambio de tareas. Reintentá.');message.setAttribute('role','alert');body.append(message,button('Reintentar',()=>load()));}}

@@ -767,3 +767,12 @@ html[data-theme="dark"] #agentPage .agent-task-list{--tc-card:#241a5e;--tc-pause
 .query-submit-choices .query-create-task{color:#159b61;border-color:#159b61;background:rgba(21,155,97,.1)}
 .query-create-task svg{flex-shrink:0}
 html[data-theme="dark"] .query-submit-choices .query-create-task{color:#77e0ad;border-color:#159b61}
+
+/* DPIA video child tasks: distinct in both themes, without changing standard task cards. */
+#agentPage .agent-task-card.agent-task-video{border:2px solid #0d9c9a;background:color-mix(in srgb,var(--tc-card) 88%,#0d9c9a 12%)}
+#agentPage .agent-task-card.agent-task-video .agent-task-type{color:#008c88;font-weight:700}
+html[data-theme="dark"] #agentPage .agent-task-card.agent-task-video .agent-task-type{color:#64e1d5}
+.query-history-card.query-history-video{border-left:4px solid #0d9c9a}
+.agent-video-dialog form{display:flex;flex-direction:column;gap:1rem}.agent-video-dialog input,.agent-video-dialog select{width:100%;box-sizing:border-box}
+
+.agent-video-result video{display:block;width:100%;max-height:65vh;background:#111;border-radius:12px;margin:.6rem 0}

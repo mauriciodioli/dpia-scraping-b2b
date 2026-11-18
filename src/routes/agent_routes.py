@@ -85,6 +85,43 @@ def create_task():
         return jsonify(success=False, error='No se confirmó la creación de la tarea.'), 503
 
 
+@agent_bp.post('/tareas/video')
+def create_video_task():
+    user_id = session.get('user_id')
+    if type(user_id) is not int:
+        return jsonify(success=False, error='Iniciá sesión.'), 401
+    origin = request.headers.get('Origin')
+    try:
+        same_origin = not origin or urlsplit(origin).netloc == request.host
+    except ValueError:
+        same_origin = False
+    if (request.headers.get('X-DPIA-Action') != 'create-task'
+            or request.headers.get('Sec-Fetch-Site') == 'cross-site' or not same_origin):
+        return jsonify(success=False, error='Solicitud no autorizada.'), 403
+    if not request.is_json or (request.content_length or 0) > 4096:
+        return jsonify(success=False, error='Consulta inválida.'), 400
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or set(body) != {'parent_task_id', 'name', 'duration_seconds'}:
+        return jsonify(success=False, error='Consulta inválida.'), 400
+    try:
+        store = current_app.extensions.get('agent_configuration_store') or AgentConfigurationStore()
+        task = store.add_video_child_task(user_id, body['parent_task_id'],
+            body['name'], body['duration_seconds'])
+        # Existing Agents synchronization is reused, never a second dispatcher.
+        # If it fails, the child stays persisted and paused, with an explicit warning.
+        try:
+            task = store.synchronize_task_schedule(user_id, task)
+        except (PreparationError, SQLAlchemyError) as exc:
+            current_app.logger.warning('Video child persisted, schedule pending: %s', exc)
+            return jsonify(success=True, task=task, warning='Tarea creada y pausada; sincronización con Agents pendiente.'), 201
+        return jsonify(success=True, task=task), 201
+    except PreparationError as exc:
+        return jsonify(success=False, error=str(exc)), exc.status
+    except SQLAlchemyError:
+        current_app.logger.exception('Video child creation failed')
+        return jsonify(success=False, error='No se confirmó la creación de la tarea.'), 503
+
+
 @agent_bp.post('/activar')
 def activate():
     user_id=session.get('user_id')

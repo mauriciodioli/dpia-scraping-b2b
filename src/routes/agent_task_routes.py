@@ -24,7 +24,7 @@ def tasks(agent_id, task_id=None, action=None):
     if request.method != 'GET':
         if request.method == 'DELETE':
             action = 'eliminar'
-        if action not in (('eliminar',) if request.method == 'DELETE' else ('activar', 'pausar', 'renombrar', 'programar')):
+        if action not in (('eliminar',) if request.method == 'DELETE' else ('activar', 'pausar', 'renombrar', 'programar', 'video-guion', 'video-produccion')):
             return jsonify(success=False, error='Acción no disponible.'), 404
         try:
             origin = request.headers.get('Origin')
@@ -36,6 +36,13 @@ def tasks(agent_id, task_id=None, action=None):
     try:
         service = current_app.extensions.get('agent_task_service') or AgentTaskService()
         command = None
+        if action in ('video-guion', 'video-produccion'):
+            if not request.is_json or (request.content_length or 0) > 30000:
+                return jsonify(success=False, error='Configuración de video inválida.'), 400
+            command = request.get_json(silent=True)
+            section = 'script' if action == 'video-guion' else 'production'
+            items = service.update_video_configuration(owner, agent_id, task_id, section, command)
+            return jsonify(success=True, tasks=items, count=len(items), execution_available=False)
         if action == 'programar':
             if not request.is_json or (request.content_length or 0)>4096:
                 return jsonify(success=False,error='Programación inválida.'),400

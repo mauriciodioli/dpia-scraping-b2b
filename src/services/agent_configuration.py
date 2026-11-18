@@ -343,6 +343,57 @@ class AgentConfigurationStore:
             return {'id': task_id, 'agent_id': agent['id'], 'duplicate': False,
                     'schedule_pending': True}
 
+    def add_video_child_task(self, user_id, parent_task_id, name, duration_seconds):
+        """Create a genuine, initially paused configured task and its 1:N video link."""
+        from sqlalchemy import MetaData as SA_MetaData, Table as SA_Table
+        from sqlalchemy import inspect
+        if type(parent_task_id) is not int or parent_task_id < 1:
+            bad('Tarea padre inválida.', 422)
+        try:
+            validate_task_name(name)
+        except ValueError as exc:
+            bad(str(exc), 422)
+        if type(duration_seconds) is not int or duration_seconds not in (15, 30, 60):
+            bad('Duración inválida.', 422)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        with self._engine().begin() as conn:
+            self._user(conn, user_id, lock=True)
+            agent = self._existing(conn, user_id)
+            if not agent or (agent['configuracion'] or {}).get('_deleted_at'):
+                bad('Primero creá el agente.', 409)
+            table = SA_Table('agente_tareas', SA_MetaData(), autoload_with=conn, resolve_fks=False)
+            parent = conn.execute(select(table).where(table.c.id == parent_task_id,
+                table.c.agente_id == agent['id']).with_for_update()).mappings().first()
+            if not parent or (parent['parametros'] or {}).get('_deleted_at'):
+                bad('La tarea padre no está disponible.', 404)
+            if parent['tipo'] == 'VIDEO_GENERAR':
+                bad('Elegí una tarea de origen, no otra tarea de video.', 422)
+            if not inspect(conn).has_table('ae_task_video_config'):
+                bad('Falta la tabla ae_task_video_config en MySQL.', 503)
+            links = SA_Table('ae_task_video_config', SA_MetaData(), autoload_with=conn, resolve_fks=False)
+            params = dict(parent['parametros'] or {})
+            params.pop('identity_hash', None)
+            params.pop('immediate_request_id', None)
+            params.update(schema_version=2, video=dict(parent_task_id=parent_task_id,
+                duration_seconds=duration_seconds, status='provider_pending',
+                script={'instructions':'', 'custom_script':''},
+                production={'video_type':'Noticiero', 'duration_seconds':duration_seconds,
+                            'language':'es', 'format':'16:9', 'provider':'heygen',
+                            'avatar_id':'', 'voice_id':'', 'budget_credits':0,
+                            'automatic_production':False}),
+                parent_task_id=parent_task_id)
+            values = dict(agente_id=agent['id'], tipo='VIDEO_GENERAR', nombre=name,
+                habilitada=False, parametros=params, creado_en=now, actualizado_en=now)
+            if 'ae_agent_id' in table.c:
+                values['ae_agent_id'] = parent.get('ae_agent_id')
+            child_id = conn.execute(insert(table).values(**values)).inserted_primary_key[0]
+            conn.execute(insert(links).values(tarea_padre_id=parent_task_id,
+                tarea_video_id=child_id, generar_video=True,
+                configuracion={'duration_seconds':duration_seconds}, creado_en=now))
+            return {'id':child_id, 'agent_id':agent['id'], 'parent_task_id':parent_task_id,
+                'name':name, 'type':'VIDEO_GENERAR', 'schedule_pending':True,
+                'execution_enabled':False}
+
     def synchronize_task_schedule(self, user_id, task):
         from model.agent_tasks import AgentTaskRepository
         from services.agent_activation import synchronize_task
