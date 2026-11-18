@@ -776,3 +776,19 @@ html[data-theme="dark"] #agentPage .agent-task-card.agent-task-video .agent-task
 .agent-video-dialog form{display:flex;flex-direction:column;gap:1rem}.agent-video-dialog input,.agent-video-dialog select{width:100%;box-sizing:border-box}
 
 .agent-video-result video{display:block;width:100%;max-height:65vh;background:#111;border-radius:12px;margin:.6rem 0}
+
+/* VIDEO_GENERAR: unique accessible card palette in light and dark mode. */
+html:not([data-theme="dark"]) #agentPage .agent-task-card.agent-task-video{
+ background:#e7f7fa;border:2px solid #087e94;color:#123d4b;
+}
+html:not([data-theme="dark"]) #agentPage .agent-task-card.agent-task-video .agent-task-type{color:#075d72}
+html[data-theme="dark"] #agentPage .agent-task-card.agent-task-video{
+ background:#102c3c;border:2px solid #47c6d8;color:#e7f9fc;
+}
+html[data-theme="dark"] #agentPage .agent-task-card.agent-task-video .agent-task-type{color:#83e8f1}
+#agentPage .agent-task-card.agent-task-video.agent-task-is-paused{opacity:1}
+.agent-video-preferences-dialog{width:min(94vw,560px);max-height:85dvh;overflow:auto}
+.agent-video-preferences-dialog form{display:grid;gap:.85rem;margin-top:1rem}
+.agent-video-preferences-dialog input:not([type="checkbox"]),.agent-video-preferences-dialog select,.agent-video-preferences-dialog textarea{box-sizing:border-box;width:100%;max-width:100%}
+.agent-video-preferences-dialog textarea{resize:vertical}
+.agent-video-preferences-dialog>button{display:block;margin:.6rem 0}

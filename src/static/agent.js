@@ -430,7 +430,7 @@
          });
          const data=await response.json();
          if(!response.ok||data.success!==true)throw Error(data.error||'Agents todavía no permite crear tareas de video.');
-         if(data.warning)window.alert(data.warning);dialog.close();editing=false;lastTasks=null;load();
+         if(data.warning)window.alert(data.warning);dialog.close();lastTasks=null;load();
         }catch(e){message.textContent=e.message||'No se pudo crear la tarea de video.';}
         finally{create.disabled=false;}
        },'primary');
@@ -441,54 +441,75 @@
       menuItems.append(videoAction);
      }
      if(task.type==='VIDEO_GENERAR'){
-      const openVideoEditor=section=>{
-       menu.open=false;if(editing||busy)return;editing=true;
-       const dialog=node('dialog',undefined,'auth-dialog agent-video-dialog');
-       const form=node('form'),fields=node('div',undefined,'agent-fields');
-       const message=node('p',undefined,'agent-feedback');message.setAttribute('role','alert');
-       const original=task.video_configuration||{},config=original[section]||{};
-       const controls={};
-       const field=(name,label,value,options=null,large=false)=>{
-        const el=options?document.createElement('select'):large?document.createElement('textarea'):document.createElement('input');
-        if(options)for(const [key,caption] of options)el.add(new Option(caption,key));
-        if(!options&&!large)el.type=name==='duration_seconds'||name==='budget_credits'?'number':'text';
-        el.value=value??'';if(large)el.rows=5;
-        controls[name]=el;fields.append(inputLabel(label,el));
-       };
-       if(section==='script'){
-        fields.append(node('p','OpenAI construye el guion automáticamente con el historial y los resultados disponibles. Las instrucciones complementan ese proceso; un guion completo tiene prioridad.'));
-        field('instructions','Instrucciones adicionales para el guion',config.instructions||'',null,true);
-        field('custom_script','Guion completo opcional',config.custom_script||'',null,true);
-       }else{
-        field('video_type','Tipo de video',config.video_type||'Noticiero', [['Noticiero','Noticiero'],['Explicativo','Explicativo'],['Promocional','Promocional'],['Resumen','Resumen']]);
-        field('duration_seconds','Duración objetivo (segundos)',config.duration_seconds||original.duration_seconds||60);
-        field('language','Idioma',config.language||document.getElementById('languageSelect')?.value||'es');
-        field('format','Formato',config.format||'16:9',[['16:9','Horizontal · 16:9'],['9:16','Vertical · 9:16'],['1:1','Cuadrado · 1:1']]);
-        field('provider','Proveedor',config.provider||'heygen');
-        field('avatar_id','Presentador (vacío = automático)',config.avatar_id||'');
-        field('voice_id','Voz (vacío = automática)',config.voice_id||'');
-        field('budget_credits','Máximo de créditos DPIA por ejecución',config.budget_credits??0);
-        field('automatic_production','Autorización de producción',String(config.automatic_production??false),[['false','Revisión antes de producir'],['true','Automática dentro del presupuesto']]);
-       }
-       const cancel=button('Cancelar',()=>dialog.close());
-       const save=button('Guardar configuración',async()=>{
-        const payload={expected_revision:task.revision||1};
-        for(const [name,el] of Object.entries(controls))payload[name]=name==='duration_seconds'||name==='budget_credits'?Number(el.value):name==='automatic_production'?el.value==='true':el.value;
-        save.disabled=true;message.textContent='Guardando…';
-        try{
-         const endpoint=section==='script'?'video-guion':'video-produccion';
-         const response=await fetch('/api/agentes/'+agentId+'/tareas/'+task.id+'/'+endpoint,{method:'PATCH',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'manage-task'},body:JSON.stringify(payload),signal:AbortSignal.timeout(20000)});
-         const data=await response.json();if(!response.ok||data.success!==true)throw Error(data.error||'No se guardó la configuración.');
-         dialog.close();editing=false;lastTasks=null;load();
-        }catch(e){message.textContent=e.message||'Error al guardar.';save.disabled=false;}
-       },'primary');
-       form.append(fields,message,cancel,save);form.onsubmit=e=>e.preventDefault();
-       dialog.append(node('h2',section==='script'?'Configuración del guion':'Configuración del video'),raw('p',task.name),form);
-       document.body.append(dialog);dialog.addEventListener('close',()=>{editing=false;dialog.remove();},{once:true});dialog.showModal();
+      const editVideo=button('Editar video',()=>{
+       menu.open=false;
+       const chooser=node('dialog',undefined,'auth-dialog agent-video-preferences-dialog');
+       chooser.setAttribute('aria-label','Editar tarea de video');
+       const scriptButton=button('1. Configuración del guion',()=>{chooser.close();openVideoEditor('script');});
+       const productionButton=button('2. Configuración del video',()=>{chooser.close();openVideoEditor('production');});
+       chooser.append(node('h2',task.name),node('p','Elegí qué querés configurar.'),scriptButton,
+        node('p','Contenido, instrucciones y guion personalizado.'),productionButton,
+        node('p','Tipo, duración, formato, idioma, avatar, voz y presupuesto.'),
+        button('Cerrar',()=>chooser.close()));
+       document.body.append(chooser);chooser.addEventListener('close',()=>chooser.remove(),{once:true});chooser.showModal();
+      });
+      const openVideoEditor=async(section)=>{
+       if(editing||busy)return;
+       editing=true;
+       const dialog=node('dialog',undefined,'auth-dialog agent-video-preferences-dialog');
+       const form=node('form'),feedback=node('p',undefined,'agent-feedback');
+       feedback.setAttribute('role','alert');form.addEventListener('submit',event=>event.preventDefault());
+       dialog.append(node('h2',section==='script'?'Configuración del guion':'Configuración del video'),
+        node('p',task.name),form,feedback);
+       document.body.append(dialog);
+       dialog.addEventListener('close',()=>{editing=false;dialog.remove();},{once:true});dialog.showModal();
+       const endpoint='/api/agentes/'+agentId+'/tareas/'+task.id+'/video/'+section;
+       try{
+        const response=await fetch(endpoint,{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(20000)});
+        const data=await response.json();if(!response.ok||!data.success)throw Error(data.error||'No se pudo cargar la configuración.');
+        if(!dialog.open)return;
+        const values=data.values,fields={};
+        const add=(label,key,type='text',options=null)=>{
+         let input;
+         if(type==='textarea'){input=document.createElement('textarea');input.rows=5;}
+         else if(type==='select'){input=document.createElement('select');for(const [value,text] of options)input.add(new Option(text,value));}
+         else {input=document.createElement('input');input.type=type;}
+         if(type==='checkbox')input.checked=Boolean(values[key]);else input.value=values[key]??'';
+         fields[key]=input;form.append(inputLabel(label,input));
+        };
+        if(section==='script'){
+         form.append(node('p','Por defecto, el guion se genera automáticamente con los resultados del agente y OpenAI.'));
+         add('Instrucciones adicionales para el guion','instructions','textarea');
+         add('Guion personalizado (opcional)','custom_script','textarea');
+         fields.instructions.maxLength=5000;fields.custom_script.maxLength=20000;
+        }else{
+         add('Tipo de video','video_type','select',[['news','Noticiero'],['explainer','Explicativo'],['promotion','Promocional'],['summary','Resumen'],['other','Otro']]);
+         add('Duración en segundos','duration_seconds','number');fields.duration_seconds.min=1;fields.duration_seconds.max=3600;
+         add('Idioma','language');add('Formato','format','select',[['16:9','Horizontal · 16:9'],['9:16','Vertical · 9:16'],['1:1','Cuadrado · 1:1']]);
+         add('Proveedor','provider');add('Avatar (auto o ID)','avatar_id');add('Voz (auto o ID)','voice_id');
+         add('Límite de créditos DPIA','budget_credits','number');fields.budget_credits.min=0;fields.budget_credits.max=1000000;
+         add('Autorizar producción automática dentro del presupuesto','automatic_production','checkbox');
+        }
+        const cancel=button('Cancelar',()=>dialog.close());
+        const save=button('Guardar configuración',async()=>{
+         const updated={};for(const [key,input] of Object.entries(fields)){
+          updated[key]=input.type==='checkbox'?input.checked:input.type==='number'?Number(input.value):input.value;
+         }
+         save.disabled=true;feedback.textContent='Guardando…';
+         try{
+          const result=await fetch(endpoint,{method:'PATCH',credentials:'same-origin',
+           headers:{'Content-Type':'application/json','X-DPIA-Action':'manage-task'},
+           body:JSON.stringify({expected_revision:data.revision,values:updated}),signal:AbortSignal.timeout(20000)});
+          const saved=await result.json();if(!result.ok||!saved.success)throw Error(saved.error||'No se guardó.');
+          task.revision=saved.revision;lastTasks=null;dialog.close();
+         }catch(error){feedback.textContent=error.message||'No se guardó la configuración.';}
+         finally{save.disabled=false;}
+        },'primary');
+        form.append(cancel,save);
+       }catch(error){feedback.textContent=error.message||'No se pudo cargar la configuración.';
+        form.append(button('Cerrar',()=>dialog.close()));}
       };
-      const editMenu=node('details',undefined,'agent-video-edit-menu');
-      editMenu.append(node('summary','Editar'),button('1. Configuración del guion',()=>openVideoEditor('script')),button('2. Configuración del video',()=>openVideoEditor('production')));
-      menuItems.append(editMenu);
+      menuItems.append(editVideo);
      }
      menuItems.append(rename,scheduleAction,removeAction);menu.append(menuButton,menuItems);
      titleRow.append(title,menu);

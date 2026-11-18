@@ -24,7 +24,7 @@ def tasks(agent_id, task_id=None, action=None):
     if request.method != 'GET':
         if request.method == 'DELETE':
             action = 'eliminar'
-        if action not in (('eliminar',) if request.method == 'DELETE' else ('activar', 'pausar', 'renombrar', 'programar', 'video-guion', 'video-produccion')):
+        if action not in (('eliminar',) if request.method == 'DELETE' else ('activar', 'pausar', 'renombrar', 'programar')):
             return jsonify(success=False, error='Acción no disponible.'), 404
         try:
             origin = request.headers.get('Origin')
@@ -36,13 +36,6 @@ def tasks(agent_id, task_id=None, action=None):
     try:
         service = current_app.extensions.get('agent_task_service') or AgentTaskService()
         command = None
-        if action in ('video-guion', 'video-produccion'):
-            if not request.is_json or (request.content_length or 0) > 30000:
-                return jsonify(success=False, error='Configuración de video inválida.'), 400
-            command = request.get_json(silent=True)
-            section = 'script' if action == 'video-guion' else 'production'
-            items = service.update_video_configuration(owner, agent_id, task_id, section, command)
-            return jsonify(success=True, tasks=items, count=len(items), execution_available=False)
         if action == 'programar':
             if not request.is_json or (request.content_length or 0)>4096:
                 return jsonify(success=False,error='Programación inválida.'),400
@@ -63,3 +56,33 @@ def tasks(agent_id, task_id=None, action=None):
     except SQLAlchemyError:
         current_app.logger.warning('Agent task storage unavailable')
         return jsonify(success=False, error='No se confirmó el cambio de tareas. Reintentá.'), 503
+
+
+@task_bp.route('/api/agentes/<int:agent_id>/tareas/<int:task_id>/video/<section>', methods=['GET', 'PATCH'])
+def video_preferences(agent_id, task_id, section):
+    from services.video_task_preferences import VideoTaskPreferences
+    owner = session.get('user_id')
+    if type(owner) is not int:
+        return jsonify(success=False, error='Iniciá sesión.'), 401
+    if request.method == 'PATCH':
+        try:
+            origin = request.headers.get('Origin')
+            same = not origin or urlsplit(origin).netloc == request.host
+        except ValueError:
+            same = False
+        if not same or request.headers.get('Sec-Fetch-Site') == 'cross-site' or request.headers.get('X-DPIA-Action') != 'manage-task':
+            return jsonify(success=False, error='Solicitud no autorizada.'), 403
+        if not request.is_json or (request.content_length or 0) > 30000:
+            return jsonify(success=False, error='Configuración inválida.'), 400
+        command = request.get_json(silent=True)
+        if not isinstance(command, dict) or set(command) != {'expected_revision', 'values'}:
+            return jsonify(success=False, error='Configuración inválida.'), 400
+    else:
+        command = None
+    try:
+        return jsonify(success=True, **VideoTaskPreferences().section(owner, agent_id, task_id, section, command))
+    except PreparationError as exc:
+        return jsonify(success=False, error=str(exc)), exc.status
+    except SQLAlchemyError:
+        current_app.logger.warning('Video preferences storage unavailable')
+        return jsonify(success=False, error='No se pudo acceder a la configuración.'), 503
