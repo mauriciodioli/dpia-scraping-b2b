@@ -121,6 +121,14 @@ nav{box-shadow:0 13px 35px #100a3960;background:#1c163b;max-width:440px}nav butt
 .auth-close{position:absolute;right:18px;top:12px;font-size:30px;color:inherit;background:transparent}
 #googleSignIn{display:flex;justify-content:center;min-height:44px;margin:25px 0 12px}
 .auth-help{font-size:12px}
+.email-login{margin:16px 0;text-align:left}
+.email-login summary{cursor:pointer;text-align:center}
+.email-login form:not([hidden]){display:grid;gap:12px;margin-top:16px}
+.email-login label{display:grid;gap:7px;font-size:13px}
+.email-login input{box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;border:1px solid #a58ac570;border-radius:12px;background:#fff;color:#25203b;font:inherit}
+.email-login input:focus-visible{outline:2px solid #a77aff;outline-offset:2px}
+.email-login button{justify-self:start}
+html[data-theme="dark"] .email-login input{background:#241a38;color:#f4edf9}
 html[data-theme="dark"]{color-scheme:dark}
 html[data-theme="dark"] body{background:#080615;color:#f7f2ff}
 html[data-theme="dark"] .phone{background:radial-gradient(ellipse at 87% 12%,#39216a70,transparent 36%),linear-gradient(145deg,#16102c,#100d22 60%,#18102e);color:#f8f4ff;box-shadow:none}
