@@ -94,6 +94,12 @@ ACTIVITY_TRUSTED_PROXIES = os.getenv('ACTIVITY_TRUSTED_PROXIES', '')
 PWA_ACTIVATION_SECRET = os.environ.get('PWA_ACTIVATION_SECRET', '')
 AGENTS_INTERNAL_URL = os.environ.get('AGENTS_INTERNAL_URL', '')
 
+# Existing Redis connection used by email login when no dedicated URL is supplied.
+REDIS_HOST = os.environ.get('REDIS_HOST', '').strip()
+REDIS_PORT = int(os.environ.get('REDIS_PORT', '6379'))
+REDIS_DB = int(os.environ.get('REDIS_DB', '0'))
+REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', '')
+
 # Local development login: explicit opt-in and an existing, fixed account.
 LOCAL_DEV_LOGIN_ENABLED = os.getenv('LOCAL_DEV_LOGIN_ENABLED', 'false').lower() == 'true'
 LOCAL_DEV_LOGIN_EMAIL = os.getenv('LOCAL_DEV_LOGIN_EMAIL', '').strip().lower()
