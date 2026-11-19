@@ -598,10 +598,10 @@
      const schedules=task.schedules||[];
      const summary=node('div',undefined,'agent-task-schedule-summary');
      const daysShort=['D','L','M','X','J','V','S'];
-     const displayDate=value=>{if(!value)return null;const parsed=new Date(value.endsWith('Z')||/[+-]\\d\\d:\\d\\d$/.test(value)?value:value+'Z');return Number.isNaN(parsed.getTime())?null:new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{dateStyle:'medium',timeStyle:'short'}).format(parsed);};
+     const displayDate=(value,zone)=>{if(!value)return null;const parsed=new Date(value.endsWith('Z')||/[+-]\d\d:\d\d$/.test(value)?value:value+'Z');return Number.isNaN(parsed.getTime())?null:new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{dateStyle:'medium',timeStyle:'short',timeZone:validZone(zone)?zone:'UTC'}).format(parsed);};
      for(const timing of schedules){
       const freq=tr(frequencies[timing.frequency]||timing.frequency||'Sin programación');
-      const timingLine=[freq,timing.time].filter(Boolean).join(' · ');
+      const timingLine=[freq,timing.time,timing.timezone].filter(Boolean).join(' · ');
       summary.append(node('p',timingLine,'agent-task-schedule-line'));
       if(timing.frequency==='WEEKLY'||timing.frequency==='DAILY'||timing.frequency==='DIARIA'){
        const chips=node('div',undefined,'agent-task-day-chips');
@@ -615,14 +615,17 @@
      }
      if(!schedules.length)summary.append(node('p','Sin programación'));
      const info=node('div',undefined,'agent-task-highlights');
-     const nextTimestamp=schedules.map(t=>!pausedByAgent&&configuredState==='active'?t.next_run_at:null).filter(Boolean).sort()[0];
-     const next=displayDate(nextTimestamp);
-     const last=displayDate(task.last_run_at);
+     const nextSchedule=!pausedByAgent&&configuredState==='active'?schedules.filter(t=>t.next_run_at).sort((a,b)=>Date.parse(a.next_run_at)-Date.parse(b.next_run_at))[0]:null;
+     const nextTimestamp=nextSchedule?.next_run_at;
+     const zone=validZone(nextSchedule?.timezone)?nextSchedule.timezone:validZone(schedules[0]?.timezone)?schedules[0].timezone:'UTC';
+     const next=displayDate(nextTimestamp,zone);
+     const last=displayDate(task.last_run_at,zone);
      const nextBox=node('div',undefined,'agent-task-highlight'),lastBox=node('div',undefined,'agent-task-highlight');
      nextBox.append(node('span','Próxima ejecución'),node('strong',next||(pausedByAgent||configuredState==='paused'?'En pausa':'Aún no programada')));
-     if(nextTimestamp&&schedules[0]?.timezone)nextBox.append(node('small',schedules[0].timezone));
+     if(nextTimestamp)nextBox.append(node('small',zone));
      else if(pausedByAgent||configuredState==='paused')nextBox.append(node('small','Activala para programarla'));
      lastBox.append(node('span','Última ejecución'),node('strong',last||'Aún no se ejecutó'));
+     if(last)lastBox.append(node('small',zone));
      lastBox.setAttribute('role','button');lastBox.tabIndex=0;lastBox.setAttribute('aria-label',tr('Editar programación de la tarea'));lastBox.dataset.editSchedule='';lastBox.style.cursor='pointer';
      lastBox.onclick=()=>editSchedule();lastBox.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();editSchedule();}};
      info.append(nextBox,lastBox);
@@ -632,7 +635,7 @@
       const reasons={TASK_ATTEMPT_BUDGET_EXCEEDED:'Se alcanzó el límite de intentos antes de completar todos los pasos.',TASK_ATTEMPTS_EXHAUSTED:'Se agotaron los reintentos.',HANDLER_FAILED:'Falló un paso de ejecución. El registro anterior no conserva la causa exacta.',analysis_input_limit:'Los datos recibidos superaron el tamaño permitido para el análisis.',provider_timeout:'El proveedor no respondió a tiempo.',provider_deadline_insufficient:'No quedó tiempo suficiente para llamar al proveedor.',output_token_budget_exceeded:'No quedó presupuesto de salida suficiente para el análisis.'};
       lastBox.append(node('small',states[runs[0].state]||runs[0].state));
       const history=node('details',undefined,'agent-task-run-history');history.append(node('summary','Ver últimas ejecuciones'));
-      for(const run of runs){const entry=node('article',undefined,'agent-task-run');entry.append(raw('strong',(displayDate(run.started_at||run.created_at)||tr('Sin fecha'))+' · '+tr(states[run.state]||run.state)));
+      for(const run of runs){const entry=node('article',undefined,'agent-task-run');entry.append(raw('strong',(displayDate(run.started_at||run.created_at,zone)||tr('Sin fecha'))+' · '+zone+' · '+tr(states[run.state]||run.state)));
        if(run.state==='DELIVERED'){
         const status=node('p',undefined,'agent-feedback');status.setAttribute('role','status');
         const view=button(task.type==='VIDEO_GENERAR'?'Ver video':'Ver resultado',async()=>{
