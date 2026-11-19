@@ -399,9 +399,9 @@ class AgentConfigurationStore:
             params.update(schema_version=2, video=dict(parent_task_id=parent_task_id,
                 duration_seconds=duration_seconds, status='provider_pending',
                 script={'instructions':'', 'custom_script':''},
-                production={'video_type':'Noticiero', 'duration_seconds':duration_seconds,
+                production={'video_type':'news', 'duration_seconds':duration_seconds,
                             'language':'es', 'format':'16:9', 'provider':'heygen',
-                            'avatar_id':'', 'voice_id':'', 'budget_credits':0,
+                            'avatar_id':'auto', 'voice_id':'auto', 'budget_credits':0,
                             'automatic_production':False}),
                 parent_task_id=parent_task_id)
             values = dict(agente_id=agent['id'], tipo='VIDEO_GENERAR', nombre=name,

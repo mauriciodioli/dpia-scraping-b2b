@@ -143,8 +143,8 @@ def task_sources(user_id):
         bad('No se pudieron cargar las conexiones disponibles de Agents. Reintentá.',502)
 
 
-def schedule_immediate_task(user_id, agent_id, task_id, request_id):
-    payload=dict(operation='schedule_task_now',owner_id=user_id,source_agent_id=agent_id,task_id=task_id,request_id=request_id)
+def schedule_immediate_task(user_id, agent_id, task_id, request_id, *, existing=False):
+    payload=dict(operation='run_existing_task_now' if existing else 'schedule_task_now',owner_id=user_id,source_agent_id=agent_id,task_id=task_id,request_id=request_id)
     base=current_app.config.get('AGENTS_INTERNAL_URL','').rstrip('/')
     secret=current_app.config.get('PWA_ACTIVATION_SECRET','')
     parsed=urlsplit(base)
@@ -161,7 +161,8 @@ def schedule_immediate_task(user_id, agent_id, task_id, request_id):
             code=data.get('error',{});code=code.get('code') if isinstance(code,dict) else code
             message={'agent_paused':'La tarea quedó guardada. Reanudá el agente y reintentá este envío.',
                      'agent_disabled':'La tarea quedó guardada. Habilitá el agente y reintentá este envío.',
-                     'selected_sources_unavailable':'La tarea quedó guardada, pero una conexión elegida no está disponible.'}.get(code,'No se confirmó la ejecución. La tarea quedó guardada; reintentá el mismo envío.')
+                     'selected_sources_unavailable':'La tarea quedó guardada, pero una conexión elegida no está disponible.',
+                     'VIDEO_EXECUTION_ALREADY_PENDING':'Hay una ejecución activa o una corrida programada próxima. Esperá a que termine.'}.get(code,'No se confirmó la ejecución. La tarea quedó guardada; reintentá el mismo envío.')
             bad(message,409 if response.status_code==409 else 502)
         if (data.get('api_version')!='agents.v1' or data.get('owner_id')!=user_id
                 or data.get('source_agent_id')!=agent_id or data.get('task_id')!=task_id

@@ -498,7 +498,7 @@
          fields[key]=input;form.append(inputLabel(label,input));
         };
         if(section==='script'){
-         form.append(node('p','Por defecto, el guion se genera automáticamente con los resultados del agente y OpenAI.'));
+         form.append(node('p','Escribí el guion que querés usar para generar tu video.'));
          add('Instrucciones adicionales para el guion','instructions','textarea');
          add('Guion personalizado (opcional)','custom_script','textarea');
          fields.instructions.maxLength=5000;fields.custom_script.maxLength=20000;
@@ -536,6 +536,26 @@
      const productionSettings=button('2. Configuración del video',()=>openVideoEditor('production'),'agent-video-setting-button');
      videoSettings.append(scriptSettings,productionSettings);
      card.append(videoSettings);
+     const runFeedback=node('p',undefined,'agent-feedback');runFeedback.setAttribute('role','status');
+     const runVideo=button('Generar video ahora',async()=>{
+      if(busy||editing||!current())return;
+      if(!window.confirm(tr('Se generará el video con la configuración de esta tarea y se descontarán los puntos correspondientes. ¿Continuar?')))return;
+      const requestKey='dpia-video-run:'+owner+':'+agentId+':'+task.id;
+      let requestId=sessionStorage.getItem(requestKey);
+      if(!requestId){requestId=pauseOperationId();sessionStorage.setItem(requestKey,requestId);}
+      runVideo.disabled=true;runFeedback.textContent=tr('Solicitando generación…');
+      try{
+       const response=await fetch('/api/agentes/'+agentId+'/tareas/'+task.id+'/ejecutar',{
+        method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'execute-task'},
+        body:JSON.stringify({request_id:requestId}),signal:AbortSignal.timeout(30000)});
+       const data=await response.json();
+       if(!response.ok||!data.success){if(response.status<500)sessionStorage.removeItem(requestKey);throw Error(data.error||'No se pudo solicitar el video.');}
+       sessionStorage.removeItem(requestKey);
+       runFeedback.textContent=tr('Video solicitado. Consultá su resultado en el historial.');
+      }catch(error){runFeedback.textContent=error.message||tr('No se pudo confirmar la solicitud. Reintentá.');}
+      finally{runVideo.disabled=effectiveState!=='active';}
+     },'primary');
+     runVideo.disabled=effectiveState!=='active';card.append(runVideo,runFeedback);
      }
      menuItems.append(rename,scheduleAction,removeAction);menu.append(menuButton,menuItems);
      titleRow.append(title,menu);

@@ -8,6 +8,27 @@ from services.query_preparation import PreparationError
 task_bp = Blueprint('agent_tasks', __name__)
 
 
+@task_bp.post('/api/agentes/<int:agent_id>/tareas/<int:task_id>/ejecutar')
+def run_video_task(agent_id,task_id):
+    from uuid import UUID
+    owner=session.get('user_id')
+    if type(owner) is not int:return jsonify(success=False,error='Iniciá sesión.'),401
+    try:
+        origin=request.headers.get('Origin')
+        if request.headers.get('X-DPIA-Action')!='execute-task' or request.headers.get('Sec-Fetch-Site')=='cross-site' or (origin and urlsplit(origin).netloc!=request.host):
+            return jsonify(success=False,error='Solicitud no autorizada.'),403
+        if not request.is_json or (request.content_length or 0)>1024:return jsonify(success=False,error='Solicitud inválida.'),400
+        body=request.get_json(silent=True)
+        if not isinstance(body,dict) or set(body)!={'request_id'} or str(UUID(body['request_id']))!=body['request_id']:
+            return jsonify(success=False,error='Solicitud inválida.'),400
+        from services.agent_activation import schedule_immediate_task
+        result=schedule_immediate_task(owner,agent_id,task_id,body['request_id'],existing=True)
+        return jsonify(success=True,**result),202
+    except (ValueError,TypeError,KeyError,AttributeError):return jsonify(success=False,error='Solicitud inválida.'),400
+    except PreparationError as exc:return jsonify(success=False,error=str(exc)),exc.status
+    except SQLAlchemyError:return jsonify(success=False,error='No se confirmó la ejecución.'),503
+
+
 @task_bp.after_request
 def no_cache(response):
     response.headers['Cache-Control'] = 'no-store'
