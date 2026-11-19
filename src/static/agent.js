@@ -573,7 +573,15 @@
       const input=(label,type,value)=>{const wrap=node('label',undefined,'agent-field'),el=document.createElement(type==='select'?'select':'input');wrap.append(node('span',label));if(type!=='select')el.type=type;el.value=value||'';el.setAttribute('aria-label',tr(label));wrap.append(el);grid.append(wrap);return el;};
       const frequency=input('Frecuencia','select','');
       for(const [value,label] of [['ONCE','Una vez'],['DAILY','Diario'],['WEEKLY','Semanal']]){const option=node('option',label);option.value=value;frequency.append(option);}frequency.value=timing.frequency||'DAILY';
-      const date=input('Fecha de ejecución','date',timing.execution_date),time=input('Horario','time',timing.time||'09:00'),zone=input('Zona horaria','text',timing.timezone||'Europe/Rome');
+      const date=input('Fecha de ejecución','date',timing.execution_date),time=input('Horario','time',timing.time||'09:00'),zone=input('Zona horaria','select','');
+      const savedZone=timing.timezone||timeZone();
+      const knownZones=['Europe/Rome','America/Mexico_City','UTC'];
+      let browserZones=[];
+      try{browserZones=Intl.supportedValuesOf?Intl.supportedValuesOf('timeZone'):[];}catch(_){}
+      const zones=[...new Set([savedZone,timeZone(),...knownZones,...browserZones])].filter(validZone);
+      const names={'Europe/Rome':'Italia · Roma','America/Mexico_City':'México · Guadalajara / Ciudad de México','UTC':'UTC · Hora universal'};
+      for(const value of zones){const option=document.createElement('option');option.value=value;option.textContent=names[value]||value.replaceAll('_',' ');zone.append(option);}
+      zone.value=savedZone;
       const days=node('fieldset',undefined,'agent-schedule-days'),choices=node('div',undefined,'agent-choices'),checks=[];
       days.append(node('legend','Días de la semana'),choices);form.append(days);
       for(let day=1;day<=7;day++){const label=node('label',undefined,'agent-choice'),check=document.createElement('input');check.type='checkbox';check.onchange=()=>{error.textContent='';};check.value=day;check.checked=(timing.days||[1]).includes(day);label.append(check,raw('span',weekday(day%7)));choices.append(label);checks.push(check);}
