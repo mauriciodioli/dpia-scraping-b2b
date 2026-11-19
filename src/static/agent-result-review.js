@@ -13,10 +13,12 @@
  function date(value){if(!value)return 'Sin fecha';const stamp=new Date(value);return Number.isNaN(stamp.getTime())?'Sin fecha':new Intl.DateTimeFormat(window.DPIAI18N?.language||'es',{dateStyle:'medium',timeStyle:'short'}).format(stamp);}
  function open(data,cards,reload,taskAction){owner=currentEmail;const run=++serial;copy.textContent='Copiar contenido';if(!dialog.open)dialog.showModal();
   const active=()=>run===serial&&dialog.open&&owner===currentEmail;
-  function draw(value){if(!active())return;content.replaceChildren();const title=el('h3',labels[value.result_classification]||'Resultado guardado','agent-result-classification');title.dataset.classification=value.result_classification||'UNCLASSIFIED';content.append(title);
+  function draw(value){if(!active())return;content.replaceChildren();const title=el('h3',labels[value.result_classification]||'Resultado guardado','agent-result-classification');title.dataset.classification=value.result_classification||'UNCLASSIFIED';
    const details=el('dl');const technical={FAILED:'Fallida',DELIVERED:'Entregada',REVIEWING:'En revisión',APPROVED:'Aprobada',READY_FOR_DELIVERY:'Lista para entrega'};
    const pairs=[['Estado técnico',technical[value.job_status]||value.job_status],['Clasificación',labels[value.result_classification]],['Motivo',value.classification_reason],['Decisión del Manager',value.manager_decision],['Objetivo original',value.objective],['Revisión humana',reviews[value.review_status]],['Revisado por',value.reviewed_by],['Fecha de revisión',value.reviewed_at?date(value.reviewed_at):null],['Motivo de revisión',value.review_reason]];
-   for(const [label,text] of pairs)if(text)details.append(el('dt',label),el('dd',text));content.append(details);
+   for(const [label,text] of pairs)if(text)details.append(el('dt',label),el('dd',text));
+   if(cards.some(card=>card.classList?.contains('agent-video-result'))){const disclosure=el('details',null,'agent-result-summary');disclosure.append(el('summary',title.textContent),details);content.append(disclosure);}
+   else content.append(title,details);
    if(value.result_classification==='TECHNICAL_ERROR'){
     content.append(el('p',value.error_message,'agent-result-error'));const execution=value.execution||{};
     for(const [label,text] of [['Trabajo',value.job_id],['Código',value.error_code],['Creación',date(execution.created_at)],['Inicio',date(execution.started_at)],['Finalización',date(execution.finished_at)],['Fecha límite',date(execution.deadline_at)],['Progreso',execution.progress==null?'No disponible':execution.progress+'%']])details.append(el('dt',label),el('dd',text||'No registrado'));

@@ -633,6 +633,15 @@
       lastBox.append(node('small',states[runs[0].state]||runs[0].state));
       const history=node('details',undefined,'agent-task-run-history');history.append(node('summary','Ver últimas ejecuciones'));
       for(const run of runs){const entry=node('article',undefined,'agent-task-run');entry.append(raw('strong',(displayDate(run.started_at||run.created_at)||tr('Sin fecha'))+' · '+tr(states[run.state]||run.state)));
+       if(run.state==='DELIVERED'){
+        const status=node('p',undefined,'agent-feedback');status.setAttribute('role','status');
+        const view=button(task.type==='VIDEO_GENERAR'?'Ver video':'Ver resultado',async()=>{
+         if(!window.DPIAOpenAgentResult){status.textContent=tr('No se pudo abrir el resultado.');return;}
+         view.disabled=true;status.textContent=tr('Cargando resultado…');
+         try{await window.DPIAOpenAgentResult(run.id,undefined,message=>{status.textContent=message;});if(status.textContent===tr('Cargando resultado…'))status.textContent='';}
+         finally{view.disabled=false;}
+        });entry.append(view,status);
+       }
        if(run.state==='FAILED'){entry.append(node('p','La ejecución falló y no se entregó una respuesta final.','agent-task-run-error'));if((run.steps||[]).some(step=>step.state==='COMPLETED'))entry.append(node('p','Hubo pasos completados antes del fallo.'));}
        if(run.reason_code)entry.append(node('p',reasons[run.reason_code]||'No se pudo completar la ejecución.'));
        const steps=node('ul');

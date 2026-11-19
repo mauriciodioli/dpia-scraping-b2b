@@ -37,7 +37,7 @@
   }
   return {sources,text};
  }
- async function loadAgentResult(jobId,taskAction){
+ async function loadAgentResult(jobId,taskAction,onError){
   const email=currentEmail,serial=++generation;$('queryHistoryStatus').textContent='Consultando respuesta de Agente…';
   try{
    const response=await fetch('/api/consultas/historial/agentes/'+encodeURIComponent(jobId),{cache:'no-store'}),data=await response.json();
@@ -83,9 +83,16 @@
    for(const finding of presentation.text){const card=document.createElement('article');card.className='prompt-result';const paragraph=document.createElement('p');paragraph.textContent=finding;card.append(paragraph);out.append(card);}
    for(const warning of data.result.warnings||[])text('p',warning).className='hint';
    for(const source of data.result.sources||[]){const url=safeQueryUrl(source.url);if(!url||(data.result.items||[]).some(item=>item.url===url))continue;const link=text('a',source.title||url);link.href=url;link.target='_blank';link.rel='noopener noreferrer';}
-   window.DPIAAgentResultUI.open(data,[...out.childNodes],()=>loadAgentResult(jobId),taskAction);
-  }catch(error){if(serial===generation&&email===currentEmail)$('queryHistoryStatus').textContent=error.message;}
+   if(videoUrl){
+    const extra=document.createElement('details'),summary=document.createElement('summary');
+    summary.textContent='Ver detalles de la respuesta';extra.append(summary);
+    for(const child of [...out.childNodes])if(!child.classList?.contains('agent-video-result'))extra.append(child);
+    out.append(extra);
+   }
+   window.DPIAAgentResultUI.open(data,[...out.childNodes],()=>loadAgentResult(jobId,taskAction,onError),taskAction);
+  }catch(error){if(serial===generation&&email===currentEmail){$('queryHistoryStatus').textContent=error.message;if(onError)onError(error.message);}}
  }
+ window.DPIAOpenAgentResult=loadAgentResult;
 
  const tr=text=>window.DPIAI18N?.translate(text)||text;
  const agentFilterLabel=document.createElement('label');agentFilterLabel.textContent='Agente';
