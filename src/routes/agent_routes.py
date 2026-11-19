@@ -9,6 +9,29 @@ from services.dpia_client import CatalogError, CatalogFiltersError
 agent_bp=Blueprint('agent',__name__,url_prefix='/api/agente')
 
 
+@agent_bp.put('/presupuesto')
+def update_budget():
+    user_id=session.get('user_id')
+    if type(user_id) is not int:return jsonify(success=False,error='Iniciá sesión.'),401
+    try:
+        origin=request.headers.get('Origin')
+        if (request.headers.get('X-DPIA-Action')!='configure-agent' or request.headers.get('Sec-Fetch-Site')=='cross-site'
+                or (origin and urlsplit(origin).netloc!=request.host)):
+            return jsonify(success=False,error='Solicitud no autorizada.'),403
+        if not request.is_json or (request.content_length or 0)>1024 or len(request.get_data(cache=True))>1024:
+            return jsonify(success=False,error='Revisá el presupuesto.'),400
+        body=request.get_json(silent=True)
+        if not isinstance(body,dict) or set(body)!={'points','expected_revision'}:
+            return jsonify(success=False,error='Revisá el presupuesto.'),400
+        store=current_app.extensions.get('agent_configuration_store') or AgentConfigurationStore()
+        return jsonify(success=True,**store.update_budget(user_id,body['points'],body['expected_revision']))
+    except (ValueError,TypeError):return jsonify(success=False,error='Solicitud inválida.'),400
+    except PreparationError as exc:return jsonify(success=False,error=str(exc)),exc.status
+    except SQLAlchemyError:
+        current_app.logger.warning('Agent budget update unavailable')
+        return jsonify(success=False,error='No se pudo guardar el presupuesto.'),503
+
+
 @agent_bp.after_request
 def no_cache(response):
     response.headers['Cache-Control']='no-store'

@@ -147,6 +147,28 @@ def verify_catalog(config):
 
 
 class AgentConfigurationStore:
+    def update_budget(self, user_id, points, expected_revision):
+        if type(points) is not int or not 0 <= points <= 1000000 or type(expected_revision) is not int or expected_revision < 1:
+            bad('Revisá el presupuesto de puntos.')
+        from services.agent_point_status import locked_balance, cost
+        with self._engine().begin() as conn:
+            self._user(conn, user_id, lock=True)
+            row = conn.execute(select(agentes).where(agentes.c.usuario_id == user_id).with_for_update()).mappings().first()
+            if not row or (row['configuracion'] or {}).get('_deleted_at'):
+                bad('No se encontró el agente.', 404)
+            if row['version_config'] != expected_revision:
+                bad('La configuración cambió. Volvé a cargarla.', 409)
+            total, held = locked_balance(conn, user_id)
+            available = max(0, total - sum(cost(entry) for entry in held))
+            if points > available:
+                bad(f'El presupuesto no puede superar tus {available} puntos disponibles.', 402)
+            config = dict(row['configuracion'] or {})
+            config['points'] = points
+            conn.execute(update(agentes).where(agentes.c.id == row['id'], agentes.c.usuario_id == user_id).values(
+                presupuesto_puntos_periodo=points, configuracion=config, version_config=expected_revision+1,
+                actualizado_en=datetime.now(timezone.utc).replace(tzinfo=None)))
+            return {'points': points, 'available': available, 'revision': expected_revision+1}
+
     def _engine(self):
         if db.engine.dialect.name!='mysql':
             bad('El guardado del agente requiere MySQL.',503)

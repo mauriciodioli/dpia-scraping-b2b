@@ -665,6 +665,7 @@ html[data-theme="dark"] .agent-field input,html[data-theme="dark"] .agent-field 
 
 .agent-schedule-dialog{margin:auto;width:min(560px,calc(100% - 32px));border:1px solid #a58ac550;padding:28px;text-align:left;max-height:88dvh;color:#17132e}
 .agent-schedule-dialog::backdrop{background:#080619b9;backdrop-filter:blur(6px)}
+.agent-budget-row{display:flex;align-items:center;gap:8px}.agent-budget-edit{padding:3px 8px;font-size:16px;line-height:1}.agent-budget-dialog{border-radius:16px}.agent-budget-dialog form{margin-top:0}.agent-budget-dialog .agent-actions{justify-content:flex-end}
 .agent-schedule-dialog h2{margin:0 0 8px;font-size:22px}.agent-schedule-dialog form{display:grid;gap:18px;margin-top:20px}
 .agent-schedule-dialog .agent-schedule-days{border:0;padding:0;margin:0;min-width:0}.agent-schedule-days legend{margin-bottom:10px;font-size:14px;font-weight:600}
 .agent-schedule-dialog .agent-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}.agent-schedule-dialog .agent-notice,.agent-schedule-dialog .agent-feedback{margin:0}

@@ -76,7 +76,10 @@
    const header=node('div',undefined,'agent-identity'),logo=node('div',undefined,'consult-art agent-logo'),symbol=document.createElement('img');
    logo.dataset.active=String(!!record&&['active','running'].includes(serverState));
    symbol.className='dpia-symbol';symbol.src='/static/branding/favicon.png';symbol.alt='';symbol.setAttribute('aria-hidden','true');logo.append(symbol);
-   const info=node('div',undefined,'agent-identity-info');info.append(raw('h3',who()),statusBadge(record?serverState:'unconfigured'),pointIndicator());header.append(logo,info);panel.append(header);
+   const info=node('div',undefined,'agent-identity-info');info.append(raw('h3',who()),statusBadge(record?serverState:'unconfigured'));
+   const pointRow=node('div',undefined,'agent-budget-row');pointRow.append(pointIndicator());
+   if(record){const edit=button('✎',editBudget,'action-button agent-budget-edit');edit.setAttribute('aria-label','Editar presupuesto de puntos');edit.title='Editar presupuesto de puntos';edit.disabled=serverBusy;pointRow.append(edit);}
+   info.append(pointRow);header.append(logo,info);panel.append(header);
    panel.append(button('＋ Crear tarea',()=>window.DPIACrearTarea?.open(),'primary'));
     panel.append(taskPanel());
    if(record){
@@ -85,6 +88,22 @@
    }
   }
   if(!who())panel.append(engineNotice(),storageNotice());feedback(panel);root.append(panel);window.DPIAI18N?.refresh();
+ }
+ function editBudget(){
+  if(!record||serverBusy)return;
+  const dialog=document.createElement('dialog'),form=document.createElement('form'),input=document.createElement('input'),message=node('p',undefined,'hint'),balance=node('p','Consultando saldo disponible…','hint');
+  dialog.className='agent-schedule-dialog agent-budget-dialog';dialog.setAttribute('aria-label','Editar presupuesto de puntos');form.append(node('h2','Puntos del agente'),node('p','Elegí cuántos puntos de tu saldo puede usar este agente por período.'));
+  input.type='number';input.min='0';input.max='1000000';input.step='1';input.required=true;input.value=record.points;
+  form.append(balance,inputLabel('Presupuesto máximo de puntos',input),node('p',record.period==='week'?'Período: por semana':'Período: por mes','hint'),message);
+  const actions=node('div',undefined,'agent-actions'),recharge=button('Cargar puntos',()=>{dialog.close();document.getElementById('balanceBtn')?.click();}),cancel=button('Cancelar',()=>dialog.close()),save=node('button','Guardar','primary');save.type='submit';actions.append(recharge,cancel,save);form.append(actions);dialog.append(form);document.body.append(dialog);
+  dialog.addEventListener('close',()=>dialog.remove());
+  form.onsubmit=async event=>{event.preventDefault();const points=Number(input.value);if(!Number.isSafeInteger(points)||points<0||points>1000000){message.textContent='Ingresá un número válido de puntos.';return;}
+   save.disabled=true;message.textContent='Guardando…';
+   try{const response=await fetch('/api/agente/presupuesto',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'configure-agent'},body:JSON.stringify({points,expected_revision:serverRevision}),signal:AbortSignal.timeout(20000)});const data=await response.json();if(!response.ok||data.success!==true)throw Error(data.error||'No se pudo guardar el presupuesto.');record.points=data.points;serverRevision=data.revision;dialog.close();dashboard();await refreshPause();}
+   catch(e){message.textContent=e.name==='Error'?e.message:'No se pudo guardar el presupuesto. Reintentá.';}finally{save.disabled=false;}
+  };
+  dialog.showModal();input.focus();
+  fetch('/api/consultas/creditos',{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():Promise.reject()).then(data=>{balance.textContent=Number.isSafeInteger(data.credits?.available)?'Saldo disponible en tu cuenta: '+data.credits.available+' puntos.':'No se pudo consultar el saldo.';}).catch(()=>{balance.textContent='No se pudo consultar el saldo.';});
  }
  async function activate(){
   if(serverBusy||!record||serverState!=='inactive'||wizard)return;
