@@ -60,6 +60,18 @@ $('#authCookieConsent').onchange=()=>{
  syncCookieConsent();
 };
 let googleLoginPending=false;
+$('#emailLoginForm').onsubmit=async event=>{
+ event.preventDefault();const form=event.currentTarget,help=$('#authHelp');
+ if(!$('#authCookieConsent').checked){help.textContent='Aceptá las cookies de sesión para continuar.';return;}
+ form.querySelector('button').disabled=true;
+ try{const res=await fetch('/api/auth/email/start',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'email-login'},body:JSON.stringify({email:$('#emailLoginAddress').value})});const data=await res.json();if(!res.ok)throw Error(data.error);help.textContent=data.message;$('#emailVerifyForm').hidden=false;$('#emailLoginCode').focus();}
+ catch(error){help.textContent=error.message||'No se pudo enviar el código.';}finally{form.querySelector('button').disabled=false;}
+};
+$('#emailVerifyForm').onsubmit=async event=>{
+ event.preventDefault();const form=event.currentTarget,help=$('#authHelp');form.querySelector('button').disabled=true;
+ try{const res=await fetch('/api/auth/email/verify',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-DPIA-Action':'email-login'},body:JSON.stringify({code:$('#emailLoginCode').value})});const data=await res.json();if(!res.ok)throw Error(data.error);updateUser(data.email);form.reset();closeAuth();notify('Sesión iniciada');}
+ catch(error){help.textContent=error.message||'No se pudo verificar el código.';}finally{form.querySelector('button').disabled=false;}
+};
 async function completeGoogleLogin({credential}){
  if(!$('#authCookieConsent').checked){openAuth();$('#authHelp').textContent='Aceptá las cookies de sesión para continuar.';$('#authCookieConsent').focus();return;}
  if(googleLoginPending)return;

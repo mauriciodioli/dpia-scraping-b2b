@@ -39,3 +39,5 @@ jsonschema>=4.23,<5
 tzdata
 
 pillow>=10,<14
+# Used for expiring one-time login codes and shared rate limits.
+redis>=5.0,<7
