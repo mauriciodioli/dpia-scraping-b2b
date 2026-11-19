@@ -401,8 +401,8 @@ class AgentConfigurationStore:
                 script={'instructions':'', 'custom_script':''},
                 production={'video_type':'news', 'duration_seconds':duration_seconds,
                             'language':'es', 'format':'16:9', 'provider':'heygen',
-                            'avatar_id':'auto', 'voice_id':'auto', 'budget_credits':0,
-                            'automatic_production':False}),
+                            'avatar_id':'auto', 'voice_id':'auto', 'budget_credits':20,
+                            'automatic_production':True}),
                 parent_task_id=parent_task_id)
             values = dict(agente_id=agent['id'], tipo='VIDEO_GENERAR', nombre=name,
                 habilitada=False, parametros=params, creado_en=now, actualizado_en=now)

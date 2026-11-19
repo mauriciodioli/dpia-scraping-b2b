@@ -6,7 +6,7 @@ from services.agent_configuration import bad
 SCRIPT_DEFAULTS = {'instructions': '', 'custom_script': ''}
 PRODUCTION_DEFAULTS = {'video_type': 'news', 'duration_seconds': 60, 'language': 'es',
                        'format': '16:9', 'provider': 'heygen', 'avatar_id': 'auto',
-                       'voice_id': 'auto', 'budget_credits': 0, 'automatic_production': False}
+                       'voice_id': 'auto', 'budget_credits': 20, 'automatic_production': False}
 
 
 def read_section(video, section):
@@ -17,6 +17,8 @@ def read_section(video, section):
         for field in ('duration_seconds', 'language', 'format', 'provider', 'avatar_id', 'voice_id', 'budget_credits', 'automatic_production', 'video_type'):
             if field not in (saved if isinstance(saved, dict) else {}) and field in video:
                 result[field] = video[field]
+        if result['budget_credits'] == 0:
+            result['budget_credits'] = 20
     return result
 
 
