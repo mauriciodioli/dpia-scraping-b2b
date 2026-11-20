@@ -510,6 +510,10 @@
          for(const key of ['avatar_id','voice_id','background']){const input=document.createElement('input');input.type='hidden';input.value=key==='background'?JSON.stringify(values[key]||{type:'auto'}):(values[key]||'auto');fields[key]=input;form.append(input);}
          const catalog=node('section'),status=node('p','Cargando avatares y voces…');status.setAttribute('role','status');catalog.append(status);form.append(catalog);
          const tabs=node('div',undefined,'video-resource-tabs'),panels={};tabs.setAttribute('role','tablist');catalog.append(tabs);
+         const summary=node('p',undefined,'video-selection-summary');summary.setAttribute('aria-live','polite');
+         const selectedNames={avatar_id:fields.avatar_id.value==='auto'?'Avatar automático':'Avatar seleccionado',voice_id:fields.voice_id.value==='auto'?'Voz automática':'Voz seleccionada',background:fields.background.value===JSON.stringify({type:'auto'})?'Fondo original':'Fondo seleccionado'};
+         function updateSummary(){summary.textContent=[selectedNames.avatar_id,selectedNames.voice_id,selectedNames.background].join(' · ');}
+         updateSummary();
          for(const [id,title] of [['avatar','Avatares'],['voice','Voces'],['background','Fondos']]){const tab=button(title,()=>selectTab(id));tab.setAttribute('role','tab');tab.id='video-tab-'+id;const panel=node('div');panel.id='video-panel-'+id;panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',tab.id);tab.setAttribute('aria-controls',panel.id);tabs.append(tab);catalog.append(panel);panels[id]={tab,panel};}
          function selectTab(id){for(const [key,entry] of Object.entries(panels)){entry.tab.setAttribute('aria-selected',String(key===id));entry.panel.hidden=key!==id;}}
          selectTab('avatar');
@@ -519,9 +523,12 @@
           const automatic=kind==='background'?JSON.stringify({type:'auto'}):'auto';
           const options=[{id:automatic,name:'Automático'},...unique.values()];
           if(fields[key].value!==automatic&&!options.some(item=>item.id===fields[key].value))options.push({id:fields[key].value,name:'Selección guardada'});
-          const cards=[];let visible=kind==='background'?3:7;const pageSize=visible;
+          const cards=[];let visible=kind==='background'?3:6;const pageSize=visible;
           for(const item of options){const label=document.createElement('label');label.className='video-choice-card';
-           const radio=document.createElement('input');radio.type='radio';radio.name='choice-'+key;radio.value=item.id;radio.checked=item.id===fields[key].value;radio.onchange=()=>{fields[key].value=item.id;};label.append(radio);
+           const radio=document.createElement('input');radio.type='radio';radio.name='choice-'+key;radio.value=item.id;radio.checked=item.id===fields[key].value;
+           const summaryName=()=>item.id===automatic?({'avatar_id':'Avatar automático','voice_id':'Voz automática','background':'Fondo original'}[key]):({'avatar_id':'Avatar: ','voice_id':'Voz: ','background':'Fondo: '}[key]+item.name);
+           if(radio.checked){selectedNames[key]=summaryName();updateSummary();}
+           radio.onchange=()=>{fields[key].value=item.id;selectedNames[key]=summaryName();updateSummary();};label.append(radio);
            if((kind==='avatar'||kind==='background')&&item.preview_image_url){const img=document.createElement('img');img.src=item.preview_image_url;img.alt='';img.loading='lazy';label.append(img);}
            if(item.color){const swatch=node('span',undefined,'video-background-swatch');swatch.style.backgroundColor=item.color;label.append(swatch);}
            label.append(node('span',item.name||item.id));if(item.language)label.append(node('small',item.language));
@@ -535,15 +542,16 @@
           function refresh(){cards.forEach((card,index)=>{card.hidden=index>=visible;});more.hidden=visible>=cards.length;less.hidden=visible<=pageSize;}
           refresh();target.append(group);
          };
-         const imageBackgrounds=[['Muebles','/static/images/catalog/furniture.webp'],['Tecnología','/static/images/catalog/technology.webp'],['Deporte','/static/images/catalog/sport.webp']].map(([name,path])=>({name,id:JSON.stringify({type:'image',url:new URL(path,location.origin).href}),preview_image_url:path}));
-         const colorBackgrounds=[['Blanco','#ffffff'],['Negro','#000000'],['Azul','#1d4ed8'],['Violeta','#6d28d9'],['Verde','#047857']].map(([name,color])=>({name,color,id:JSON.stringify({type:'color',value:color})}));
-         renderChoices('Fondo','background',[...colorBackgrounds,...imageBackgrounds],'background',panels.background.panel);
+         const colorBackgrounds=[['Azul oscuro','#18233D'],['Blanco','#ffffff'],['Negro','#000000'],['Azul','#1d4ed8'],['Violeta','#6d28d9'],['Verde','#047857']].map(([name,color])=>({name,color,id:JSON.stringify({type:'color',value:color})}));
+         renderChoices('Fondo','background',colorBackgrounds,'background',panels.background.panel);
+         panels.background.panel.append(node('p','Imágenes: todavía no hay fondos configurados para Noticiero, Oficina, Tecnología, Ferretería, Belleza o Estudio.','help'));
          fetch('/api/agentes/'+agentId+'/tareas/'+task.id+'/video-recursos',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(45000)})
           .then(async response=>{const body=await response.json();if(!response.ok||!body.success)throw Error(body.error||'No se pudo cargar el catálogo.');return body;})
           .then(data=>{if(!dialog.open)return;status.textContent=data.errors?.length?'Algunos recursos no están disponibles: '+data.errors.join(', '):(!data.catalog_complete?'Se muestra una selección parcial del catálogo.':'Elegí un avatar, una voz y un fondo.');renderChoices('Avatar','avatar_id',data.avatars,'avatar',panels.avatar.panel);renderChoices('Voz','voice_id',data.voices,'voice',panels.voice.panel);})
           .catch(error=>{if(dialog.open){status.textContent=error.message||'No se pudo cargar el catálogo.';renderChoices('Avatar','avatar_id',[],'avatar',panels.avatar.panel);renderChoices('Voz','voice_id',[],'voice',panels.voice.panel);}});
          add('Límite de créditos DPIA','budget_credits','number');fields.budget_credits.min=0;fields.budget_credits.max=1000000;
          add('Autorizar producción automática dentro del presupuesto','automatic_production','checkbox');
+         form.append(summary);
         }
         const cancel=button('Cancelar',()=>dialog.close());
         const save=button('Guardar configuración',async()=>{

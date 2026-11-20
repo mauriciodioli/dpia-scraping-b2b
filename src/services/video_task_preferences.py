@@ -50,7 +50,10 @@ def validate(section, values):
             from urllib.parse import urlsplit
             try:url=urlsplit(background.get('url',''))
             except (ValueError,TypeError):bad('Fondo inválido.',422)
-            if set(background)!={'type','url'} or url.scheme!='https' or not url.hostname or url.username or url.password or len(background['url'])>2048:bad('Fondo inválido.',422)
+            try:port=url.port
+            except ValueError:bad('Fondo inválido.',422)
+            host=(url.hostname or '').lower()
+            if set(background)!={'type','url'} or url.scheme!='https' or not (host=='dpia.site' or host.endswith('.dpia.site')) or url.username or url.password or port not in (None,443) or len(background['url'])>2048:bad('Fondo inválido.',422)
     return result
 
 
