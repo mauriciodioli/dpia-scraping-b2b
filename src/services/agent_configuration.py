@@ -3,7 +3,7 @@ from datetime import datetime, timezone, time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy import (MetaData, Table, Column, Integer, String, Boolean, DateTime,
-                        JSON, Time, select, insert, update, UniqueConstraint)
+                        JSON, Time, select, insert, update, UniqueConstraint, inspect)
 from flask import current_app
 from werkzeug.datastructures import MultiDict
 from model.usuario import Usuario
@@ -450,9 +450,40 @@ class AgentConfigurationStore:
             if agent['configuration']['points']>available:
                 bad(f'El presupuesto no puede superar tus {available} puntos disponibles.',402)
             # Hold the owner lock through confirmation: edits and concurrent clicks cannot race.
-            binding=provision(translate(agent,user_id))
+            config_data=agent['configuration']
+            binding=None
+            if (len(config_data['scopes']) != 1 or len(config_data['categories']) != 1):
+                binding=self._existing_engine_binding(conn, row, user_id)
+            if binding is None:
+                binding=provision(translate(agent,user_id))
             now=datetime.now(timezone.utc).replace(tzinfo=None)
             config={**row['configuracion'],'engine_binding':binding}
             conn.execute(update(agentes).where(agentes.c.id==row['id'],agentes.c.usuario_id==user_id).values(
                 estado='ACTIVO',configuracion=config,activado_en=now,actualizado_en=now))
             return {**agent,'state':'active','configuration':config}
+
+    @staticmethod
+    def _existing_engine_binding(conn, row, user_id):
+        """Reuse an already configured engine without changing its tasks or schedules."""
+        inspector=inspect(conn)
+        if not inspector.has_table('ae_agents'):
+            return None
+        engine_agents=Table('ae_agents',MetaData(),autoload_with=conn,resolve_fks=False)
+        matches=conn.execute(select(engine_agents.c.id,engine_agents.c.owner_id,
+            engine_agents.c.legacy_agent_id,engine_agents.c.revision,engine_agents.c.configuration_state)
+            .where(engine_agents.c.legacy_agent_id==row['id']).with_for_update()).mappings().all()
+        if not matches:
+            return None
+        if len(matches)!=1 or matches[0]['owner_id']!=user_id or matches[0]['configuration_state']!='ENABLED':
+            bad('No se pudo vincular el agente existente. Revisá su configuración.',409)
+        engine=matches[0]
+        old=(row['configuracion'] or {}).get('engine_binding')
+        if old and (not isinstance(old,dict) or old.get('id')!=engine['id']):
+            bad('La vinculación del agente no coincide con su configuración.',409)
+        if 'ae_agent_id' not in {col['name'] for col in inspector.get_columns('agente_tareas')}:
+            return None
+        task_table=Table('agente_tareas',MetaData(),autoload_with=conn,resolve_fks=False)
+        task_links=conn.execute(select(task_table.c.ae_agent_id).where(task_table.c.agente_id==row['id'])).scalars().all()
+        if engine['id'] not in task_links or any(link not in (None,engine['id']) for link in task_links):
+            bad('Las tareas no coinciden con el agente existente.',409)
+        return {'id':engine['id'],'revision':engine['revision']}
