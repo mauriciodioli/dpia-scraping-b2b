@@ -507,32 +507,48 @@
          add('Duración en segundos','duration_seconds','number');fields.duration_seconds.min=1;fields.duration_seconds.max=3600;
          add('Idioma','language');add('Formato','format','select',[['16:9','Horizontal · 16:9'],['9:16','Vertical · 9:16'],['1:1','Cuadrado · 1:1']]);
          add('Proveedor','provider');
-         for(const key of ['avatar_id','voice_id']){const input=document.createElement('input');input.type='hidden';input.value=values[key]||'auto';fields[key]=input;form.append(input);}
+         for(const key of ['avatar_id','voice_id','background']){const input=document.createElement('input');input.type='hidden';input.value=key==='background'?JSON.stringify(values[key]||{type:'auto'}):(values[key]||'auto');fields[key]=input;form.append(input);}
          const catalog=node('section'),status=node('p','Cargando avatares y voces…');status.setAttribute('role','status');catalog.append(status);form.append(catalog);
-         const renderChoices=(title,key,items,kind)=>{
-          const group=node('fieldset'),legend=node('legend',title),grid=node('div');group.append(legend,grid);
-          grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px';
-          const options=[{id:'auto',name:'Automático'},...items];
-          if(fields[key].value!=='auto'&&!options.some(item=>item.id===fields[key].value))options.push({id:fields[key].value,name:'Selección guardada'});
-          for(const item of options){const label=document.createElement('label');label.style.cssText='display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid #59477a;border-radius:10px';
+         const tabs=node('div',undefined,'video-resource-tabs'),panels={};tabs.setAttribute('role','tablist');catalog.append(tabs);
+         for(const [id,title] of [['avatar','Avatares'],['voice','Voces'],['background','Fondos']]){const tab=button(title,()=>selectTab(id));tab.setAttribute('role','tab');tab.id='video-tab-'+id;const panel=node('div');panel.id='video-panel-'+id;panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',tab.id);tab.setAttribute('aria-controls',panel.id);tabs.append(tab);catalog.append(panel);panels[id]={tab,panel};}
+         function selectTab(id){for(const [key,entry] of Object.entries(panels)){entry.tab.setAttribute('aria-selected',String(key===id));entry.panel.hidden=key!==id;}}
+         selectTab('avatar');
+         const renderChoices=(title,key,items,kind,target)=>{
+          const group=node('fieldset',undefined,'video-choice-group'),legend=node('legend',title),grid=node('div',undefined,'video-choice-grid');group.append(legend,grid);
+          const unique=new Map();for(const item of items)if(item&&typeof item.id==='string'&&item.id!=='auto'&&!unique.has(item.id))unique.set(item.id,item);
+          const automatic=kind==='background'?JSON.stringify({type:'auto'}):'auto';
+          const options=[{id:automatic,name:'Automático'},...unique.values()];
+          if(fields[key].value!==automatic&&!options.some(item=>item.id===fields[key].value))options.push({id:fields[key].value,name:'Selección guardada'});
+          const cards=[];let visible=kind==='background'?3:7;const pageSize=visible;
+          for(const item of options){const label=document.createElement('label');label.className='video-choice-card';
            const radio=document.createElement('input');radio.type='radio';radio.name='choice-'+key;radio.value=item.id;radio.checked=item.id===fields[key].value;radio.onchange=()=>{fields[key].value=item.id;};label.append(radio);
-           if(kind==='avatar'&&item.preview_image_url){const img=document.createElement('img');img.src=item.preview_image_url;img.alt='';img.loading='lazy';img.style.cssText='width:100%;height:110px;object-fit:cover;border-radius:6px';label.append(img);}
+           if((kind==='avatar'||kind==='background')&&item.preview_image_url){const img=document.createElement('img');img.src=item.preview_image_url;img.alt='';img.loading='lazy';label.append(img);}
+           if(item.color){const swatch=node('span',undefined,'video-background-swatch');swatch.style.backgroundColor=item.color;label.append(swatch);}
            label.append(node('span',item.name||item.id));if(item.language)label.append(node('small',item.language));
-           if(kind==='voice'&&item.preview_audio_url){const audio=document.createElement('audio');audio.controls=true;audio.preload='none';audio.src=item.preview_audio_url;audio.style.maxWidth='100%';label.append(audio);}
-           grid.append(label);
-          }catalog.append(group);
+           if(kind==='voice'&&item.preview_audio_url){const audio=document.createElement('audio');audio.controls=true;audio.preload='none';audio.src=item.preview_audio_url;label.append(audio);}
+           grid.append(label);if(item.id!==automatic)cards.push(label);
+          }
+          const controls=node('div',undefined,'video-choice-controls');
+          const more=button('Mostrar más',()=>{visible+=pageSize;refresh();});
+          const less=button('Mostrar menos',()=>{visible=pageSize;refresh();});
+          controls.append(more,less);group.append(controls);
+          function refresh(){cards.forEach((card,index)=>{card.hidden=index>=visible;});more.hidden=visible>=cards.length;less.hidden=visible<=pageSize;}
+          refresh();target.append(group);
          };
+         const imageBackgrounds=[['Muebles','/static/images/catalog/furniture.webp'],['Tecnología','/static/images/catalog/technology.webp'],['Deporte','/static/images/catalog/sport.webp']].map(([name,path])=>({name,id:JSON.stringify({type:'image',url:new URL(path,location.origin).href}),preview_image_url:path}));
+         const colorBackgrounds=[['Blanco','#ffffff'],['Negro','#000000'],['Azul','#1d4ed8'],['Violeta','#6d28d9'],['Verde','#047857']].map(([name,color])=>({name,color,id:JSON.stringify({type:'color',value:color})}));
+         renderChoices('Fondo','background',[...colorBackgrounds,...imageBackgrounds],'background',panels.background.panel);
          fetch('/api/agentes/'+agentId+'/tareas/'+task.id+'/video-recursos',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(45000)})
           .then(async response=>{const body=await response.json();if(!response.ok||!body.success)throw Error(body.error||'No se pudo cargar el catálogo.');return body;})
-          .then(data=>{if(!dialog.open)return;status.textContent=data.errors?.length?'Algunos recursos no están disponibles: '+data.errors.join(', '):(!data.catalog_complete?'Se muestra una selección parcial del catálogo.':'Elegí un avatar y una voz.');renderChoices('Avatar','avatar_id',data.avatars,'avatar');renderChoices('Voz','voice_id',data.voices,'voice');})
-          .catch(error=>{if(dialog.open){status.textContent=error.message||'No se pudo cargar el catálogo.';renderChoices('Avatar','avatar_id',[],'avatar');renderChoices('Voz','voice_id',[],'voice');}});
+          .then(data=>{if(!dialog.open)return;status.textContent=data.errors?.length?'Algunos recursos no están disponibles: '+data.errors.join(', '):(!data.catalog_complete?'Se muestra una selección parcial del catálogo.':'Elegí un avatar, una voz y un fondo.');renderChoices('Avatar','avatar_id',data.avatars,'avatar',panels.avatar.panel);renderChoices('Voz','voice_id',data.voices,'voice',panels.voice.panel);})
+          .catch(error=>{if(dialog.open){status.textContent=error.message||'No se pudo cargar el catálogo.';renderChoices('Avatar','avatar_id',[],'avatar',panels.avatar.panel);renderChoices('Voz','voice_id',[],'voice',panels.voice.panel);}});
          add('Límite de créditos DPIA','budget_credits','number');fields.budget_credits.min=0;fields.budget_credits.max=1000000;
          add('Autorizar producción automática dentro del presupuesto','automatic_production','checkbox');
         }
         const cancel=button('Cancelar',()=>dialog.close());
         const save=button('Guardar configuración',async()=>{
          const updated={};for(const [key,input] of Object.entries(fields)){
-          updated[key]=input.type==='checkbox'?input.checked:input.type==='number'?Number(input.value):input.value;
+          updated[key]=key==='background'?JSON.parse(input.value):input.type==='checkbox'?input.checked:input.type==='number'?Number(input.value):input.value;
          }
          save.disabled=true;feedback.textContent='Guardando…';
          try{

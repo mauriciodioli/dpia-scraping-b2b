@@ -6,7 +6,7 @@ from services.agent_configuration import bad
 SCRIPT_DEFAULTS = {'instructions': '', 'custom_script': ''}
 PRODUCTION_DEFAULTS = {'video_type': 'news', 'duration_seconds': 60, 'language': 'es',
                        'format': '16:9', 'provider': 'heygen', 'avatar_id': 'auto',
-                       'voice_id': 'auto', 'budget_credits': 20, 'automatic_production': False}
+                       'voice_id': 'auto', 'background': {'type':'auto'}, 'budget_credits': 20, 'automatic_production': False}
 
 
 def read_section(video, section):
@@ -41,6 +41,16 @@ def validate(section, values):
         import re
         if any(not re.fullmatch(r'[A-Za-z0-9_-]{1,160}',result[k]) for k in ('avatar_id','voice_id')):
             bad('Identificador audiovisual inválido.',422)
+        background=result['background']
+        if not isinstance(background,dict) or background.get('type') not in ('auto','color','image'):
+            bad('Fondo inválido.',422)
+        if background['type']=='auto' and set(background)!={'type'}:bad('Fondo inválido.',422)
+        if background['type']=='color' and (set(background)!={'type','value'} or not isinstance(background.get('value'),str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',background['value'])):bad('Fondo inválido.',422)
+        if background['type']=='image':
+            from urllib.parse import urlsplit
+            try:url=urlsplit(background.get('url',''))
+            except (ValueError,TypeError):bad('Fondo inválido.',422)
+            if set(background)!={'type','url'} or url.scheme!='https' or not url.hostname or url.username or url.password or len(background['url'])>2048:bad('Fondo inválido.',422)
     return result
 
 
@@ -62,7 +72,10 @@ class VideoTaskPreferences:
                 if (not isinstance(command, dict) or type(command.get('expected_revision')) is not int
                     or command['expected_revision'] != revision or not isinstance(command.get('values'), dict)):
                     bad('La configuración cambió. Actualizá antes de guardar.', 409)
-                video[section] = validate(section, command['values'])
+                supplied=dict(command['values'])
+                if section=='production' and 'background' not in supplied:
+                    supplied['background']=read_section(video,section)['background']
+                video[section] = validate(section, supplied)
                 params['video'] = video
                 params['_configuration_revision'] = revision + 1
                 self.repository.change(conn, tables['agente_tareas'], task_id, parametros=params,

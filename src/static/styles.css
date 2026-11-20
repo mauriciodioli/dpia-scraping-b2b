@@ -801,6 +801,18 @@ html[data-theme="dark"] #agentPage .agent-task-card.agent-task-video .agent-task
 .agent-video-preferences-dialog input:not([type="checkbox"]),.agent-video-preferences-dialog select,.agent-video-preferences-dialog textarea{box-sizing:border-box;width:100%;max-width:100%}
 .agent-video-preferences-dialog textarea{resize:vertical}
 .agent-video-preferences-dialog>button{display:block;margin:.6rem 0}
+.video-choice-group{min-width:0;margin:.7rem 0;padding:.7rem;border:1px solid currentColor;border-radius:10px}
+.video-choice-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,130px),1fr));gap:8px}
+.video-choice-card{display:flex;flex-direction:column;gap:5px;min-width:0;padding:8px;border:1px solid currentColor;border-radius:10px;color:inherit}
+.video-choice-card[hidden]{display:none}
+.agent-video-preferences-dialog .video-choice-card input[type="radio"]{width:auto;align-self:flex-start}
+.video-choice-card img{width:100%;height:100px;object-fit:cover;border-radius:6px}
+.video-choice-card audio{width:100%;min-width:0;height:36px}
+.video-choice-controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.video-choice-controls button[hidden]{display:none}
+.video-resource-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:.75rem 0}
+.video-resource-tabs button[aria-selected="true"]{outline:2px solid #8d65ec}
+.video-background-swatch{display:block;width:100%;height:100px;border-radius:6px;border:1px solid #888}
 
 /* Visible controls for VIDEO_GENERAR only, not hidden in the overflow menu. */
 #agentPage .agent-task-card.agent-task-video .agent-video-settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:12px 0}
