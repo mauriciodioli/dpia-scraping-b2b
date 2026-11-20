@@ -12,6 +12,26 @@ from services.task_names import normalize_task_payload
 PATH = '/api/agents/v1/internal/pwa-activations'
 
 
+def video_resources(user_id, agent_id, task_id, language):
+    payload=dict(operation='video_resources',owner_id=user_id,source_agent_id=agent_id,task_id=task_id,language=language)
+    base=current_app.config.get('AGENTS_INTERNAL_URL','').rstrip('/')
+    secret=current_app.config.get('PWA_ACTIVATION_SECRET','');parsed=urlsplit(base)
+    if not secret or parsed.scheme not in ('http','https') or not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+        bad('La conexión con Agents no está configurada.',503)
+    raw=json.dumps(payload,sort_keys=True,separators=(',',':')).encode();stamp=str(int(time.time()))
+    signature=hmac.new(secret.encode(),stamp.encode()+b'\n'+PATH.encode()+b'\n'+raw,hashlib.sha256).hexdigest()
+    try:
+        response=requests.post(base+PATH,data=raw,headers={'Content-Type':'application/json','X-DPIA-Timestamp':stamp,'X-DPIA-Signature':signature},timeout=(3.05,30),allow_redirects=False)
+        data=response.json()
+        if response.status_code!=200:
+            error=data.get('error');code=error.get('code') if isinstance(error,dict) else error
+            bad('No se pudo consultar el catálogo de video'+(': '+code if isinstance(code,str) else '')+'.',502)
+        if not isinstance(data,dict) or any(not isinstance(data.get(key),list) for key in ('avatars','voices','errors')):raise ValueError()
+        return data
+    except (requests.RequestException,ValueError,TypeError):
+        bad('No se pudo consultar el catálogo de video. Reintentá.',502)
+
+
 def translate(agent, user_id):
     config = agent['configuration']
     if config['tasks'] != ['products']:

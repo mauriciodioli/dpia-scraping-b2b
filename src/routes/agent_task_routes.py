@@ -8,6 +8,19 @@ from services.query_preparation import PreparationError
 task_bp = Blueprint('agent_tasks', __name__)
 
 
+@task_bp.get('/api/agentes/<int:agent_id>/tareas/<int:task_id>/video-recursos')
+def video_resources(agent_id,task_id):
+    owner=session.get('user_id')
+    if type(owner) is not int:return jsonify(success=False,error='Iniciá sesión.'),401
+    try:
+        from services.video_task_preferences import VideoTaskPreferences
+        from services.agent_activation import video_resources as load_resources
+        values=VideoTaskPreferences().section(owner,agent_id,task_id,'production')['values']
+        return jsonify(success=True,**load_resources(owner,agent_id,task_id,values.get('language') or 'es'))
+    except PreparationError as exc:return jsonify(success=False,error=str(exc)),exc.status
+    except SQLAlchemyError:return jsonify(success=False,error='No se pudo consultar el catálogo.'),503
+
+
 @task_bp.post('/api/agentes/<int:agent_id>/tareas/<int:task_id>/ejecutar')
 def run_video_task(agent_id,task_id):
     from uuid import UUID

@@ -506,7 +506,26 @@
          add('Tipo de video','video_type','select',[['news','Noticiero'],['explainer','Explicativo'],['promotion','Promocional'],['summary','Resumen'],['other','Otro']]);
          add('Duración en segundos','duration_seconds','number');fields.duration_seconds.min=1;fields.duration_seconds.max=3600;
          add('Idioma','language');add('Formato','format','select',[['16:9','Horizontal · 16:9'],['9:16','Vertical · 9:16'],['1:1','Cuadrado · 1:1']]);
-         add('Proveedor','provider');add('Avatar (auto o ID)','avatar_id');add('Voz (auto o ID)','voice_id');
+         add('Proveedor','provider');
+         for(const key of ['avatar_id','voice_id']){const input=document.createElement('input');input.type='hidden';input.value=values[key]||'auto';fields[key]=input;form.append(input);}
+         const catalog=node('section'),status=node('p','Cargando avatares y voces…');status.setAttribute('role','status');catalog.append(status);form.append(catalog);
+         const renderChoices=(title,key,items,kind)=>{
+          const group=node('fieldset'),legend=node('legend',title),grid=node('div');group.append(legend,grid);
+          grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px';
+          const options=[{id:'auto',name:'Automático'},...items];
+          if(fields[key].value!=='auto'&&!options.some(item=>item.id===fields[key].value))options.push({id:fields[key].value,name:'Selección guardada'});
+          for(const item of options){const label=document.createElement('label');label.style.cssText='display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid #59477a;border-radius:10px';
+           const radio=document.createElement('input');radio.type='radio';radio.name='choice-'+key;radio.value=item.id;radio.checked=item.id===fields[key].value;radio.onchange=()=>{fields[key].value=item.id;};label.append(radio);
+           if(kind==='avatar'&&item.preview_image_url){const img=document.createElement('img');img.src=item.preview_image_url;img.alt='';img.loading='lazy';img.style.cssText='width:100%;height:110px;object-fit:cover;border-radius:6px';label.append(img);}
+           label.append(node('span',item.name||item.id));if(item.language)label.append(node('small',item.language));
+           if(kind==='voice'&&item.preview_audio_url){const audio=document.createElement('audio');audio.controls=true;audio.preload='none';audio.src=item.preview_audio_url;audio.style.maxWidth='100%';label.append(audio);}
+           grid.append(label);
+          }catalog.append(group);
+         };
+         fetch('/api/agentes/'+agentId+'/tareas/'+task.id+'/video-recursos',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(45000)})
+          .then(async response=>{const body=await response.json();if(!response.ok||!body.success)throw Error(body.error||'No se pudo cargar el catálogo.');return body;})
+          .then(data=>{if(!dialog.open)return;status.textContent=data.errors?.length?'Algunos recursos no están disponibles: '+data.errors.join(', '):(!data.catalog_complete?'Se muestra una selección parcial del catálogo.':'Elegí un avatar y una voz.');renderChoices('Avatar','avatar_id',data.avatars,'avatar');renderChoices('Voz','voice_id',data.voices,'voice');})
+          .catch(error=>{if(dialog.open){status.textContent=error.message||'No se pudo cargar el catálogo.';renderChoices('Avatar','avatar_id',[],'avatar');renderChoices('Voz','voice_id',[],'voice');}});
          add('Límite de créditos DPIA','budget_credits','number');fields.budget_credits.min=0;fields.budget_credits.max=1000000;
          add('Autorizar producción automática dentro del presupuesto','automatic_production','checkbox');
         }

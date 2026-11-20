@@ -36,8 +36,11 @@ def validate(section, values):
             or type(result['automatic_production']) is not bool):
             bad('Duración, presupuesto o autorización inválidos.', 422)
         for key in ('video_type', 'language', 'format', 'provider', 'avatar_id', 'voice_id'):
-            if not isinstance(result[key], str) or not 1 <= len(result[key]) <= 100:
+            if not isinstance(result[key], str) or not 1 <= len(result[key]) <= (160 if key in ('avatar_id','voice_id') else 100):
                 bad('Configuración audiovisual inválida.', 422)
+        import re
+        if any(not re.fullmatch(r'[A-Za-z0-9_-]{1,160}',result[k]) for k in ('avatar_id','voice_id')):
+            bad('Identificador audiovisual inválido.',422)
     return result
 
 
