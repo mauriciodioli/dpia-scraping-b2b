@@ -31,6 +31,21 @@ def monetary_balance(user_id):
 
 
 def dispatch(action, owner, publication_id, body):
+    if action == 'billing':
+        from services.agent_activation import billing_policy
+        try:
+            rate, revision = billing_policy(owner)
+            quota = current_app.extensions.get('scraping_quota') or MySQLScrapingQuota()
+            summary = quota.credits(owner)
+            money = lambda n: str((Decimal(n)*rate).quantize(Decimal('0.01'), rounding=ROUND_DOWN))
+            return {'currency':'USD','policy_version':str(revision),
+                    'available':money(summary['available']), 'allocated':money(summary['initial']),
+                    'consumed':money(summary['consumed']), 'reserved':money(summary['reserved']),
+                    'movements':[{'id':r['operation_id'],'source':r['source'],'state':r['state'],
+                        'equivalent':money(r.get('amount',0) if r['source']=='recarga' else r['cost'])}
+                        for r in summary['operations']], 'history_limit':30}
+        except PreparationError as exc:
+            return {'error':'billing_unavailable'}, exc.status
     store = current_app.extensions.get('agent_configuration_store') or AgentConfigurationStore()
     try:
         task = store.prepare_publication_video(owner, publication_id)
