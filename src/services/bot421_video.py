@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation, ROUND_DOWN
 
 from flask import current_app
 
-from services.agent_activation import video_resources
+from services.agent_activation import video_resources, video_quote
 from services.agent_configuration import AgentConfigurationStore
 from services.query_preparation import PreparationError
 from services.scraping_quota import MySQLScrapingQuota
@@ -35,6 +35,8 @@ def dispatch(action, owner, publication_id, body):
     try:
         task = store.prepare_publication_video(owner, publication_id)
         prefs = VideoTaskPreferences()
+        if action == 'quote':
+            return video_quote(owner, task['agent_id'], task['id'], {k:body[k] for k in ('duration','format','language','avatar_id','voice_id')})
         if action == 'resources':
             return video_resources(owner, task['agent_id'], task['id'], body['language'])
         if action == 'script':
