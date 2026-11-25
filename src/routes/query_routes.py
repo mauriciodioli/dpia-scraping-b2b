@@ -125,7 +125,15 @@ def query_operation(operation_id):
         from services.base44_images import public_stage
         if 'image_stages' in outcome:outcome['image_stages']={k:public_stage(v) for k,v in outcome['image_stages'].items()}
         generated=outcome.get('generation_result')
-        payload=dict(result=generated or result_template(operation['prepared']),rows=sheet_rows(generated) if generated else [],request_id=operation_id,
+        result=generated or None
+        if result is None:
+            prepared=operation['prepared']
+            if isinstance(prepared,dict) and 'commercial_prepared' in prepared:
+                prepared=prepared['commercial_prepared']
+            # Agents can reserve the operation before the query is prepared.
+            if isinstance(prepared,dict) and prepared.get('context'):
+                result=result_template(prepared)
+        payload=dict(result=result,rows=sheet_rows(generated) if generated else [],request_id=operation_id,
                      sources={operation['source']:outcome})
         return jsonify(success=True,state=operation['state'],payload=payload)
     except PreparationError as exc:
