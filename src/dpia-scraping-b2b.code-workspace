@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../../ms-dpia-agents"
+		},
+		{
+			"path": "../../bot421"
 		}
 	],
 	"settings": {}

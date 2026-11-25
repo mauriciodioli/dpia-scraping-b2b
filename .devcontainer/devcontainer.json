@@ -1,11 +1,11 @@
-
 {
-  "name": "Existing Dockerfile",
-  "build": {
-    "context": "..",
-    "dockerfile": "../Dockerfile"
-  },
-  "mounts": [
-    "source=C:/Users/mauri/Documents/ITCOR/ms-dpia-agents,target=/workspaces/ms-dpia-agents,type=bind"
-  ]
+    "name": "Existing Dockerfile",
+    "build": {
+        "context": "..",
+        "dockerfile": "../Dockerfile"
+    },
+    "mounts": [
+        "source=C:/Users/mauri/Documents/ITCOR/ms-dpia-agents,target=/workspaces/ms-dpia-agents,type=bind",
+        "source=C:/Users/mauri/Documents/ITCOR/dpia/bot421,target=/workspaces/bot421,type=bind"
+    ]
 }

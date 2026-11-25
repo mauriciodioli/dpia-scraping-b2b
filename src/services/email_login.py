@@ -11,11 +11,20 @@ from model.usuario import Usuario
 
 EMAIL = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
 VERIFY = """
+local function reject()
+    if #KEYS == 3 then redis.call('SET', KEYS[3], ARGV[3], 'EX', 600) end
+    return 0
+end
 local value=redis.call('HGET',KEYS[1],'digest')
-if not value then return 0 end
+if not value then return reject() end
 local attempts=redis.call('HINCRBY',KEYS[1],'attempts',1)
-if attempts > 5 then redis.call('DEL',KEYS[1]); return 0 end
-if value ~= ARGV[1] then return 0 end
+if attempts > 5 then redis.call('DEL',KEYS[1]); return reject() end
+if value ~= ARGV[1] then return reject() end
+if #KEYS == 3 then
+    local ttl = tonumber(ARGV[2]) - tonumber(redis.call('TIME')[1])
+    if ttl <= 0 then return reject() end
+    redis.call('SET', KEYS[2], ARGV[2], 'EX', ttl)
+end
 redis.call('DEL',KEYS[1]); return 1
 """
 
@@ -68,6 +77,19 @@ def send_mail(host,sender,email,code):
         smtp.send_message(msg)
 
 
+def new_code():
+    return str(secrets.randbelow(100000000)).zfill(8)
+
+
+def allow_attempt(redis, secret, name, limit):
+    key = 'dpia:email-login:limit:' + digest(secret, name)
+    return redis.eval("""
+        local count = redis.call('INCR', KEYS[1])
+        if count == 1 then redis.call('EXPIRE', KEYS[1], 600) end
+        return count
+    """, 1, key) <= limit
+
+
 def start():
     if not same_origin():return jsonify(error='Solicitud no autorizada.'),403
     body=request.get_json(silent=True)
@@ -81,11 +103,9 @@ def start():
         stage='redis'
         ip=request.remote_addr or 'unknown'
         for name,limit in [('email:'+email,4),('ip:'+ip,20)]:
-            key='dpia:email-login:limit:'+digest(secret,name)
-            count=redis.incr(key)
-            if count==1:redis.expire(key,600)
-            if count>limit:return jsonify(error='Demasiados intentos. Probá más tarde.'),429
-        challenge=secrets.token_urlsafe(32);code=str(secrets.randbelow(100000000)).zfill(8)
+            if not allow_attempt(redis, secret, name, limit):
+                return jsonify(error='Demasiados intentos. Probá más tarde.'),429
+        challenge=secrets.token_urlsafe(32);code=new_code()
         session.pop('email_login_challenge',None)
         if user:
             key='dpia:email-login:code:'+digest(secret,challenge)

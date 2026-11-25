@@ -21,6 +21,8 @@ def create_app():
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
+    from routes.bot421_auth_routes import bot421_auth
+    app.register_blueprint(bot421_auth)
     app.register_blueprint(catalog_bp)
     app.register_blueprint(query_bp)
     from routes.intent_routes import intent_bp

@@ -191,6 +191,8 @@ class AgentConfigurationStore:
         config=row['configuracion']
         if not isinstance(config,dict) or config.get('version')!=1:
             bad('La configuración guardada no es compatible. Revisala antes de guardar.',409)
+        if config.get('publication_only') is True:
+            return {'id': row['id'], 'revision': row['version_config'], 'state': 'inactive', 'configuration': config}
         try:
             validate_config({key:config[key] for key in FIELDS | (set(config) & {'query_context', 'execution_sources'})})
         except (KeyError,PreparationError):
@@ -365,7 +367,65 @@ class AgentConfigurationStore:
             return {'id': task_id, 'agent_id': agent['id'], 'duplicate': False,
                     'schedule_pending': True}
 
-    def add_video_child_task(self, user_id, parent_task_id, name, duration_seconds):
+    def prepare_publication_video(self, user_id, publication_id):
+        """Create a source and video child once under the existing owner lock."""
+        from model.publicaciones.publicaciones import Publicacion
+        with self._engine().begin() as conn:
+            self._user(conn, user_id, lock=True)
+            publication = conn.execute(select(Publicacion.__table__).where(
+                Publicacion.id == publication_id, Publicacion.user_id == user_id
+            )).mappings().first()
+            if not publication:
+                bad('Publicación no disponible.', 404)
+            agent = self._existing(conn, user_id)
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            language = (publication.get('idioma') or 'es').split('-')[0].lower()
+            language = 'en' if language == 'in' else language
+            if agent is None:
+                email = conn.execute(select(Usuario.correo_electronico).where(Usuario.id == user_id)).scalar_one()
+                config = {'version': 1, 'publication_only': True, 'tasks': [], 'language': language}
+                agent_id = conn.execute(insert(agentes).values(
+                    usuario_id=user_id, nombre=email, estado='INACTIVO', idioma=language,
+                    zona_horaria='UTC', presupuesto_puntos_periodo=0, periodo_presupuesto='SEMANA',
+                    notificaciones_activas=False, configuracion=config, version_config=1,
+                    creado_en=now, actualizado_en=now,
+                )).inserted_primary_key[0]
+                agent = conn.execute(select(agentes).where(agentes.c.id == agent_id)).mappings().one()
+            if (agent['configuracion'] or {}).get('_deleted_at'):
+                bad('El agente fue eliminado.', 409)
+            table = Table('agente_tareas', MetaData(), autoload_with=conn, resolve_fks=False)
+            kind = table.c.tipo.type
+            source = {'type': 'publication', 'application': 'bot421', 'publication_id': publication_id}
+            if 'PUBLICACION' not in (getattr(kind, 'enums', None) or ()):
+                existing_rows = conn.execute(select(table).where(table.c.agente_id == agent['id'],
+                    table.c.tipo == 'VIDEO_GENERAR').order_by(table.c.id).with_for_update()).mappings()
+                for row in existing_rows:
+                    parameters = row['parametros'] or {}
+                    if parameters.get('source') == source and not parameters.get('_deleted_at'):
+                        return {'id': row['id'], 'agent_id': agent['id']}
+                from services.video_task_preferences import PRODUCTION_DEFAULTS, SCRIPT_DEFAULTS
+                task_id = conn.execute(insert(table).values(
+                    agente_id=agent['id'], tipo='VIDEO_GENERAR', nombre='Portada DPIA #' + str(publication_id),
+                    habilitada=False, parametros={'schema_version': 2, 'source': source,
+                        'video': {'script': SCRIPT_DEFAULTS, 'production': {**PRODUCTION_DEFAULTS, 'language': language}}},
+                    creado_en=now, actualizado_en=now,
+                )).inserted_primary_key[0]
+                return {'id': task_id, 'agent_id': agent['id']}
+            rows = conn.execute(select(table).where(table.c.agente_id == agent['id'],
+                table.c.tipo == 'PUBLICACION').order_by(table.c.id).with_for_update()).mappings()
+            parent = next((row for row in rows if (row['parametros'] or {}).get('source') == source
+                           and not (row['parametros'] or {}).get('_deleted_at')), None)
+            name = 'Portada DPIA #' + str(publication_id)
+            if parent is None:
+                parent_id = conn.execute(insert(table).values(
+                    agente_id=agent['id'], tipo='PUBLICACION', nombre=name, habilitada=False,
+                    parametros={'source': source, 'language': language}, creado_en=now, actualizado_en=now,
+                )).inserted_primary_key[0]
+            else:
+                parent_id = parent['id']
+            return self.add_video_child_task(user_id, parent_id, name, 60, connection=conn)
+
+    def add_video_child_task(self, user_id, parent_task_id, name, duration_seconds, *, connection=None):
         """Create a genuine, initially paused configured task and its 1:N video link."""
         from sqlalchemy import MetaData as SA_MetaData, Table as SA_Table
         from sqlalchemy import inspect
@@ -378,7 +438,8 @@ class AgentConfigurationStore:
         if type(duration_seconds) is not int or duration_seconds not in (15, 30, 60):
             bad('Duración inválida.', 422)
         now = datetime.now(timezone.utc).replace(tzinfo=None)
-        with self._engine().begin() as conn:
+        from contextlib import nullcontext
+        with (nullcontext(connection) if connection is not None else self._engine().begin()) as conn:
             self._user(conn, user_id, lock=True)
             agent = self._existing(conn, user_id)
             if not agent or (agent['configuracion'] or {}).get('_deleted_at'):
@@ -393,6 +454,16 @@ class AgentConfigurationStore:
             if not inspect(conn).has_table('ae_task_video_config'):
                 bad('Falta la tabla ae_task_video_config en MySQL.', 503)
             links = SA_Table('ae_task_video_config', SA_MetaData(), autoload_with=conn, resolve_fks=False)
+            publication_source = parent['tipo'] == 'PUBLICACION'
+            if publication_source:
+                children = conn.execute(select(table).join(links, links.c.tarea_video_id == table.c.id).where(
+                    links.c.tarea_padre_id == parent_task_id, table.c.agente_id == agent['id'],
+                    table.c.tipo == 'VIDEO_GENERAR',
+                ).order_by(table.c.id).with_for_update()).mappings()
+                existing = next((row for row in children if not (row['parametros'] or {}).get('_deleted_at')), None)
+                if existing:
+                    return {'id': existing['id'], 'agent_id': agent['id'], 'parent_task_id': parent_task_id,
+                            'type': 'VIDEO_GENERAR', 'schedule_pending': True, 'execution_enabled': False}
             params = dict(parent['parametros'] or {})
             params.pop('identity_hash', None)
             params.pop('immediate_request_id', None)
@@ -400,9 +471,9 @@ class AgentConfigurationStore:
                 duration_seconds=duration_seconds, status='provider_pending',
                 script={'instructions':'', 'custom_script':''},
                 production={'video_type':'news', 'duration_seconds':duration_seconds,
-                            'language':'es', 'format':'16:9', 'provider':'heygen',
+                            'language':params.get('language', 'es') if publication_source else 'es', 'format':'16:9', 'provider':'heygen',
                             'avatar_id':'auto', 'voice_id':'auto', 'budget_credits':20,
-                            'automatic_production':True}),
+                            'automatic_production':not publication_source}),
                 parent_task_id=parent_task_id)
             values = dict(agente_id=agent['id'], tipo='VIDEO_GENERAR', nombre=name,
                 habilitada=False, parametros=params, creado_en=now, actualizado_en=now)
