@@ -192,3 +192,28 @@ def schedule_immediate_task(user_id, agent_id, task_id, request_id, *, existing=
         return data
     except (requests.RequestException,ValueError,KeyError,TypeError):
         bad('No se confirmó la ejecución. La tarea quedó guardada; reintentá el mismo envío para evitar duplicados.',502)
+
+
+def video_quote(user_id, agent_id, task_id, configuration):
+    """Read-only quote using the existing authenticated Agents boundary."""
+    payload=dict(operation='video_quote',owner_id=user_id,source_agent_id=agent_id,task_id=task_id,**configuration)
+    base=current_app.config.get('AGENTS_INTERNAL_URL','').rstrip('/')
+    secret=current_app.config.get('PWA_ACTIVATION_SECRET','')
+    parsed=urlsplit(base)
+    if not secret or parsed.scheme not in ('http','https') or not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+        bad('La conexión con Agents no está configurada.',503)
+    raw=json.dumps(payload,sort_keys=True,separators=(',',':')).encode()
+    stamp=str(int(time.time()))
+    signature=hmac.new(secret.encode(),stamp.encode()+b'\n'+PATH.encode()+b'\n'+raw,hashlib.sha256).hexdigest()
+    from decimal import Decimal, InvalidOperation
+    try:
+        response=requests.post(base+PATH,data=raw,headers={'Content-Type':'application/json','X-DPIA-Timestamp':stamp,'X-DPIA-Signature':signature},timeout=(3.05,30),allow_redirects=False)
+        data=response.json()
+        if response.status_code!=200:
+            bad('No hay una cotización disponible.',409 if response.status_code in (400,409,422) else 502)
+        amount=Decimal(data['amount'])
+        if data['currency']!='USD' or not amount.is_finite() or amount<=0:
+            raise ValueError()
+        return {'amount':str(amount),'currency':'USD','provisional':data['provisional'],'valid_until':data['valid_until']}
+    except (requests.RequestException,ValueError,KeyError,TypeError,InvalidOperation):
+        bad('No se pudo consultar la cotización.',502)
