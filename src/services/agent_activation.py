@@ -222,3 +222,26 @@ def video_quote(user_id, agent_id, task_id, configuration):
                 'usd_per_credit':str(rate),'policy_revision':revision}
     except (requests.RequestException,ValueError,KeyError,TypeError,InvalidOperation):
         bad('No se pudo consultar la cotización.',502)
+
+
+def billing_policy(user_id):
+    from decimal import Decimal, InvalidOperation
+    base=current_app.config.get('AGENTS_INTERNAL_URL','').rstrip('/')
+    secret=current_app.config.get('PWA_ACTIVATION_SECRET','')
+    parsed=urlsplit(base)
+    if not secret or parsed.scheme not in ('http','https') or not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+        bad('La conexión con Agents no está configurada.',503)
+    raw=json.dumps({'operation':'billing_policy','owner_id':user_id},sort_keys=True,separators=(',',':')).encode()
+    stamp=str(int(time.time()))
+    signature=hmac.new(secret.encode(),stamp.encode()+b'\n'+PATH.encode()+b'\n'+raw,hashlib.sha256).hexdigest()
+    try:
+        response=requests.post(base+PATH,data=raw,headers={'Content-Type':'application/json','X-DPIA-Timestamp':stamp,'X-DPIA-Signature':signature},timeout=(3.05,10),allow_redirects=False)
+        data=response.json()
+        if response.status_code!=200 or data['owner_id']!=user_id or data['currency']!='USD':
+            raise ValueError()
+        rate=Decimal(data['usd_per_credit'])
+        if not rate.is_finite() or rate<=0 or type(data['policy_revision']) is not int or data['policy_revision']<1:
+            raise ValueError()
+        return rate, data['policy_revision']
+    except (requests.RequestException,ValueError,KeyError,TypeError,InvalidOperation):
+        bad('No se pudo consultar la política monetaria.',502)
