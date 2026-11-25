@@ -55,6 +55,7 @@ def send_challenge(redis, secret, mail_host, sender, key, email, resend, idem, s
         pipe.execute()
 
 
+@bot421_auth.post('/billing', defaults={'action': 'billing'})
 @bot421_auth.post('/quote', defaults={'action': 'quote'})
 @bot421_auth.post('/workspace', defaults={'action': 'workspace'})
 @bot421_auth.post('/resources', defaults={'action': 'resources'})
@@ -124,7 +125,7 @@ def delegate(action):
         prefix = 'dpia:bot421:video:' + scope
         grant = prefix + ':grant'
         challenge = prefix + ':code'
-        if action in ('workspace', 'resources', 'script', 'quote'):
+        if action in ('workspace', 'resources', 'script', 'quote', 'billing'):
             if not authorization(redis, grant):
                 return jsonify(error='verification_required'), 403
             if action == 'resources' and body['language'] not in ('es', 'en', 'it'):
