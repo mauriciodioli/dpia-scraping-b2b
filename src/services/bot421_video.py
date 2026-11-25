@@ -36,7 +36,19 @@ def dispatch(action, owner, publication_id, body):
         task = store.prepare_publication_video(owner, publication_id)
         prefs = VideoTaskPreferences()
         if action == 'quote':
-            return video_quote(owner, task['agent_id'], task['id'], {k:body[k] for k in ('duration','format','language','avatar_id','voice_id')})
+            quote = video_quote(owner, task['agent_id'], task['id'], {k:body[k] for k in ('duration','format','language','avatar_id','voice_id')})
+            quota = current_app.extensions.get('scraping_quota') or MySQLScrapingQuota()
+            try:
+                summary = quota.credits(owner)
+                rate = Decimal(quote['usd_per_credit'])
+                money = lambda n: str((Decimal(n)*rate).quantize(Decimal('0.01'), rounding=ROUND_DOWN))
+                quote['balance'] = {'currency':'USD','amount':money(summary['available']),
+                    'allocated':money(summary['initial']), 'consumed':money(summary['consumed']),
+                    'reserved':money(summary['reserved']), 'policy_version':str(quote['policy_revision'])}
+            except Exception:
+                current_app.logger.warning('BOT421 billing balance unavailable')
+                quote['balance'] = None
+            return quote
         if action == 'resources':
             return video_resources(owner, task['agent_id'], task['id'], body['language'])
         if action == 'script':
