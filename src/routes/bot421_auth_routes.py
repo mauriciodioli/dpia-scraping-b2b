@@ -55,6 +55,7 @@ def send_challenge(redis, secret, mail_host, sender, key, email, resend, idem, s
         pipe.execute()
 
 
+@bot421_auth.post('/billing_credit', defaults={'action': 'billing_credit'})
 @bot421_auth.post('/billing', defaults={'action': 'billing'})
 @bot421_auth.post('/quote', defaults={'action': 'quote'})
 @bot421_auth.post('/workspace', defaults={'action': 'workspace'})
@@ -83,7 +84,7 @@ def delegate(action):
 
     body = request.get_json(silent=True)
     required = {'usuario_id', 'publicacion_id', 'session_ref', 'jwt_exp'}
-    if action in ('start', 'verify'):
+    if action in ('start', 'verify', 'billing_credit'):
         required.add('idempotency_key')
     if action == 'resources':
         required.add('language')
@@ -99,7 +100,7 @@ def delegate(action):
         return jsonify(error='invalid_request'), 400
     if (any(type(body[key]) is not int or body[key] <= 0 for key in ('usuario_id', 'publicacion_id', 'jwt_exp'))
             or not isinstance(body['session_ref'], str) or not re.fullmatch(r'[a-f0-9]{64}', body['session_ref'])
-            or (action in ('start', 'verify') and not canonical_uuid(body['idempotency_key']))
+            or (action in ('start', 'verify', 'billing_credit') and not canonical_uuid(body['idempotency_key']))
             or (action == 'start' and type(body['resend']) is not bool)
             or (action == 'verify' and (not isinstance(body['code'], str) or not re.fullmatch(r'[0-9]{8}', body['code'])))):
         return jsonify(error='invalid_request'), 400
@@ -125,7 +126,7 @@ def delegate(action):
         prefix = 'dpia:bot421:video:' + scope
         grant = prefix + ':grant'
         challenge = prefix + ':code'
-        if action in ('workspace', 'resources', 'script', 'quote', 'billing'):
+        if action in ('workspace', 'resources', 'script', 'quote', 'billing', 'billing_credit'):
             if not authorization(redis, grant):
                 return jsonify(error='verification_required'), 403
             if action == 'resources' and body['language'] not in ('es', 'en', 'it'):

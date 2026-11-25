@@ -31,7 +31,18 @@ def monetary_balance(user_id):
 
 
 def dispatch(action, owner, publication_id, body):
-    if action == 'billing':
+    if action in ('billing', 'billing_credit'):
+        from services.scraping_quota import Usuario, db
+        user = db.session.get(Usuario, owner)
+        can_credit = bool(user and user.activo and str(user.roll or '').strip().casefold() in {'administrador','admin'})
+        if action == 'billing_credit':
+            if not can_credit:
+                return {'error':'forbidden'}, 403
+            quota = current_app.extensions.get('scraping_quota') or MySQLScrapingQuota()
+            try:
+                return quota.grant_points(owner, 6, body['idempotency_key'], admin_only=True)
+            except PreparationError as exc:
+                return {'error':'credit_failed'}, exc.status
         from services.agent_activation import billing_policy
         try:
             rate, revision = billing_policy(owner)
@@ -39,6 +50,7 @@ def dispatch(action, owner, publication_id, body):
             summary = quota.credits(owner)
             money = lambda n: str((Decimal(n)*rate).quantize(Decimal('0.01'), rounding=ROUND_DOWN))
             return {'currency':'USD','policy_version':str(revision),
+                    'can_virtual_credit':can_credit, 'virtual_credit_amount':money(6),
                     'available':money(summary['available']), 'allocated':money(summary['initial']),
                     'consumed':money(summary['consumed']), 'reserved':money(summary['reserved']),
                     'movements':[{'id':r['operation_id'],'source':r['source'],'state':r['state'],

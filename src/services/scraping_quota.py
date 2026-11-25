@@ -127,7 +127,7 @@ class MySQLScrapingQuota:
                     'operations': [{'operation_id': row[0], 'source': row[1], 'state': row[2], 'cost': 0 if row[1]=='recarga' else 5 if row[1]=='promocion' else 1,
                                     **({'amount':(decode(row[3]) or {}).get('credited_points',0)} if row[1]=='recarga' else {})} for row in rows]}
 
-    def grant_points(self, user_id, amount, request_id):
+    def grant_points(self, user_id, amount, request_id, *, admin_only=False):
         """Role-authorized self-credit, atomic and idempotent; uses existing tables only."""
         if type(amount) is not int or amount != 6:
             raise PreparationError('La recarga autorizada es de 6 puntos.',400)
@@ -137,7 +137,7 @@ class MySQLScrapingQuota:
             user=conn.execute(select(Usuario.activo,Usuario.roll).where(Usuario.id==user_id).with_for_update()).first()
             if not user or not user.activo:
                 raise PreparationError('Iniciá sesión.',401)
-            if not privileged_credit_role(user.roll):
+            if not privileged_credit_role(user.roll) or (admin_only and str(user.roll or '').strip().casefold() not in {'administrador','admin'}):
                 raise PreparationError('Solo administradores y usuarios avanzados pueden cargar puntos sin pago.',403)
             total=self._lock(conn,user_id)
             previous=conn.execute(select(operaciones).where(operaciones.c.operacion_id==request_id).with_for_update()).mappings().first()
