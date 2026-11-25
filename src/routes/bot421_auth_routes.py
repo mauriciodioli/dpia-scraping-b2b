@@ -55,6 +55,7 @@ def send_challenge(redis, secret, mail_host, sender, key, email, resend, idem, s
         pipe.execute()
 
 
+@bot421_auth.post('/quote', defaults={'action': 'quote'})
 @bot421_auth.post('/workspace', defaults={'action': 'workspace'})
 @bot421_auth.post('/resources', defaults={'action': 'resources'})
 @bot421_auth.post('/script', defaults={'action': 'script'})
@@ -85,6 +86,8 @@ def delegate(action):
         required.add('idempotency_key')
     if action == 'resources':
         required.add('language')
+    if action == 'quote':
+        required.update(('duration','format','language','avatar_id','voice_id'))
     if action == 'script':
         required.update(('expected_revision', 'custom_script', 'instructions'))
     if action == 'start':
@@ -121,7 +124,7 @@ def delegate(action):
         prefix = 'dpia:bot421:video:' + scope
         grant = prefix + ':grant'
         challenge = prefix + ':code'
-        if action in ('workspace', 'resources', 'script'):
+        if action in ('workspace', 'resources', 'script', 'quote'):
             if not authorization(redis, grant):
                 return jsonify(error='verification_required'), 403
             if action == 'resources' and body['language'] not in ('es', 'en', 'it'):
