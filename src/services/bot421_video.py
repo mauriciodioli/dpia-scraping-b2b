@@ -31,6 +31,12 @@ def monetary_balance(user_id):
 
 
 def dispatch(action, owner, publication_id, body):
+    if action == 'billing_topup_quote':
+        from services.scraping_quota import topup_package
+        try:
+            return topup_package(body['amount_cents'])
+        except PreparationError as error:
+            return {'error': 'invalid_amount'}, error.status
     if action in ('billing', 'billing_credit'):
         from services.scraping_quota import Usuario, db
         user = db.session.get(Usuario, owner)
@@ -54,7 +60,8 @@ def dispatch(action, owner, publication_id, body):
                     'available':money(summary['available']), 'allocated':money(summary['initial']),
                     'consumed':money(summary['consumed']), 'reserved':money(summary['reserved']),
                     'movements':[{'id':r['operation_id'],'source':r['source'],'state':r['state'],
-                        'equivalent':money(r.get('amount',0) if r['source']=='recarga' else r['cost'])}
+                        'equivalent':money(r.get('amount',0) if r['source']=='recarga' else r['cost']),
+                        **({'paid_cents': r['paid_cents'], 'points': r['amount']} if 'paid_cents' in r else {})}
                         for r in summary['operations']], 'history_limit':30}
         except PreparationError as exc:
             return {'error':'billing_unavailable'}, exc.status

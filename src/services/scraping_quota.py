@@ -5,6 +5,7 @@ Separate metadata deliberately prevents db.create_all() from provisioning them.
 import hashlib
 import json
 from datetime import datetime, timezone
+from uuid import NAMESPACE_URL, uuid5
 from model.usuario import Usuario
 from sqlalchemy import Table, Column, MetaData, Integer, String, Text, DateTime, select, func, update, case
 from sqlalchemy.dialects.mysql import insert
@@ -24,6 +25,23 @@ operaciones = Table('pwa_scraping_operaciones', metadata,
     Column('actualizado_en', DateTime))
 HELD = ('reserved', 'dispatching', 'pending', 'consumed')
 POINT_COST = case((operaciones.c.origen == 'promocion', 5), (operaciones.c.origen == 'recarga', 0), else_=1)
+
+# Package totals are authoritative in cents. Per-point labels are informational.
+TOPUP_PACKAGES = {
+    499: ('base', 100, '0.0499'),
+    1299: ('exploratore', 300, '0.0433'),
+    2999: ('completo', 800, '0.03749'),
+}
+TOPUP_POLICY_REVISION = 1
+
+
+def topup_package(amount_cents):
+    if type(amount_cents) is not int or amount_cents not in TOPUP_PACKAGES:
+        raise PreparationError('Elegí un paquete de recarga válido.', 400)
+    package, points, rate = TOPUP_PACKAGES[amount_cents]
+    return {'package': package, 'amount_cents': amount_cents, 'currency': 'USD',
+            'points': points, 'usd_per_credit': rate, 'policy_revision': TOPUP_POLICY_REVISION}
+
 
 def self_topup_allowed(user_id):
     user=db.session.get(Usuario,user_id)
@@ -122,38 +140,72 @@ class MySQLScrapingQuota:
                 operaciones.c.creado_en.desc(), operaciones.c.operacion_id).limit(30)).all()
             reserved = sum(int(counts.get(state, 0)) for state in ('reserved', 'dispatching', 'pending'))
             consumed = int(counts.get('consumed', 0))
+            operations = []
+            for operation_id, source, state, result in rows:
+                movement = {'operation_id': operation_id, 'source': source, 'state': state,
+                            'cost': 0 if source == 'recarga' else 5 if source == 'promocion' else 1}
+                if source == 'recarga':
+                    credit = decode(result) or {}
+                    movement['amount'] = credit.get('credited_points', 0)
+                    if credit.get('currency') == 'USD' and type(credit.get('paid_cents')) is int:
+                        movement['paid_cents'] = credit['paid_cents']
+                operations.append(movement)
             return {'initial': total, 'available': max(0, total-reserved-consumed),
-                    'reserved': reserved, 'consumed': consumed,
-                    'operations': [{'operation_id': row[0], 'source': row[1], 'state': row[2], 'cost': 0 if row[1]=='recarga' else 5 if row[1]=='promocion' else 1,
-                                    **({'amount':(decode(row[3]) or {}).get('credited_points',0)} if row[1]=='recarga' else {})} for row in rows]}
+                    'reserved': reserved, 'consumed': consumed, 'operations': operations}
 
     def grant_points(self, user_id, amount, request_id, *, admin_only=False):
         """Role-authorized self-credit, atomic and idempotent; uses existing tables only."""
         if type(amount) is not int or amount != 6:
             raise PreparationError('La recarga autorizada es de 6 puntos.',400)
         digest=hashlib.sha256(json.dumps({'user_id':user_id,'amount':amount,'action':'self_credit'},sort_keys=True).encode()).hexdigest()
-        now=datetime.now(timezone.utc).replace(tzinfo=None)
         with self._engine().begin() as conn:
             user=conn.execute(select(Usuario.activo,Usuario.roll).where(Usuario.id==user_id).with_for_update()).first()
             if not user or not user.activo:
                 raise PreparationError('Iniciá sesión.',401)
             if not privileged_credit_role(user.roll) or (admin_only and str(user.roll or '').strip().casefold() not in {'administrador','admin'}):
                 raise PreparationError('Solo administradores y usuarios avanzados pueden cargar puntos sin pago.',403)
-            total=self._lock(conn,user_id)
-            previous=conn.execute(select(operaciones).where(operaciones.c.operacion_id==request_id).with_for_update()).mappings().first()
-            if previous:
-                if previous['usuario_id']!=user_id or previous['origen']!='recarga' or previous['solicitud_hash']!=digest:
-                    raise PreparationError('El identificador de recarga ya está utilizado.',409)
-                return {'credited_points':amount,'reused':True}
-            if total>2147483647-amount:
-                raise PreparationError('La cantidad supera el límite del saldo.',400)
-            conn.execute(update(cupos).where(cupos.c.usuario_id==user_id).values(ejecuciones_habilitadas=total+amount))
-            # released means no hold or debit; source=recarga identifies the credit entry.
-            conn.execute(operaciones.insert().values(operacion_id=request_id,usuario_id=user_id,
-                origen='recarga',estado='released',solicitud_hash=digest,
-                contexto_json=json.dumps({'action':'self_credit','actor_user_id':user_id,'amount':amount}),
-                resultado_json=json.dumps({'credited_points':amount}),creado_en=now,actualizado_en=now))
-            return {'credited_points':amount,'reused':False}
+            return self._apply_credit(conn, user_id, amount, request_id, digest,
+                                      {'action': 'self_credit', 'actor_user_id': user_id, 'amount': amount})
+
+    def credit_verified_payment(self, user_id, payment):
+        package = topup_package(payment['expected_cents'])
+        if (payment['paid_cents'] != package['amount_cents']
+                or any(payment[key] != package[key] for key in
+                       ('points', 'currency', 'policy_revision', 'usd_per_credit'))):
+            raise PreparationError('El pago no coincide con el paquete cotizado.', 409)
+        reference = str(uuid5(NAMESPACE_URL, f"dpia:topup:{payment['provider']}:{payment['capture_id']}"))
+        details = {**payment, 'action': 'paid_topup', 'package': package['package']}
+        digest = hashlib.sha256(json.dumps({'user_id': user_id, **details}, sort_keys=True).encode()).hexdigest()
+        with self._engine().begin() as conn:
+            user = conn.execute(select(Usuario.activo).where(Usuario.id == user_id)
+                                .with_for_update()).scalar_one_or_none()
+            if user is None:
+                raise PreparationError('Titular inexistente.', 404)
+            return self._apply_credit(conn, user_id, package['points'], reference, digest, details)
+
+    def _apply_credit(self, conn, user_id, amount, request_id, digest, details):
+        total = self._lock(conn, user_id)
+        previous = conn.execute(select(operaciones).where(operaciones.c.operacion_id == request_id)
+                                .with_for_update()).mappings().first()
+        if previous:
+            if (previous['usuario_id'] != user_id or previous['origen'] != 'recarga'
+                    or previous['solicitud_hash'] != digest):
+                raise PreparationError('El identificador de recarga ya está utilizado.', 409)
+            return {'credited_points': amount, 'reused': True}
+        if total > 2147483647 - amount:
+            raise PreparationError('La cantidad supera el límite del saldo.', 400)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        conn.execute(update(cupos).where(cupos.c.usuario_id == user_id)
+                     .values(ejecuciones_habilitadas=total + amount))
+        # A credit movement has no hold or debit.
+        result = {'credited_points': amount}
+        if details['action'] == 'paid_topup':
+            result.update(paid_cents=details['paid_cents'], currency=details['currency'])
+        conn.execute(operaciones.insert().values(
+            operacion_id=request_id, usuario_id=user_id, origen='recarga', estado='released',
+            solicitud_hash=digest, contexto_json=json.dumps(details),
+            resultado_json=json.dumps(result), creado_en=now, actualizado_en=now))
+        return {'credited_points': amount, 'reused': False}
 
     def grant_test(self, user_id):
         with self._engine().begin() as conn:

@@ -55,6 +55,8 @@ def send_challenge(redis, secret, mail_host, sender, key, email, resend, idem, s
         pipe.execute()
 
 
+@bot421_auth.post('/billing_topup_settle', defaults={'action': 'billing_topup_settle'})
+@bot421_auth.post('/billing_topup_quote', defaults={'action': 'billing_topup_quote'})
 @bot421_auth.post('/billing_credit', defaults={'action': 'billing_credit'})
 @bot421_auth.post('/billing', defaults={'action': 'billing'})
 @bot421_auth.post('/quote', defaults={'action': 'quote'})
@@ -83,9 +85,13 @@ def delegate(action):
         return jsonify(error='invalid_signature'), 401
 
     body = request.get_json(silent=True)
+    if action == 'billing_topup_settle':
+        return settle_topup(body)
     required = {'usuario_id', 'publicacion_id', 'session_ref', 'jwt_exp'}
     if action in ('start', 'verify', 'billing_credit'):
         required.add('idempotency_key')
+    if action == 'billing_topup_quote':
+        required.add('amount_cents')
     if action == 'resources':
         required.add('language')
     if action == 'quote':
@@ -126,7 +132,7 @@ def delegate(action):
         prefix = 'dpia:bot421:video:' + scope
         grant = prefix + ':grant'
         challenge = prefix + ':code'
-        if action in ('workspace', 'resources', 'script', 'quote', 'billing', 'billing_credit'):
+        if action in ('workspace', 'resources', 'script', 'quote', 'billing', 'billing_credit', 'billing_topup_quote'):
             if not authorization(redis, grant):
                 return jsonify(error='verification_required'), 403
             if action == 'resources' and body['language'] not in ('es', 'en', 'it'):
@@ -181,4 +187,35 @@ def delegate(action):
             return jsonify(result), status
     except Exception as exc:
         current_app.logger.warning('BOT421 delegated authentication unavailable: %s', type(exc).__name__)
+        return jsonify(error='unavailable'), 503
+
+
+def settle_topup(body):
+    # The shared BOT421 service HMAC above authenticates the provider verifier.
+    # Settlement must be possible after the payer's browser session has ended.
+    from sqlalchemy.exc import SQLAlchemyError
+    from services.query_preparation import PreparationError
+    from services.scraping_quota import MySQLScrapingQuota
+
+    if os.environ.get('DPIA_TOPUP_SANDBOX_ENABLED') != '1':
+        return jsonify(error='unavailable'), 503
+    required = {'usuario_id', 'order_id', 'capture_id', 'expected_cents', 'paid_cents',
+                'currency', 'points', 'usd_per_credit', 'policy_revision', 'provider'}
+    if (not isinstance(body, dict) or set(body) != required
+            or any(type(body[key]) is not int or not 0 < body[key] <= 2147483647 for key in
+                   ('usuario_id', 'expected_cents', 'paid_cents', 'points', 'policy_revision'))
+            or body['provider'] not in ('stripe', 'paypal', 'mercadopago')
+            or not isinstance(body['usd_per_credit'], str)
+            or not re.fullmatch(r'[0-9]{1,12}(?:[.][0-9]{1,18})?', body['usd_per_credit'])
+            or any(not isinstance(body[key], str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,120}', body[key])
+                   for key in ('order_id', 'capture_id'))):
+        return jsonify(error='invalid_request'), 400
+    quota = current_app.extensions.get('scraping_quota') or MySQLScrapingQuota()
+    try:
+        return jsonify(quota.credit_verified_payment(body['usuario_id'],
+                       {key: body[key] for key in required - {'usuario_id'}}))
+    except PreparationError as error:
+        return jsonify(error='credit_failed'), error.status
+    except SQLAlchemyError:
+        current_app.logger.warning('Service top-up settlement unavailable')
         return jsonify(error='unavailable'), 503
