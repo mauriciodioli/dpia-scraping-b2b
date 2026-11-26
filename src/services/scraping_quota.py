@@ -4,7 +4,8 @@ Separate metadata deliberately prevents db.create_all() from provisioning them.
 """
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from uuid import NAMESPACE_URL, uuid5
 from model.usuario import Usuario
 from sqlalchemy import Table, Column, MetaData, Integer, String, Text, DateTime, select, func, update, case
@@ -183,7 +184,52 @@ class MySQLScrapingQuota:
                 raise PreparationError('Titular inexistente.', 404)
             return self._apply_credit(conn, user_id, package['points'], reference, digest, details)
 
+    def _lock_credit_agent(self, conn, user_id):
+        # Match the engine lock order: legacy agent before shared quota.
+        from services.agent_configuration import agentes
+        return conn.execute(select(agentes).where(
+            agentes.c.usuario_id == user_id).with_for_update()).mappings().first()
+
+    def _sync_credit_budget(self, conn, agent, total, now):
+        if not agent:
+            return
+        from services.agent_configuration import agentes
+        config = dict(agent['configuracion'] or {})
+        if config.get('_deleted_at'):
+            return
+        binding = (config.get('engine_binding') or {}).get('id')
+        zone = agent['zona_horaria']
+        day = now.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(zone)).date()
+        if agent['periodo_presupuesto'] == 'SEMANA':
+            start = day - timedelta(days=day.weekday())
+            period = f'week:{start.isoformat()}:{zone}'
+        elif agent['periodo_presupuesto'] == 'MES':
+            period = f'month:{day.replace(day=1).isoformat()}:{zone}'
+        else:
+            raise PreparationError('Período de presupuesto inválido.', 409)
+        rows = conn.execute(select(operaciones.c.origen, operaciones.c.contexto_json).where(
+            operaciones.c.usuario_id == agent['usuario_id'],
+            operaciones.c.estado.in_(HELD)).with_for_update()).all()
+        used = committed = 0
+        for source, raw in rows:
+            cost = 0 if source == 'recarga' else 5 if source == 'promocion' else 1
+            used += cost
+            try:
+                ctx = decode(raw)
+            except (ValueError, TypeError):
+                ctx = None
+            if binding and isinstance(ctx, dict) and ctx.get('agent_id') == binding and ctx.get('period') == period:
+                committed += cost
+        budget = max(0, total - used) + committed
+        if agent['presupuesto_puntos_periodo'] != budget or config.get('points') != budget:
+            config['points'] = budget
+            conn.execute(update(agentes).where(agentes.c.id == agent['id'],
+                agentes.c.usuario_id == agent['usuario_id']).values(
+                presupuesto_puntos_periodo=budget, configuracion=config,
+                version_config=agent['version_config'] + 1, actualizado_en=now))
+
     def _apply_credit(self, conn, user_id, amount, request_id, digest, details):
+        agent = self._lock_credit_agent(conn, user_id)
         total = self._lock(conn, user_id)
         previous = conn.execute(select(operaciones).where(operaciones.c.operacion_id == request_id)
                                 .with_for_update()).mappings().first()
@@ -197,6 +243,7 @@ class MySQLScrapingQuota:
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         conn.execute(update(cupos).where(cupos.c.usuario_id == user_id)
                      .values(ejecuciones_habilitadas=total + amount))
+        self._sync_credit_budget(conn, agent, total + amount, now)
         # A credit movement has no hold or debit.
         result = {'credited_points': amount}
         if details['action'] == 'paid_topup':
