@@ -59,6 +59,7 @@ def send_challenge(redis, secret, mail_host, sender, key, email, resend, idem, s
 @bot421_auth.post('/billing_topup_quote', defaults={'action': 'billing_topup_quote'})
 @bot421_auth.post('/billing_credit', defaults={'action': 'billing_credit'})
 @bot421_auth.post('/billing', defaults={'action': 'billing'})
+@bot421_auth.post('/generate', defaults={'action': 'generate'})
 @bot421_auth.post('/quote', defaults={'action': 'quote'})
 @bot421_auth.post('/workspace', defaults={'action': 'workspace'})
 @bot421_auth.post('/resources', defaults={'action': 'resources'})
@@ -76,7 +77,7 @@ def delegate(action):
     now = int(time.time())
     if not re.fullmatch(r'[0-9]{1,12}', stamp) or abs(now - int(stamp)) > 60 or not canonical_uuid(nonce):
         return jsonify(error='invalid_signature'), 401
-    if not request.is_json or not 0 < (request.content_length or 0) <= (60000 if action == 'script' else 2048):
+    if not request.is_json or not 0 < (request.content_length or 0) <= (60000 if action in ('script', 'generate') else 2048):
         return jsonify(error='invalid_request'), 400
     raw = request.get_data(cache=True)
     signed = '\n'.join(('POST', request.path, stamp, nonce)).encode() + b'\n' + raw
@@ -88,7 +89,7 @@ def delegate(action):
     if action == 'billing_topup_settle':
         return settle_topup(body)
     required = {'usuario_id', 'publicacion_id', 'session_ref', 'jwt_exp'}
-    if action in ('start', 'verify', 'billing_credit'):
+    if action in ('start', 'verify', 'billing_credit', 'generate'):
         required.add('idempotency_key')
     if action == 'billing_topup_quote' and isinstance(body, dict) and 'amount_cents' in body:
         required.add('amount_cents')
@@ -96,6 +97,8 @@ def delegate(action):
         required.add('language')
     if action == 'quote':
         required.update(('duration','format','language','avatar_id','voice_id'))
+    if action == 'generate':
+        required.update(('duration','format','language','avatar_id','voice_id','background','expected_revision','custom_script','instructions'))
     if action == 'script':
         required.update(('expected_revision', 'custom_script', 'instructions'))
     if action == 'start':
@@ -106,7 +109,7 @@ def delegate(action):
         return jsonify(error='invalid_request'), 400
     if (any(type(body[key]) is not int or body[key] <= 0 for key in ('usuario_id', 'publicacion_id', 'jwt_exp'))
             or not isinstance(body['session_ref'], str) or not re.fullmatch(r'[a-f0-9]{64}', body['session_ref'])
-            or (action in ('start', 'verify', 'billing_credit') and not canonical_uuid(body['idempotency_key']))
+            or (action in ('start', 'verify', 'billing_credit', 'generate') and not canonical_uuid(body['idempotency_key']))
             or (action == 'start' and type(body['resend']) is not bool)
             or (action == 'verify' and (not isinstance(body['code'], str) or not re.fullmatch(r'[0-9]{8}', body['code'])))):
         return jsonify(error='invalid_request'), 400
@@ -132,7 +135,7 @@ def delegate(action):
         prefix = 'dpia:bot421:video:' + scope
         grant = prefix + ':grant'
         challenge = prefix + ':code'
-        if action in ('workspace', 'resources', 'script', 'quote', 'billing', 'billing_credit', 'billing_topup_quote'):
+        if action in ('workspace', 'resources', 'script', 'quote', 'billing', 'billing_credit', 'billing_topup_quote', 'generate'):
             if not authorization(redis, grant):
                 return jsonify(error='verification_required'), 403
             if action == 'resources' and body['language'] not in ('es', 'en', 'it'):
