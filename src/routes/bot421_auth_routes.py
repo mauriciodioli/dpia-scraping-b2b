@@ -197,8 +197,6 @@ def settle_topup(body):
     from services.query_preparation import PreparationError
     from services.scraping_quota import MySQLScrapingQuota
 
-    if os.environ.get('DPIA_TOPUP_SANDBOX_ENABLED') != '1':
-        return jsonify(error='unavailable'), 503
     required = {'usuario_id', 'order_id', 'capture_id', 'expected_cents', 'paid_cents',
                 'currency', 'points', 'usd_per_credit', 'policy_revision', 'provider'}
     if (not isinstance(body, dict) or set(body) != required
