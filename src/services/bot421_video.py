@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation, ROUND_DOWN
 
 from flask import current_app
 
-from services.agent_activation import video_resources, video_quote
+from services.agent_activation import video_resources, video_quote, schedule_immediate_task
 from services.agent_configuration import AgentConfigurationStore
 from services.query_preparation import PreparationError
 from services.scraping_quota import MySQLScrapingQuota
@@ -71,6 +71,51 @@ def dispatch(action, owner, publication_id, body):
     try:
         task = store.prepare_publication_video(owner, publication_id)
         prefs = VideoTaskPreferences()
+        if action == 'generate':
+            from services.video_task_preferences import validate
+            from sqlalchemy import update
+            from datetime import datetime, timezone
+            from services.agent_configuration import bad
+            from decimal import ROUND_CEILING
+            configuration = {k: body[k] for k in ('duration','format','language','avatar_id','voice_id')}
+            if (type(body['duration']) is not int or body['duration'] not in (15,30,60)
+                    or body['format'] not in ('16:9','9:16','1:1') or body['language'] not in ('es','en','it')
+                    or type(body['expected_revision']) is not int):
+                bad('Configuración inválida.', 422)
+            script = validate('script', {k:body[k] for k in ('custom_script','instructions')})
+            if not script['custom_script'].strip():
+                bad('Ingresá un guion.', 422)
+            production = validate('production', {'duration_seconds':body['duration'],
+                'format':body['format'], 'language':body['language'], 'avatar_id':body['avatar_id'],
+                'voice_id':body['voice_id'], 'background':body['background'], 'automatic_production':True})
+            quote = video_quote(owner, task['agent_id'], task['id'], configuration)
+            points = int((Decimal(quote['amount']) / Decimal(quote['usd_per_credit'])).to_integral_value(rounding=ROUND_CEILING))
+            quota = current_app.extensions.get('scraping_quota') or MySQLScrapingQuota()
+            production['budget_credits'] = points
+            with prefs.repository.transaction(owner, task['agent_id']) as (conn, tables, agent):
+                row = next((r for r in prefs.repository.tasks(conn, tables, task['agent_id']) if r['id']==task['id']), None)
+                if not row or row['tipo'] != 'VIDEO_GENERAR':
+                    bad('Tarea no disponible.', 404)
+                params = dict(row['parametros'] or {})
+                revision = params.get('_configuration_revision', 1)
+                previous = params.get('_publication_execution')
+                if previous and previous.get('key') == body['idempotency_key']:
+                    if previous.get('configuration') != {**configuration,'background':body['background'],'script':script}:
+                        bad('Solicitud duplicada con otra configuración.', 409)
+                else:
+                    if revision != body['expected_revision']:
+                        bad('La configuración cambió.', 409)
+                    if quota.credits(owner)['available'] < points:
+                        bad('Saldo insuficiente.', 402)
+                    video = dict(params.get('video') or {})
+                    video.update(script=script, production=production)
+                    params.update(video=video, _configuration_revision=revision+1,
+                        _publication_execution={'key':body['idempotency_key'],
+                            'configuration':{**configuration,'background':body['background'],'script':script}})
+                    conn.execute(update(tables['agente_tareas']).where(tables['agente_tareas'].c.id==task['id'])
+                        .values(parametros=params, habilitada=True, actualizado_en=datetime.now(timezone.utc).replace(tzinfo=None)))
+            result = schedule_immediate_task(owner, task['agent_id'], task['id'], body['idempotency_key'], existing=True)
+            return {'state':'SCHEDULED','task_id':task['id'],'schedule':result['schedule'],'replayed':result['replayed']}
         if action == 'quote':
             quote = video_quote(owner, task['agent_id'], task['id'], {k:body[k] for k in ('duration','format','language','avatar_id','voice_id')})
             quota = current_app.extensions.get('scraping_quota') or MySQLScrapingQuota()
