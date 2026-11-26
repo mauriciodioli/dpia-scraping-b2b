@@ -406,7 +406,7 @@ class AgentConfigurationStore:
                 from services.video_task_preferences import PRODUCTION_DEFAULTS, SCRIPT_DEFAULTS
                 task_id = conn.execute(insert(table).values(
                     agente_id=agent['id'], tipo='VIDEO_GENERAR', nombre='Portada DPIA #' + str(publication_id),
-                    habilitada=False, parametros={'schema_version': 2, 'source': source,
+                    habilitada=True, parametros={'schema_version': 2, 'source': source,
                         'video': {'script': SCRIPT_DEFAULTS, 'production': {**PRODUCTION_DEFAULTS, 'language': language}}},
                     creado_en=now, actualizado_en=now,
                 )).inserted_primary_key[0]
@@ -463,7 +463,7 @@ class AgentConfigurationStore:
                 existing = next((row for row in children if not (row['parametros'] or {}).get('_deleted_at')), None)
                 if existing:
                     return {'id': existing['id'], 'agent_id': agent['id'], 'parent_task_id': parent_task_id,
-                            'type': 'VIDEO_GENERAR', 'schedule_pending': True, 'execution_enabled': False}
+                            'type': 'VIDEO_GENERAR', 'schedule_pending': True, 'execution_enabled': bool(existing['habilitada'])}
             params = dict(parent['parametros'] or {})
             params.pop('identity_hash', None)
             params.pop('immediate_request_id', None)
@@ -476,7 +476,7 @@ class AgentConfigurationStore:
                             'automatic_production':not publication_source}),
                 parent_task_id=parent_task_id)
             values = dict(agente_id=agent['id'], tipo='VIDEO_GENERAR', nombre=name,
-                habilitada=False, parametros=params, creado_en=now, actualizado_en=now)
+                habilitada=publication_source, parametros=params, creado_en=now, actualizado_en=now)
             if 'ae_agent_id' in table.c:
                 values['ae_agent_id'] = parent.get('ae_agent_id')
             child_id = conn.execute(insert(table).values(**values)).inserted_primary_key[0]
