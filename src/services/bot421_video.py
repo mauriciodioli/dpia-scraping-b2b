@@ -32,7 +32,9 @@ def monetary_balance(user_id):
 
 def dispatch(action, owner, publication_id, body):
     if action == 'billing_topup_quote':
-        from services.scraping_quota import topup_package
+        from services.scraping_quota import TOPUP_PACKAGES, topup_package
+        if body.get('amount_cents') is None:
+            return {'packages': [topup_package(cents) for cents in TOPUP_PACKAGES]}
         try:
             return topup_package(body['amount_cents'])
         except PreparationError as error:

@@ -90,7 +90,7 @@ def delegate(action):
     required = {'usuario_id', 'publicacion_id', 'session_ref', 'jwt_exp'}
     if action in ('start', 'verify', 'billing_credit'):
         required.add('idempotency_key')
-    if action == 'billing_topup_quote':
+    if action == 'billing_topup_quote' and isinstance(body, dict) and 'amount_cents' in body:
         required.add('amount_cents')
     if action == 'resources':
         required.add('language')
