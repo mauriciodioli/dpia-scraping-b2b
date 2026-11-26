@@ -31,6 +31,16 @@ def monetary_balance(user_id):
 
 
 def dispatch(action, owner, publication_id, body):
+    if action == 'billing_topup_quote':
+        from services.agent_activation import billing_policy
+        from services.scraping_quota import paid_topup_points
+        try:
+            rate, revision = billing_policy(owner)
+            return {'currency': 'USD', 'amount_cents': body['amount_cents'],
+                    'points': paid_topup_points(body['amount_cents'], rate),
+                    'usd_per_credit': format(rate, 'f'), 'policy_revision': revision}
+        except PreparationError as error:
+            return {'error': 'invalid_amount' if error.status == 400 else 'unavailable'}, error.status
     if action in ('billing', 'billing_credit'):
         from services.scraping_quota import Usuario, db
         user = db.session.get(Usuario, owner)
@@ -47,14 +57,16 @@ def dispatch(action, owner, publication_id, body):
         try:
             rate, revision = billing_policy(owner)
             quota = current_app.extensions.get('scraping_quota') or MySQLScrapingQuota()
-            summary = quota.credits(owner)
+            summary = quota.credits(owner, group_video=True)
             money = lambda n: str((Decimal(n)*rate).quantize(Decimal('0.01'), rounding=ROUND_DOWN))
             return {'currency':'USD','policy_version':str(revision),
                     'can_virtual_credit':can_credit, 'virtual_credit_amount':money(6),
                     'available':money(summary['available']), 'allocated':money(summary['initial']),
                     'consumed':money(summary['consumed']), 'reserved':money(summary['reserved']),
                     'movements':[{'id':r['operation_id'],'source':r['source'],'state':r['state'],
-                        'equivalent':money(r.get('amount',0) if r['source']=='recarga' else r['cost'])}
+                        'equivalent':money(r.get('amount',0) if r['source']=='recarga' else r['cost']),
+                        **({'video_units': r['video_units']} if 'video_units' in r else {}),
+                        **({'paid_cents': r['paid_cents'], 'points': r['amount']} if 'paid_cents' in r else {})}
                         for r in summary['operations']], 'history_limit':30}
         except PreparationError as exc:
             return {'error':'billing_unavailable'}, exc.status
