@@ -5,9 +5,6 @@ Separate metadata deliberately prevents db.create_all() from provisioning them.
 import hashlib
 import json
 from datetime import datetime, timezone
-from decimal import Decimal
-from fractions import Fraction
-from uuid import NAMESPACE_URL, uuid5
 from model.usuario import Usuario
 from sqlalchemy import Table, Column, MetaData, Integer, String, Text, DateTime, select, func, update, case
 from sqlalchemy.dialects.mysql import insert
@@ -53,15 +50,6 @@ def decode(value):
 def fingerprint(prepared):
     payload = {**prepared, 'context': {k: v for k, v in prepared['context'].items() if k != 'fecha'}}
     return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-
-
-def paid_topup_points(cents, rate):
-    if type(cents) is not int or not 50 <= cents <= 99999999 or not isinstance(rate, Decimal) or not rate.is_finite() or rate <= 0:
-        raise PreparationError('Importe inválido.', 400)
-    points = Fraction(cents, 100) / Fraction(rate)
-    if points.denominator != 1 or not 0 < points.numerator <= 2147483647:
-        raise PreparationError('El importe debe corresponder a puntos enteros.', 400)
-    return points.numerator
 
 
 class MySQLScrapingQuota:
@@ -123,108 +111,49 @@ class MySQLScrapingQuota:
                 operaciones.c.usuario_id == user_id).values(**values))
             return True
 
-    def credits(self, user_id, *, group_video=False):
+    def credits(self, user_id):
         with self._engine().begin() as conn:
             total = self._lock(conn, user_id)
             counts = dict(conn.execute(select(operaciones.c.estado, func.sum(POINT_COST)).where(
                 operaciones.c.usuario_id == user_id).group_by(operaciones.c.estado)).all())
-            owner = operaciones.c.usuario_id == user_id
-            source = operaciones.c.origen
-            state = operaciones.c.estado
-            raw_context = operaciones.c.contexto_json
-            credit_result = case((source == 'recarga', operaciones.c.resultado_json), else_=None)
-            credit_context = case((source == 'recarga', raw_context), else_=None)
-            if group_video:
-                video_json = case((source == 'video', case((func.json_valid(raw_context) == 1, raw_context), else_='{}')), else_='{}')
-                video_id = func.json_extract(video_json, '$.video_operation')
-                if conn.dialect.name == 'mysql':
-                    video_id = func.json_unquote(video_id)
-                key = func.coalesce(video_id, operaciones.c.operacion_id)
-                rows = conn.execute(select(
-                    key, source,
-                    func.sum(case((state.in_(('reserved', 'dispatching', 'pending')), 1), else_=0)),
-                    func.sum(case((state == 'consumed', 1), else_=0)),
-                    func.sum(case((state == 'released', 1), else_=0)),
-                    func.max(state), func.max(credit_result), func.max(credit_context),
-                ).where(owner).group_by(source, key).order_by(
-                    func.max(operaciones.c.creado_en).desc(), key).limit(30)).all()
-            else:
-                rows = conn.execute(select(operaciones.c.operacion_id, source, state, credit_result, credit_context)
-                    .where(owner).order_by(operaciones.c.creado_en.desc(), operaciones.c.operacion_id).limit(30)).all()
+            rows = conn.execute(select(operaciones.c.operacion_id, operaciones.c.origen, operaciones.c.estado,
+                case((operaciones.c.origen=='recarga',operaciones.c.resultado_json),else_=None)
+                ).where(operaciones.c.usuario_id == user_id).order_by(
+                operaciones.c.creado_en.desc(), operaciones.c.operacion_id).limit(30)).all()
             reserved = sum(int(counts.get(state, 0)) for state in ('reserved', 'dispatching', 'pending'))
             consumed = int(counts.get('consumed', 0))
-            operations = []
-            for row in rows:
-                if group_video:
-                    operation_id, source, held, used, released, state, result, raw_context = row
-                else:
-                    operation_id, source, state, result, raw_context = row
-                movement = {'operation_id': operation_id, 'source': source, 'state': state,
-                            'cost': 0 if source == 'recarga' else 5 if source == 'promocion' else 1}
-                if group_video and source == 'video':
-                    movement.update(cost=int(held + used), state='pending' if held else 'consumed' if used else 'released',
-                                    video_units={'reserved': int(held), 'consumed': int(used), 'released': int(released)})
-                if source == 'recarga':
-                    movement['amount'] = (decode(result) or {}).get('credited_points', 0)
-                    try:
-                        context = decode(raw_context)
-                    except ValueError:
-                        context = None
-                    if (isinstance(context, dict) and context.get('action') == 'paid_topup'
-                            and context.get('currency') == 'USD' and type(context.get('paid_cents')) is int):
-                        movement['paid_cents'] = context['paid_cents']
-                operations.append(movement)
             return {'initial': total, 'available': max(0, total-reserved-consumed),
-                    'reserved': reserved, 'consumed': consumed, 'operations': operations}
+                    'reserved': reserved, 'consumed': consumed,
+                    'operations': [{'operation_id': row[0], 'source': row[1], 'state': row[2], 'cost': 0 if row[1]=='recarga' else 5 if row[1]=='promocion' else 1,
+                                    **({'amount':(decode(row[3]) or {}).get('credited_points',0)} if row[1]=='recarga' else {})} for row in rows]}
 
     def grant_points(self, user_id, amount, request_id, *, admin_only=False):
         """Role-authorized self-credit, atomic and idempotent; uses existing tables only."""
         if type(amount) is not int or amount != 6:
             raise PreparationError('La recarga autorizada es de 6 puntos.',400)
         digest=hashlib.sha256(json.dumps({'user_id':user_id,'amount':amount,'action':'self_credit'},sort_keys=True).encode()).hexdigest()
+        now=datetime.now(timezone.utc).replace(tzinfo=None)
         with self._engine().begin() as conn:
             user=conn.execute(select(Usuario.activo,Usuario.roll).where(Usuario.id==user_id).with_for_update()).first()
             if not user or not user.activo:
                 raise PreparationError('Iniciá sesión.',401)
             if not privileged_credit_role(user.roll) or (admin_only and str(user.roll or '').strip().casefold() not in {'administrador','admin'}):
                 raise PreparationError('Solo administradores y usuarios avanzados pueden cargar puntos sin pago.',403)
-            return self._apply_credit(conn, user_id, amount, request_id, digest,
-                                      {'action': 'self_credit', 'actor_user_id': user_id, 'amount': amount})
-
-    def credit_verified_payment(self, user_id, payment):
-        points = paid_topup_points(payment['paid_cents'], Decimal(payment['usd_per_credit']))
-        if (points != payment['points'] or payment['paid_cents'] != payment['expected_cents']
-                or payment['currency'] != 'USD'):
-            raise PreparationError('El pago no coincide con la cotización.', 409)
-        reference = str(uuid5(NAMESPACE_URL, f"dpia:topup:{payment['provider']}:{payment['capture_id']}"))
-        details = {**payment, 'action': 'paid_topup'}
-        digest = hashlib.sha256(json.dumps({'user_id': user_id, **details}, sort_keys=True).encode()).hexdigest()
-        with self._engine().begin() as conn:
-            user = conn.execute(select(Usuario.activo).where(Usuario.id == user_id)
-                                .with_for_update()).scalar_one_or_none()
-            if user is None:
-                raise PreparationError('Titular inexistente.', 404)
-            return self._apply_credit(conn, user_id, points, reference, digest, details)
-
-    def _apply_credit(self, conn, user_id, amount, request_id, digest, details):
-        total = self._lock(conn, user_id)
-        previous = conn.execute(select(operaciones).where(operaciones.c.operacion_id == request_id)
-                                .with_for_update()).mappings().first()
-        if previous:
-            if (previous['usuario_id'] != user_id or previous['origen'] != 'recarga'
-                    or previous['solicitud_hash'] != digest):
-                raise PreparationError('El identificador de recarga ya está utilizado.', 409)
-            return {'credited_points': amount, 'reused': True}
-        if total > 2147483647 - amount:
-            raise PreparationError('La cantidad supera el límite del saldo.', 400)
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        conn.execute(update(cupos).where(cupos.c.usuario_id == user_id)
-                     .values(ejecuciones_habilitadas=total + amount))
-        conn.execute(operaciones.insert().values(
-            operacion_id=request_id, usuario_id=user_id, origen='recarga', estado='released',
-            solicitud_hash=digest, contexto_json=json.dumps(details),
-            resultado_json=json.dumps({'credited_points': amount}), creado_en=now, actualizado_en=now))
-        return {'credited_points': amount, 'reused': False}
+            total=self._lock(conn,user_id)
+            previous=conn.execute(select(operaciones).where(operaciones.c.operacion_id==request_id).with_for_update()).mappings().first()
+            if previous:
+                if previous['usuario_id']!=user_id or previous['origen']!='recarga' or previous['solicitud_hash']!=digest:
+                    raise PreparationError('El identificador de recarga ya está utilizado.',409)
+                return {'credited_points':amount,'reused':True}
+            if total>2147483647-amount:
+                raise PreparationError('La cantidad supera el límite del saldo.',400)
+            conn.execute(update(cupos).where(cupos.c.usuario_id==user_id).values(ejecuciones_habilitadas=total+amount))
+            # released means no hold or debit; source=recarga identifies the credit entry.
+            conn.execute(operaciones.insert().values(operacion_id=request_id,usuario_id=user_id,
+                origen='recarga',estado='released',solicitud_hash=digest,
+                contexto_json=json.dumps({'action':'self_credit','actor_user_id':user_id,'amount':amount}),
+                resultado_json=json.dumps({'credited_points':amount}),creado_en=now,actualizado_en=now))
+            return {'credited_points':amount,'reused':False}
 
     def grant_test(self, user_id):
         with self._engine().begin() as conn:
