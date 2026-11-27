@@ -67,6 +67,8 @@ def dispatch(action, owner, publication_id, body):
                         for r in summary['operations']], 'history_limit':30}
         except PreparationError as exc:
             return {'error':'billing_unavailable'}, exc.status
+    if action == 'generation_status':
+        return generation_status(owner, publication_id)
     store = current_app.extensions.get('agent_configuration_store') or AgentConfigurationStore()
     try:
         task = store.prepare_publication_video(owner, publication_id)
@@ -141,3 +143,50 @@ def dispatch(action, owner, publication_id, body):
                 'balance': monetary_balance(owner)}
     except PreparationError as exc:
         return {'error': 'video_operation_unavailable', 'message': str(exc)}, exc.status
+
+
+def generation_status(owner, publication_id):
+    """Read the exact latest publication request, never a recurring task's latest job."""
+    from uuid import uuid5, NAMESPACE_URL
+    from sqlalchemy import text
+    from utils.db import db
+    with db.engine.connect() as conn:
+        row = conn.execute(text("""
+            SELECT t.id, t.parametros
+            FROM agente_tareas t JOIN agentes a ON a.id=t.agente_id
+            WHERE a.usuario_id=:owner AND t.tipo='VIDEO_GENERAR'
+              AND JSON_UNQUOTE(JSON_EXTRACT(t.parametros,'$.source.publication_id'))=:publication
+            ORDER BY t.id DESC LIMIT 1
+        """), dict(owner=owner, publication=str(publication_id))).mappings().first()
+        import json
+        params = row['parametros'] if row else {}
+        if isinstance(params, str):
+            params = json.loads(params)
+        key = (params.get('_publication_execution') or {}).get('key')
+        if not key:
+            return {'state':'IDLE'}
+        schedule = str(uuid5(NAMESPACE_URL, 'immediate-task:'+str(owner)+':'+key))
+        run = conn.execute(text("""
+            SELECT j.id, j.state, j.error_code
+            FROM ae_schedules s LEFT JOIN ae_jobs j
+              ON j.schedule_id=s.id AND j.owner_id=s.owner_id
+              AND j.legacy_task_id=s.legacy_task_id AND j.agent_id=s.agent_id
+            WHERE s.id=:schedule AND s.owner_id=:owner AND s.legacy_task_id=:task
+            ORDER BY j.created_at DESC LIMIT 1
+        """), dict(schedule=schedule, owner=owner, task=row['id'])).mappings().first()
+        if run is None:
+            return {'state':'UNCONFIRMED','schedule_id':schedule}
+        result = {'schedule_id':schedule,'job_id':run['id'],'state':run['state'] or 'SCHEDULED'}
+        if run['error_code']:
+            result['reason_code'] = run['error_code']
+        if run['state'] == 'DELIVERED':
+            payload = conn.execute(text("""
+                SELECT payload FROM ae_results WHERE owner_id=:owner AND job_id=:job
+                ORDER BY version DESC LIMIT 1
+            """), dict(owner=owner, job=run['id'])).scalar()
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            video = (payload or {}).get('video') or {}
+            if video.get('state') == 'COMPLETED' and video.get('url'):
+                result.update(state='COMPLETED', video_url=video['url'])
+        return result
