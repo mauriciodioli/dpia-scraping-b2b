@@ -1,5 +1,6 @@
 """Owner-scoped workspace adapter for the verified BOT421 publication."""
 
+import json
 import os
 import re
 from decimal import Decimal, InvalidOperation, ROUND_DOWN
@@ -158,7 +159,6 @@ def generation_status(owner, publication_id):
               AND JSON_UNQUOTE(JSON_EXTRACT(t.parametros,'$.source.publication_id'))=:publication
             ORDER BY t.id DESC LIMIT 1
         """), dict(owner=owner, publication=str(publication_id))).mappings().first()
-        import json
         params = row['parametros'] if row else {}
         if isinstance(params, str):
             params = json.loads(params)
@@ -167,7 +167,7 @@ def generation_status(owner, publication_id):
             return {'state':'IDLE'}
         schedule = str(uuid5(NAMESPACE_URL, 'immediate-task:'+str(owner)+':'+key))
         run = conn.execute(text("""
-            SELECT j.id, j.state, j.error_code
+            SELECT j.id, j.state, j.error_code, j.finished_at
             FROM ae_schedules s LEFT JOIN ae_jobs j
               ON j.schedule_id=s.id AND j.owner_id=s.owner_id
               AND j.legacy_task_id=s.legacy_task_id AND j.agent_id=s.agent_id
@@ -176,7 +176,9 @@ def generation_status(owner, publication_id):
         """), dict(schedule=schedule, owner=owner, task=row['id'])).mappings().first()
         if run is None:
             return {'state':'UNCONFIRMED','schedule_id':schedule}
-        result = {'schedule_id':schedule,'job_id':run['id'],'state':run['state'] or 'SCHEDULED'}
+        result = {'schedule_id': schedule, 'job_id': run['id'], 'state': run['state'] or 'SCHEDULED'}
+        if run['finished_at']:
+            result['finished_at'] = run['finished_at'].isoformat() + 'Z'
         if run['error_code']:
             result['reason_code'] = run['error_code']
         if run['state'] == 'DELIVERED':
@@ -184,9 +186,55 @@ def generation_status(owner, publication_id):
                 SELECT payload FROM ae_results WHERE owner_id=:owner AND job_id=:job
                 ORDER BY version DESC LIMIT 1
             """), dict(owner=owner, job=run['id'])).scalar()
-            if isinstance(payload, str):
-                payload = json.loads(payload)
-            video = (payload or {}).get('video') or {}
-            if video.get('state') == 'COMPLETED' and video.get('url'):
-                result.update(state='COMPLETED', video_url=video['url'])
+            url = _completed_video_url(payload)
+            if url:
+                result.update(state='COMPLETED', video_url=url)
         return result
+
+def generation_notifications(owner):
+    """Recover terminal publication jobs from persisted immediate schedules."""
+    from sqlalchemy import text
+    from utils.db import db
+
+    with db.engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT j.id, j.state, j.error_code, j.finished_at, p.id AS publication_id,
+                   CASE WHEN j.state = 'DELIVERED' THEN (
+                       SELECT r.payload FROM ae_results r
+                       WHERE r.owner_id=j.owner_id AND r.job_id=j.id
+                       ORDER BY r.version DESC LIMIT 1
+                   ) END AS payload
+            FROM ae_jobs j
+            JOIN ae_schedules s ON s.id=j.schedule_id AND s.owner_id=j.owner_id
+                AND s.agent_id=j.agent_id AND s.legacy_task_id=j.legacy_task_id
+            JOIN agente_tareas t ON t.id=j.legacy_task_id AND t.tipo='VIDEO_GENERAR'
+            JOIN agentes a ON a.id=t.agente_id AND a.usuario_id=j.owner_id
+            JOIN publicacion p ON p.user_id=j.owner_id AND
+                p.id=JSON_UNQUOTE(JSON_EXTRACT(t.parametros,'$.source.publication_id'))
+            WHERE j.owner_id=:owner AND j.finished_at IS NOT NULL
+              AND j.state IN ('DELIVERED', 'FAILED', 'CANCELLED')
+              AND JSON_UNQUOTE(JSON_EXTRACT(t.parametros,'$.source.application'))='bot421'
+              AND EXISTS (
+                  SELECT 1 FROM ae_agent_events e
+                  WHERE e.owner_id=j.owner_id AND e.agent_id=j.agent_id
+                    AND e.action='TASK_SCHEDULE_CREATED'
+                    AND JSON_UNQUOTE(JSON_EXTRACT(e.details,'$.immediate'))='true'
+                    AND JSON_UNQUOTE(JSON_EXTRACT(e.details,'$.schedule_id'))=s.id
+              )
+            ORDER BY j.finished_at, j.id
+        """), {'owner': owner}).mappings()
+
+        return [{
+            'job_id': row['id'],
+            'publication_id': row['publication_id'],
+            'state': 'COMPLETED' if row['state'] == 'DELIVERED' else row['state'],
+            'reason_code': row['error_code'],
+            'finished_at': row['finished_at'].isoformat() + 'Z',
+        } for row in rows if row['state'] != 'DELIVERED' or _completed_video_url(row['payload'])]
+
+
+def _completed_video_url(payload):
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    video = (payload or {}).get('video') or {}
+    return video.get('url') if video.get('state') == 'COMPLETED' else None

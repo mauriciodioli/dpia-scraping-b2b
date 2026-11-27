@@ -59,6 +59,7 @@ def send_challenge(redis, secret, mail_host, sender, key, email, resend, idem, s
 @bot421_auth.post('/billing_topup_quote', defaults={'action': 'billing_topup_quote'})
 @bot421_auth.post('/billing_credit', defaults={'action': 'billing_credit'})
 @bot421_auth.post('/billing', defaults={'action': 'billing'})
+@bot421_auth.post('/generation_notifications', defaults={'action': 'generation_notifications'})
 @bot421_auth.post('/generation_status', defaults={'action': 'generation_status'})
 @bot421_auth.post('/generate', defaults={'action': 'generate'})
 @bot421_auth.post('/quote', defaults={'action': 'quote'})
@@ -125,6 +126,10 @@ def delegate(action):
         user = Usuario.query.filter_by(id=owner, activo=True).first()
         if not user or not Publicacion.query.filter_by(id=body['publicacion_id'], user_id=owner).first():
             return jsonify(error='forbidden'), 403
+        if action == 'generation_notifications':
+            # Signed, owner-scoped metadata for the inbox after a new login.
+            from services.bot421_video import generation_notifications
+            return jsonify(executions=generation_notifications(owner))
         email = user.correo_electronico.strip() if user.correo_electronico else ''
         if len(email) > 120 or not email_login.EMAIL.fullmatch(email):
             return jsonify(error='email_unavailable'), 409
