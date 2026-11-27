@@ -8,8 +8,8 @@ from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from uuid import NAMESPACE_URL, uuid5
 from model.usuario import Usuario
-from sqlalchemy import Table, Column, MetaData, Integer, String, Text, DateTime, JSON, select, func, update, case, type_coerce
-from sqlalchemy.dialects.mysql import insert
+from sqlalchemy import Table, Column, MetaData, Integer, String, Text, DateTime, JSON, select, func, update, case, cast, type_coerce
+from sqlalchemy.dialects.mysql import CHAR, insert
 from sqlalchemy.exc import IntegrityError
 from services.query_preparation import PreparationError
 from utils.db import db
@@ -137,8 +137,19 @@ class MySQLScrapingQuota:
                 operaciones.c.usuario_id == user_id).group_by(operaciones.c.estado)).all())
             ledger = operaciones.c
             meta = type_coerce(case((func.json_valid(ledger.contexto_json) == 1, ledger.contexto_json), else_='{}'), JSON)
-            group = func.coalesce(meta['service_operation'].as_string(), meta['video_operation'].as_string())
-            key = func.coalesce(group, ledger.operacion_id)
+            service_id = meta['service_operation'].as_string()
+            video_id = meta['video_operation'].as_string()
+            ledger_id = ledger.operacion_id
+            if conn.dialect.name == 'mysql':
+                # JSON strings and legacy ASCII ledger IDs need a common collation
+                # before either COALESCE resolves its result type.
+                identifier_type = CHAR(charset='utf8mb4')
+                service_id, video_id, ledger_id = (
+                    cast(identifier, identifier_type).collate('utf8mb4_bin')
+                    for identifier in (service_id, video_id, ledger_id)
+                )
+            group = func.coalesce(service_id, video_id)
+            key = func.coalesce(group, ledger_id)
             rows = conn.execute(select(
                 key.label('id'), ledger.origen.label('source'), func.max(group).label('group_id'),
                 func.max(ledger.estado).label('state'), func.min(ledger.contexto_json).label('context'),
