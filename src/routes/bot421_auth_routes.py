@@ -59,6 +59,7 @@ def send_challenge(redis, secret, mail_host, sender, key, email, resend, idem, s
 @bot421_auth.post('/billing_topup_quote', defaults={'action': 'billing_topup_quote'})
 @bot421_auth.post('/billing_credit', defaults={'action': 'billing_credit'})
 @bot421_auth.post('/billing', defaults={'action': 'billing'})
+@bot421_auth.post('/generation_status', defaults={'action': 'generation_status'})
 @bot421_auth.post('/generate', defaults={'action': 'generate'})
 @bot421_auth.post('/quote', defaults={'action': 'quote'})
 @bot421_auth.post('/workspace', defaults={'action': 'workspace'})
@@ -135,7 +136,7 @@ def delegate(action):
         prefix = 'dpia:bot421:video:' + scope
         grant = prefix + ':grant'
         challenge = prefix + ':code'
-        if action in ('workspace', 'resources', 'script', 'quote', 'billing', 'billing_credit', 'billing_topup_quote', 'generate'):
+        if action in ('workspace', 'resources', 'script', 'quote', 'billing', 'billing_credit', 'billing_topup_quote', 'generate', 'generation_status'):
             if not authorization(redis, grant):
                 return jsonify(error='verification_required'), 403
             if action == 'resources' and body['language'] not in ('es', 'en', 'it'):
