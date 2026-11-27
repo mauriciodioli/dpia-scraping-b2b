@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from uuid import NAMESPACE_URL, uuid5
 from model.usuario import Usuario
-from sqlalchemy import Table, Column, MetaData, Integer, String, Text, DateTime, select, func, update, case
+from sqlalchemy import Table, Column, MetaData, Integer, String, Text, DateTime, JSON, select, func, update, case, type_coerce
 from sqlalchemy.dialects.mysql import insert
 from sqlalchemy.exc import IntegrityError
 from services.query_preparation import PreparationError
@@ -135,16 +135,36 @@ class MySQLScrapingQuota:
             total = self._lock(conn, user_id)
             counts = dict(conn.execute(select(operaciones.c.estado, func.sum(POINT_COST)).where(
                 operaciones.c.usuario_id == user_id).group_by(operaciones.c.estado)).all())
-            rows = conn.execute(select(operaciones.c.operacion_id, operaciones.c.origen, operaciones.c.estado,
-                case((operaciones.c.origen=='recarga',operaciones.c.resultado_json),else_=None)
-                ).where(operaciones.c.usuario_id == user_id).order_by(
-                operaciones.c.creado_en.desc(), operaciones.c.operacion_id).limit(30)).all()
+            ledger = operaciones.c
+            meta = type_coerce(case((func.json_valid(ledger.contexto_json) == 1, ledger.contexto_json), else_='{}'), JSON)
+            group = func.coalesce(meta['service_operation'].as_string(), meta['video_operation'].as_string())
+            key = func.coalesce(group, ledger.operacion_id)
+            rows = conn.execute(select(
+                key.label('id'), ledger.origen.label('source'), func.max(group).label('group_id'),
+                func.max(ledger.estado).label('state'), func.min(ledger.contexto_json).label('context'),
+                func.max(ledger.resultado_json).label('result'), func.min(ledger.creado_en).label('created'),
+                func.sum(POINT_COST).label('points'),
+                func.sum(case((ledger.estado.in_(('reserved', 'dispatching', 'pending')), POINT_COST), else_=0)).label('reserved'),
+                func.sum(case((ledger.estado == 'consumed', POINT_COST), else_=0)).label('consumed'),
+                func.sum(case((ledger.estado == 'released', POINT_COST), else_=0)).label('released'),
+            ).where(ledger.usuario_id == user_id).group_by(key, ledger.origen)
+                .order_by(func.min(ledger.creado_en).desc(), key).limit(30)).mappings()
             reserved = sum(int(counts.get(state, 0)) for state in ('reserved', 'dispatching', 'pending'))
             consumed = int(counts.get('consumed', 0))
             operations = []
-            for operation_id, source, state, result in rows:
-                movement = {'operation_id': operation_id, 'source': source, 'state': state,
-                            'cost': 0 if source == 'recarga' else 5 if source == 'promocion' else 1}
+            for row in rows:
+                source, result = row['source'], row['result']
+                movement = {'operation_id': row['id'], 'source': source, 'state': row['state'], 'cost': int(row['points'])}
+                if row['group_id']:
+                    info = decode(row['context']) or {}
+                    commercial = info.get('commercial') or {}
+                    receipt = decode(result) or {}
+                    movement.update(grouped=True, reserved_points=int(row['reserved']),
+                        consumed_points=int(row['consumed']), released_points=int(row['released']),
+                        state='pending' if row['reserved'] else 'consumed' if row['consumed'] else 'released',
+                        created_at=row['created'].isoformat() + 'Z' if row['created'] else None,
+                        authorized_amount=commercial.get('amount'), job_id=info.get('job_id'),
+                        result_id=receipt.get('result_id'), settled_amount=receipt.get('settled_amount'))
                 if source == 'recarga':
                     credit = decode(result) or {}
                     movement['amount'] = credit.get('credited_points', 0)

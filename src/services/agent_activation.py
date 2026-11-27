@@ -218,7 +218,13 @@ def video_quote(user_id, agent_id, task_id, configuration):
         revision=data['policy_revision']
         if not rate.is_finite() or rate<=0 or type(revision) is not int or revision<1:
             raise ValueError()
-        return {'amount':str(amount),'currency':'USD','provisional':data['provisional'],'valid_until':data['valid_until'],
+        estimate = Decimal(data['estimated_usd'])
+        points = data['required_credits']
+        if (not estimate.is_finite() or not 0 < estimate <= amount
+                or type(points) is not int or points < 1 or amount != points * rate):
+            raise ValueError()
+        return {'amount':str(amount),'estimated_usd':str(estimate),'required_credits':points,
+                'currency':'USD','provisional':data['provisional'],'valid_until':data['valid_until'],
                 'usd_per_credit':str(rate),'policy_revision':revision}
     except (requests.RequestException,ValueError,KeyError,TypeError,InvalidOperation):
         bad('No se pudo consultar la cotización.',502)

@@ -6,7 +6,7 @@ from services.agent_configuration import bad
 SCRIPT_DEFAULTS = {'instructions': '', 'custom_script': ''}
 PRODUCTION_DEFAULTS = {'video_type': 'news', 'duration_seconds': 60, 'language': 'es',
                        'format': '16:9', 'provider': 'heygen', 'avatar_id': 'auto',
-                       'voice_id': 'auto', 'background': {'type':'auto'}, 'budget_credits': 20, 'automatic_production': False}
+                       'voice_id': 'auto', 'background': {'type':'auto'}, 'budget_credits': 20, 'automatic_production': False, 'commercial_approval': False}
 
 
 def read_section(video, section):
@@ -33,7 +33,9 @@ def validate(section, values):
     else:
         if (type(result['duration_seconds']) is not int or not 1 <= result['duration_seconds'] <= 3600
             or type(result['budget_credits']) is not int or not 0 <= result['budget_credits'] <= 1000000
-            or type(result['automatic_production']) is not bool):
+            or type(result['automatic_production']) is not bool
+            or type(result['commercial_approval']) is not bool
+            or (result['commercial_approval'] and result['budget_credits'] < 1)):
             bad('Duración, presupuesto o autorización inválidos.', 422)
         for key in ('video_type', 'language', 'format', 'provider', 'avatar_id', 'voice_id'):
             if not isinstance(result[key], str) or not 1 <= len(result[key]) <= (160 if key in ('avatar_id','voice_id') else 100):

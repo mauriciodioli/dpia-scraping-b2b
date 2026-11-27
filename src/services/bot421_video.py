@@ -66,7 +66,9 @@ def dispatch(action, owner, publication_id, body):
                     'available':money(summary['available']), 'allocated':money(summary['initial']),
                     'consumed':money(summary['consumed']), 'reserved':money(summary['reserved']),
                     'movements':[{'id':r['operation_id'],'source':r['source'],'state':r['state'],
-                        'equivalent':money(r.get('amount',0) if r['source']=='recarga' else r['cost']),
+                        'equivalent':(r.get('settled_amount') or r.get('authorized_amount')) if r.get('grouped') else money(r.get('amount',0) if r['source']=='recarga' else r['cost']),
+                        **({k:r[k] for k in ('grouped','reserved_points','consumed_points','released_points','created_at','job_id','result_id')}
+                           if r.get('grouped') else {}),
                         **({'paid_cents': r['paid_cents'], 'points': r['amount']} if 'paid_cents' in r else {})}
                         for r in summary['operations']], 'history_limit':30}
         except PreparationError as exc:
@@ -82,7 +84,6 @@ def dispatch(action, owner, publication_id, body):
             from sqlalchemy import update
             from datetime import datetime, timezone
             from services.agent_configuration import bad
-            from decimal import ROUND_CEILING
             configuration = {k: body[k] for k in ('duration','format','language','avatar_id','voice_id')}
             if (type(body['duration']) is not int or body['duration'] not in (15,30,60)
                     or body['format'] not in ('16:9','9:16','1:1') or body['language'] not in ('es','en','it')
@@ -95,7 +96,15 @@ def dispatch(action, owner, publication_id, body):
                 'format':body['format'], 'language':body['language'], 'avatar_id':body['avatar_id'],
                 'voice_id':body['voice_id'], 'background':body['background'], 'automatic_production':True})
             quote = video_quote(owner, task['agent_id'], task['id'], configuration)
-            points = int((Decimal(quote['amount']) / Decimal(quote['usd_per_credit'])).to_integral_value(rounding=ROUND_CEILING))
+            accepted = body.get('accepted_quote')
+            if 'accepted_quote' in body and (not isinstance(accepted, dict)
+                    or type(accepted.get('policy_revision')) is not int):
+                bad('Cotización inválida.', 422)
+            commercial = {key: quote[key] for key in ('amount', 'currency', 'usd_per_credit', 'policy_revision')}
+            if isinstance(accepted, dict) and 'pricing_model' in accepted:
+                commercial.update(pricing_model='duration', authorized_seconds=body['duration'],
+                    duration_base_amount=quote['estimated_usd'])
+            points = quote['required_credits']
             quota = current_app.extensions.get('scraping_quota') or MySQLScrapingQuota()
             production['budget_credits'] = points
             with prefs.repository.transaction(owner, task['agent_id']) as (conn, tables, agent):
@@ -106,9 +115,13 @@ def dispatch(action, owner, publication_id, body):
                 revision = params.get('_configuration_revision', 1)
                 previous = params.get('_publication_execution')
                 if previous and previous.get('key') == body['idempotency_key']:
-                    if previous.get('configuration') != {**configuration,'background':body['background'],'script':script}:
+                    previous_quote = previous.get('commercial')
+                    if (previous.get('configuration') != {**configuration,'background':body['background'],'script':script}
+                            or accepted != ({key: previous_quote.get(key) for key in commercial} if previous_quote else None)):
                         bad('Solicitud duplicada con otra configuración.', 409)
                 else:
+                    if accepted is not None and accepted != commercial:
+                        bad('La cotización cambió.', 409)
                     if revision != body['expected_revision']:
                         bad('La configuración cambió.', 409)
                     if quota.credits(owner)['available'] < points:
@@ -117,13 +130,16 @@ def dispatch(action, owner, publication_id, body):
                     video.update(script=script, production=production)
                     params.update(video=video, _configuration_revision=revision+1,
                         _publication_execution={'key':body['idempotency_key'],
-                            'configuration':{**configuration,'background':body['background'],'script':script}})
+                            'configuration':{**configuration,'background':body['background'],'script':script},
+                            **({'commercial': {**commercial, 'points': points}} if accepted else {})})
                     conn.execute(update(tables['agente_tareas']).where(tables['agente_tareas'].c.id==task['id'])
                         .values(parametros=params, habilitada=True, actualizado_en=datetime.now(timezone.utc).replace(tzinfo=None)))
             result = schedule_immediate_task(owner, task['agent_id'], task['id'], body['idempotency_key'], existing=True)
             return {'state':'SCHEDULED','task_id':task['id'],'schedule':result['schedule'],'replayed':result['replayed']}
         if action == 'quote':
             quote = video_quote(owner, task['agent_id'], task['id'], {k:body[k] for k in ('duration','format','language','avatar_id','voice_id')})
+            quote.update(pricing_model='duration', authorized_seconds=body['duration'],
+                         duration_base_amount=quote['estimated_usd'])
             quota = current_app.extensions.get('scraping_quota') or MySQLScrapingQuota()
             try:
                 summary = quota.credits(owner)

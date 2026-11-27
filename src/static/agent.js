@@ -551,6 +551,7 @@
           .catch(error=>{if(dialog.open){status.textContent=error.message||'No se pudo cargar el catálogo.';renderChoices('Avatar','avatar_id',[],'avatar',panels.avatar.panel);renderChoices('Voz','voice_id',[],'voice',panels.voice.panel);}});
          add('Límite de créditos DPIA','budget_credits','number');fields.budget_credits.min=0;fields.budget_credits.max=1000000;
          add('Autorizar producción automática dentro del presupuesto','automatic_production','checkbox');
+         add('Autorizar el cobro a la tarifa vigente por la duración entregada, hasta el límite de créditos indicado','commercial_approval','checkbox');
          form.append(summary);
         }
         const cancel=button('Cancelar',()=>dialog.close());

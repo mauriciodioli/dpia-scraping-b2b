@@ -115,6 +115,8 @@ def delegate(action):
         required.update(('duration','format','language','avatar_id','voice_id'))
     if action == 'generate':
         required.update(('duration','format','language','avatar_id','voice_id','background','expected_revision','custom_script','instructions'))
+        if isinstance(body, dict) and 'accepted_quote' in body:
+            required.add('accepted_quote')
     if action == 'script':
         required.update(('expected_revision', 'custom_script', 'instructions'))
     if action == 'start':

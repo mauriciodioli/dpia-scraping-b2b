@@ -18,6 +18,14 @@
   $('creditOperations').replaceChildren();
   for(const operation of credits?.operations||[]){
    if(operation.source==='recarga'){const row=document.createElement('li');row.textContent=tr('Recarga sin pago')+' · +'+operation.amount+' '+tr('pts');row.dataset.catalogName='';$('creditOperations').append(row);continue;}
+   if(operation.grouped){
+    const item=document.createElement('li'), parts=[tr(operation.source==='video'?'Generación de video':operation.source),
+     operation.created_at?new Date(operation.created_at).toLocaleString(document.documentElement.lang||'es'):'',
+     tr(states[operation.state]),tr('Reservados')+' '+operation.reserved_points,
+     tr('Consumidos')+' '+operation.consumed_points,tr('Liberados')+' '+operation.released_points,
+     (operation.settled_amount??operation.authorized_amount)==null?tr('Importe sin confirmar'):'USD '+(operation.settled_amount??operation.authorized_amount),operation.result_id||operation.job_id];
+    item.textContent=parts.filter(Boolean).join(' · ');$('creditOperations').append(item);continue;
+   }
    const row=document.createElement('li'),name=document.createElement('span'),button=document.createElement('button');button.className='action-button';
    name.textContent=(operation.source==='promocion'?tr('Publicación destacada'):operation.source)+' · '+tr(states[operation.state]||'Pendiente de confirmación')+' · '+(operation.cost||(operation.source==='promocion'?5:1))+' '+tr('pts');button.type='button';button.textContent=tr(operation.source==='promocion'?'Ver publicación':'Ver resultado');
    button.onclick=()=>operation.source==='promocion'?window.DPIAPublications?.openProfile():loadQueryOperation(operation.operation_id);row.append(name,button);$('creditOperations').append(row);
