@@ -90,6 +90,20 @@ def delegate(action):
     body = request.get_json(silent=True)
     if action == 'billing_topup_settle':
         return settle_topup(body)
+    if action == 'generation_notifications' and isinstance(body, dict) and set(body) == {'publications'}:
+        publications = body['publications']
+        if (not isinstance(publications, list) or not 1 <= len(publications) <= 100
+                or any(type(item) is not int or not 0 < item <= 2147483647 for item in publications)):
+            return jsonify(error='invalid_request'), 400
+        try:
+            redis, _, _, _ = email_login.setup()
+            if not redis.set('dpia:bot421:nonce:' + nonce, '1', ex=125, nx=True):
+                return jsonify(error='replay'), 409
+            from services.bot421_video import generation_notifications
+            return jsonify(covers=generation_notifications(publications=publications))
+        except Exception:
+            current_app.logger.exception('BOT421 public video covers unavailable')
+            return jsonify(error='unavailable'), 503
     required = {'usuario_id', 'publicacion_id', 'session_ref', 'jwt_exp'}
     if action in ('start', 'verify', 'billing_credit', 'generate'):
         required.add('idempotency_key')

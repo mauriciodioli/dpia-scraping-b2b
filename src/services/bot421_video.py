@@ -1,9 +1,12 @@
 """Owner-scoped workspace adapter for the verified BOT421 publication."""
 
+import base64
 import json
 import os
 import re
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_DOWN
+from urllib.parse import parse_qs, urlsplit
 
 from flask import current_app
 
@@ -191,13 +194,18 @@ def generation_status(owner, publication_id):
                 result.update(state='COMPLETED', video_url=url)
         return result
 
-def generation_notifications(owner):
+
+def generation_notifications(owner=None, publications=None):
     """Recover terminal publication jobs from persisted immediate schedules."""
-    from sqlalchemy import text
+    from sqlalchemy import bindparam, text
     from utils.db import db
 
+    public = publications is not None
+    scope = """p.id IN :publications AND LOWER(p.estado)='activo' AND j.state='DELIVERED'
+        AND NOT EXISTS (SELECT 1 FROM estado_publi_usu e
+                        WHERE e.publicacion_id=p.id AND e.estado='eliminado')""" if public else 'j.owner_id=:owner'
     with db.engine.connect() as conn:
-        rows = conn.execute(text("""
+        statement = text(f"""
             SELECT j.id, j.state, j.error_code, j.finished_at, p.id AS publication_id,
                    CASE WHEN j.state = 'DELIVERED' THEN (
                        SELECT r.payload FROM ae_results r
@@ -211,7 +219,7 @@ def generation_notifications(owner):
             JOIN agentes a ON a.id=t.agente_id AND a.usuario_id=j.owner_id
             JOIN publicacion p ON p.user_id=j.owner_id AND
                 p.id=JSON_UNQUOTE(JSON_EXTRACT(t.parametros,'$.source.publication_id'))
-            WHERE j.owner_id=:owner AND j.finished_at IS NOT NULL
+            WHERE {scope} AND j.finished_at IS NOT NULL
               AND j.state IN ('DELIVERED', 'FAILED', 'CANCELLED')
               AND JSON_UNQUOTE(JSON_EXTRACT(t.parametros,'$.source.application'))='bot421'
               AND EXISTS (
@@ -222,15 +230,59 @@ def generation_notifications(owner):
                     AND JSON_UNQUOTE(JSON_EXTRACT(e.details,'$.schedule_id'))=s.id
               )
             ORDER BY j.finished_at, j.id
-        """), {'owner': owner}).mappings()
+        """)
+        if public:
+            statement = statement.bindparams(bindparam('publications', expanding=True))
+        rows = conn.execute(statement, {'publications': publications} if public else {'owner': owner}).mappings()
 
-        return [{
-            'job_id': row['id'],
-            'publication_id': row['publication_id'],
-            'state': 'COMPLETED' if row['state'] == 'DELIVERED' else row['state'],
-            'reason_code': row['error_code'],
-            'finished_at': row['finished_at'].isoformat() + 'Z',
-        } for row in rows if row['state'] != 'DELIVERED' or _completed_video_url(row['payload'])]
+        executions = []
+        for row in rows:
+            url = _completed_video_url(row['payload'])
+            if row['state'] == 'DELIVERED' and not url:
+                continue
+            execution = {
+                'job_id': row['id'], 'publication_id': row['publication_id'],
+                'state': 'COMPLETED' if url else row['state'], 'reason_code': row['error_code'],
+                'finished_at': row['finished_at'].isoformat() + 'Z',
+            }
+            if url:
+                execution['cover'] = _temporary_cover(url)
+            executions.append(execution)
+        if public:
+            latest = {item['publication_id']: item['cover'] for item in executions}
+            return {key: cover for key, cover in latest.items() if cover}
+        return executions
+
+
+def _temporary_cover(url):
+    if not isinstance(url, str) or any(ord(char) <= 32 for char in url):
+        return None
+    try:
+        parsed = urlsplit(url)
+        if parsed.scheme != 'https' or not parsed.hostname or parsed.username is not None:
+            return None
+        fields = {key.lower(): value[0] for key, value in parse_qs(parsed.query).items()}
+        expiry = _signed_url_expiry(fields)
+    except (ValueError, OverflowError, OSError, KeyError, TypeError):
+        return None
+    if expiry and expiry <= datetime.now(timezone.utc):
+        return None
+    return {'url': url, 'expires_at': expiry.isoformat() if expiry else None}
+
+
+def _signed_url_expiry(fields):
+    for prefix in ('x-amz-', 'x-goog-'):
+        if prefix + 'expires' in fields:
+            start = datetime.strptime(fields[prefix + 'date'], '%Y%m%dT%H%M%SZ').replace(tzinfo=timezone.utc)
+            return start + timedelta(seconds=int(fields[prefix + 'expires']))
+    if 'policy' in fields and 'key-pair-id' in fields:
+        policy = fields['policy'].translate(str.maketrans('-_~', '+=/'))
+        statements = json.loads(base64.b64decode(policy))['Statement']
+        return min(datetime.fromtimestamp(item['Condition']['DateLessThan']['AWS:EpochTime'], timezone.utc)
+                   for item in statements)
+    if 'expires' in fields:
+        return datetime.fromtimestamp(int(fields['expires']), timezone.utc)
+    return None
 
 
 def _completed_video_url(payload):
